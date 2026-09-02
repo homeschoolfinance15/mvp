@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   AMAZING — "Obsidian luxe"
+   Near-black canvas, hairline rules, muted gold used sparingly as punctuation.
+   Gold is reserved for: the wordmark dot, invite codes, and primary actions.
+   Everything else earns attention through spacing and type weight, not colour.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-ink: #0b0b0c;
+  --color-surface: #100f12;
+  --color-raised: #17161a;
+  --color-line: #232327;
+  --color-line-strong: #33333a;
+  --color-fg: #ededed;
+  --color-muted: #8a8a93;
+  --color-dim: #5c5c65;
+  --color-gold: #c9a961;
+  --color-gold-dim: #8a7442;
+  --color-gold-wash: #1e1a12;
+  --color-positive: #7ba888;
+  --color-negative: #c97b7d;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv11', 'ss01';
+    font-variant-ligatures: contextual;
+  }
+
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+
+  /* Autofill in Chrome repaints inputs white; hold the dark surface. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-fg);
+    -webkit-box-shadow: 0 0 0 1000px var(--color-raised) inset;
+    caret-color: var(--color-fg);
+  }
+}
+
+@layer components {
+  /* Small uppercase label. The workhorse of this design — used for every
+     section heading, table header, and field label. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+
+  /* Display type: tight tracking is what makes this feel expensive. */
+  .display {
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
+  }
+
+  .hairline {
+    border-color: var(--color-line);
+  }
+
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.375rem;
+  }
+
+  /* Invite and claim codes. Always gold, always tabular, always selectable. */
+  .code-chip {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.12em;
+    color: var(--color-gold);
+    background-color: var(--color-gold-wash);
+    border: 1px solid color-mix(in srgb, var(--color-gold) 26%, transparent);
+  }
+}
+
+/* A slow, barely-there vignette so the near-black canvas has some depth
+   instead of reading as flat #000. */
+.ambient::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, rgba(201, 169, 97, 0.05), transparent 70%),
+    radial-gradient(50rem 50rem at 100% 100%, rgba(201, 169, 97, 0.025), transparent 70%);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
