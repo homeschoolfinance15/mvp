@@ -16,8 +16,8 @@ import { createClient } from '@supabase/supabase-js'
  * Environment variables still win when present, so a staging or fork deployment
  * can point somewhere else without touching this file.
  */
-const DEFAULT_URL = 'https://lugpsuqcrwkokiyhbjmm.supabase.co'
-const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_bqdEKUhnBuelmNJXIgXLrQ_rIupw4LN'
+const DEFAULT_URL = 'https://ppbpukefjvpwrwztsgyj.supabase.co'
+const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_-sq0pBrSswEKNc8jytbwvw__Wqr1MJe'
 
 const url = import.meta.env.VITE_SUPABASE_URL || DEFAULT_URL
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || DEFAULT_PUBLISHABLE_KEY

@@ -1,51 +1,59 @@
 /**
- * Seeds a working demo by driving the real application code paths:
- * admin -> create_connector_invitation -> redeem_code (connector)
- *       -> create_invite_code -> redeem_code (members) -> notes.
+ * Seeds a working demo by driving the real application code paths, using only
+ * the publishable key — exactly what a person going through /join does:
  *
- * Auth users are created with email_confirm:true via the admin API purely so
- * this can run while "Confirm email" is still switched on in the project.
+ *   admin -> create_connector_invitation -> redeem_code (connector)
+ *         -> create_invite_code -> redeem_code (members) -> notes
+ *
+ * No service-role key is involved, so a successful run also proves the whole
+ * invite chain works for an ordinary visitor with nothing privileged.
+ *
+ *   SUPABASE_URL=<url> PUB=<publishable-key> node scripts/seed-demo.mjs
  */
-const URL = process.env.SUPABASE_URL
+const BASE = process.env.SUPABASE_URL
 const PUB = process.env.PUB
-const SR = process.env.SR
-const PASSWORD = 'AmazingDemo2026!'
+const PASSWORD = process.env.DEMO_PASSWORD || 'AmazingDemo2026!'
 
-const adminHeaders = { apikey: SR, Authorization: `Bearer ${SR}`, 'Content-Type': 'application/json' }
-
-async function createUser(email, fullName) {
-  const res = await fetch(`${URL}/auth/v1/admin/users`, {
-    method: 'POST',
-    headers: adminHeaders,
-    body: JSON.stringify({
-      email,
-      password: PASSWORD,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
-    }),
-  })
-  const body = await res.json()
-  if (!res.ok && !String(body.msg ?? body.message ?? '').includes('already been registered')) {
-    throw new Error(`createUser ${email}: ${JSON.stringify(body)}`)
-  }
-  return body
+if (!BASE || !PUB) {
+  console.error('Set SUPABASE_URL and PUB before running this.')
+  process.exit(1)
 }
 
-async function signIn(email) {
-  const res = await fetch(`${URL}/auth/v1/token?grant_type=password`, {
+const anonHeaders = { apikey: PUB, 'Content-Type': 'application/json' }
+
+/** Sign up, or sign in if the account already exists, and return a session. */
+async function account(email, fullName) {
+  const signUp = await fetch(`${BASE}/auth/v1/signup`, {
     method: 'POST',
-    headers: { apikey: PUB, 'Content-Type': 'application/json' },
+    headers: anonHeaders,
+    body: JSON.stringify({ email, password: PASSWORD, data: { full_name: fullName } }),
+  })
+  const created = await signUp.json()
+
+  if (created.access_token) {
+    return { token: created.access_token, id: created.user.id, isNew: true }
+  }
+
+  const signIn = await fetch(`${BASE}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: anonHeaders,
     body: JSON.stringify({ email, password: PASSWORD }),
   })
-  const body = await res.json()
-  if (!body.access_token) throw new Error(`signIn ${email}: ${JSON.stringify(body)}`)
-  return { token: body.access_token, id: body.user.id }
+  const session = await signIn.json()
+  if (!session.access_token) {
+    throw new Error(`Could not sign up or sign in ${email}: ${JSON.stringify(created)}`)
+  }
+  return { token: session.access_token, id: session.user.id, isNew: false }
+}
+
+function authed(token) {
+  return { apikey: PUB, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
 
 async function rpc(token, fn, args) {
-  const res = await fetch(`${URL}/rest/v1/rpc/${fn}`, {
+  const res = await fetch(`${BASE}/rest/v1/rpc/${fn}`, {
     method: 'POST',
-    headers: { apikey: PUB, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: authed(token),
     body: JSON.stringify(args),
   })
   const body = await res.json()
@@ -54,28 +62,18 @@ async function rpc(token, fn, args) {
 }
 
 async function patchProfile(token, id, fields) {
-  const res = await fetch(`${URL}/rest/v1/profiles?id=eq.${id}`, {
+  const res = await fetch(`${BASE}/rest/v1/profiles?id=eq.${id}`, {
     method: 'PATCH',
-    headers: {
-      apikey: PUB,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
+    headers: { ...authed(token), Prefer: 'return=minimal' },
     body: JSON.stringify(fields),
   })
   if (!res.ok) throw new Error(`patchProfile: ${await res.text()}`)
 }
 
 async function insertNote(token, note) {
-  const res = await fetch(`${URL}/rest/v1/connector_notes`, {
+  const res = await fetch(`${BASE}/rest/v1/connector_notes`, {
     method: 'POST',
-    headers: {
-      apikey: PUB,
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
+    headers: { ...authed(token), Prefer: 'return=minimal' },
     body: JSON.stringify(note),
   })
   if (!res.ok) throw new Error(`insertNote: ${await res.text()}`)
@@ -83,12 +81,12 @@ async function insertNote(token, note) {
 
 /* -------------------------------------------------------------------------- */
 
-console.log('1. admin account')
-await createUser('moshe@valued.ventures', 'Moshe')
-const admin = await signIn('moshe@valued.ventures')
-console.log('   signed in as admin', admin.id)
+console.log('1. administrator')
+// The email is on admin_allowlist, so handle_new_user grants the admin role.
+const admin = await account('moshe@valued.ventures', 'Moshe')
+console.log('   signed in')
 
-console.log('2. admin creates a connector')
+console.log('2. administrator creates a connector')
 const invitation = await rpc(admin.token, 'create_connector_invitation', {
   p_full_name: 'Elena Vasquez',
   p_email: 'zalmytouger@gmail.com',
@@ -96,14 +94,13 @@ const invitation = await rpc(admin.token, 'create_connector_invitation', {
 })
 console.log('   claim code', invitation.claim_code)
 
-console.log('3. connector claims the account')
-await createUser('zalmytouger@gmail.com', 'Elena Vasquez')
-const connector = await signIn('zalmytouger@gmail.com')
+console.log('3. connector claims their account')
+const connector = await account('zalmytouger@gmail.com', 'Elena Vasquez')
 const claimed = await rpc(connector.token, 'redeem_code', {
   p_code: invitation.claim_code,
   p_full_name: 'Elena Vasquez',
 })
-console.log('   connector first invite code', claimed.invite_code)
+console.log('   first invitation code', claimed.invite_code)
 
 await patchProfile(connector.token, connector.id, {
   current_profession: 'Partner, Meridian Capital',
@@ -150,8 +147,7 @@ const MEMBERS = [
 ]
 
 for (const member of MEMBERS) {
-  await createUser(member.email, member.name)
-  const session = await signIn(member.email)
+  const session = await account(member.email, member.name)
   await rpc(session.token, 'redeem_code', { p_code: member.code, p_full_name: member.name })
   await patchProfile(session.token, session.id, {
     current_profession: member.profession,
@@ -166,7 +162,7 @@ for (const member of MEMBERS) {
   console.log(`   ${member.name} joined on ${member.code}`)
 }
 
-console.log('6. a second connector, left unclaimed')
+console.log('6. a second connector, left unclaimed for demos')
 const pending = await rpc(admin.token, 'create_connector_invitation', {
   p_full_name: 'Daniel Abiodun',
   p_email: 'daniel.abiodun@ramedia.dev',
@@ -174,4 +170,7 @@ const pending = await rpc(admin.token, 'create_connector_invitation', {
 })
 console.log('   unclaimed claim code', pending.claim_code)
 
-console.log('\nDone. Password for every seeded account:', PASSWORD)
+console.log('\nDone.')
+console.log('Password for every seeded account:', PASSWORD)
+console.log('Connector claim code to try:', pending.claim_code)
+console.log('Member invitation code to try:', claimed.invite_code)
