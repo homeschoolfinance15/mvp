@@ -39,7 +39,6 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    # Only on main, and only once the Hostinger FTP secrets have been added.
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     steps:
       - uses: actions/download-artifact@v4
@@ -47,8 +46,22 @@ jobs:
           name: dist
           path: dist
 
+      # The `secrets` context is not available inside `if:` expressions, so the
+      # presence check has to happen in a step that can read it as an env var.
+      - name: Check whether Hostinger credentials are configured
+        id: guard
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+        run: |
+          if [ -n "$FTP_SERVER" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::FTP_SERVER is not set — skipping deploy. The build artifact is still available above."
+          fi
+
       - name: Publish to Hostinger over FTP
-        if: ${{ secrets.FTP_SERVER != '' }}
+        if: steps.guard.outputs.ready == 'true'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}

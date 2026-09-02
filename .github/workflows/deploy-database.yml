@@ -27,11 +27,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Skip cleanly rather than failing every push while secrets are unset.
+      - name: Check whether Supabase credentials are configured
+        id: guard
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF is not set — skipping migrations."
+          fi
+
       - uses: supabase/setup-cli@v1
+        if: steps.guard.outputs.ready == 'true'
         with:
           version: latest
 
       - name: Link project
+        if: steps.guard.outputs.ready == 'true'
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -39,12 +55,14 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Show what would be applied
+        if: steps.guard.outputs.ready == 'true'
         run: supabase db push --dry-run
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Apply migrations
+        if: steps.guard.outputs.ready == 'true'
         run: supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
