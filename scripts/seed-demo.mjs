@@ -91,14 +91,14 @@ console.log('   signed in as admin', admin.id)
 console.log('2. admin creates a connector')
 const invitation = await rpc(admin.token, 'create_connector_invitation', {
   p_full_name: 'Elena Vasquez',
-  p_email: 'elena.vasquez@ramedia.dev',
+  p_email: 'zalmytouger@gmail.com',
   p_capacity: 8,
 })
 console.log('   claim code', invitation.claim_code)
 
 console.log('3. connector claims the account')
-await createUser('elena.vasquez@ramedia.dev', 'Elena Vasquez')
-const connector = await signIn('elena.vasquez@ramedia.dev')
+await createUser('zalmytouger@gmail.com', 'Elena Vasquez')
+const connector = await signIn('zalmytouger@gmail.com')
 const claimed = await rpc(connector.token, 'redeem_code', {
   p_code: invitation.claim_code,
   p_full_name: 'Elena Vasquez',
@@ -118,7 +118,7 @@ console.log('   shared code', shared.code)
 console.log('5. members join')
 const MEMBERS = [
   {
-    email: 'james.oduya@ramedia.dev',
+    email: 'mn26ventures@gmail.com',
     name: 'James Oduya',
     profession: 'Founder & CEO, Northwind Grid',
     summary:

@@ -31,8 +31,8 @@ function check(name, pass, detail) {
 }
 
 const admin = await signIn('moshe@valued.ventures')
-const connector = await signIn('elena.vasquez@ramedia.dev')
-const james = await signIn('james.oduya@ramedia.dev')
+const connector = await signIn('zalmytouger@gmail.com')
+const james = await signIn('mn26ventures@gmail.com')
 const priya = await signIn('priya.raghavan@ramedia.dev')
 
 // 1. A member sees only themselves and their connector — not other members.
