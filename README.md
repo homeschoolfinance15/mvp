@@ -136,6 +136,62 @@ Verified by `scripts/check-rls.mjs`, which asserts against the live project:
 PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs
 ```
 
+## Deployment
+
+The frontend and the database deploy separately, from the same repo, on every
+push to `main`.
+
+| Piece | Lives on | Workflow |
+| --- | --- | --- |
+| Static site | Hostinger | `.github/workflows/deploy-frontend.yml` |
+| Schema, RLS, functions | Supabase | `.github/workflows/deploy-database.yml` |
+
+### The database *is* in this repo
+
+`supabase/migrations/` holds the whole schema as ordered SQL — tables, enums,
+row level security, and every function. "Deploying the database" means replaying
+the migrations the linked project has not applied yet, which is what
+`deploy-database.yml` does with `supabase db push`.
+
+Migrations are **append-only**. To change the schema, add a new file; editing an
+applied one breaks the checksum in the remote migration history.
+
+Keep the database on Supabase rather than moving it to Hostinger. Supabase is
+not just Postgres here — it is also the auth server and the REST layer, and the
+entire security model is Postgres row level security plus `SECURITY DEFINER`
+functions. Hostinger's shared hosting offers MySQL, which has none of the
+features this schema depends on (enums, `jsonb`, RLS policies, pgvector), is not
+reachable from a browser, and provides no auth. Hostinger serves the built
+static files; Supabase remains the backend.
+
+### Required repository secrets
+
+Settings → Secrets and variables → Actions.
+
+| Secret | Used by | Where to find it |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | frontend build | Project Settings → API → Project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | frontend build | Project Settings → API → `publishable` |
+| `SUPABASE_ACCESS_TOKEN` | database | Account → Access Tokens → generate |
+| `SUPABASE_PROJECT_REF` | database | The subdomain in your project URL |
+| `SUPABASE_DB_PASSWORD` | database | Project Settings → Database → password |
+| `FTP_SERVER` | Hostinger | hPanel → Files → FTP Accounts |
+| `FTP_USERNAME` | Hostinger | same |
+| `FTP_PASSWORD` | Hostinger | same |
+| `FTP_SERVER_DIR` | Hostinger | optional; defaults to `/public_html/` |
+
+The frontend build runs on pull requests too, so a broken build is caught before
+merge. The FTP step is skipped until `FTP_SERVER` is set, so the workflow is
+safe to merge before hosting is ready.
+
+### After the domain is live
+
+Add it to Supabase → Authentication → URL Configuration, as both the Site URL
+and an allowed redirect URL.
+
+`public/.htaccess` ships the SPA rewrite rules Apache needs; without it, routes
+like `/join` and `/admin` return 404 on refresh.
+
 ## Demo data
 
 `scripts/seed-demo.mjs` builds a populated demo by driving the real code paths —

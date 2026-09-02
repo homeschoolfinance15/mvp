@@ -1,0 +1,61 @@
+name: Deploy frontend
+
+# Vite inlines VITE_* variables into the bundle at BUILD time, not runtime, so
+# the values have to be present here — setting them on the host does nothing.
+# Both are safe to expose: the publishable key is designed for browser code and
+# row level security is what actually protects the data.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck and build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only on main, and only once the Hostinger FTP secrets have been added.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to Hostinger over FTP
+        if: ${{ secrets.FTP_SERVER != '' }}
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Hostinger serves from public_html. The trailing slashes matter.
+          local-dir: ./dist/
+          server-dir: ${{ secrets.FTP_SERVER_DIR || '/public_html/' }}
+          # dist is rebuilt from source every run, so nothing here is precious.
+          dangerous-clean-slate: false
