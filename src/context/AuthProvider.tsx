@@ -37,9 +37,43 @@ interface AuthValue {
 const AuthContext = createContext<AuthValue | null>(null)
 
 const NO_SESSION_AFTER_SIGNUP =
-  'Your account was created but email confirmation is switched on for this ' +
-  'project, so we could not sign you in. Turn off "Confirm email" in Supabase ' +
-  'Authentication settings, or confirm via the link we emailed you.'
+  "Your account was created, but we couldn't sign you in automatically. " +
+  'Check your inbox for a confirmation link, then sign in.'
+
+const RATE_LIMITED =
+  'Too many accounts have been created in the last hour. Please try again ' +
+  'shortly, or ask the person who invited you to let us know.'
+
+/**
+ * Supabase surfaces provisioning problems as raw strings like "email rate limit
+ * exceeded", which are meaningless to the person signing up and cannot be acted
+ * on by them. Translate to something honest and human, and log the operator
+ * detail to the console where whoever runs the project will find it.
+ *
+ * The rate limit is a symptom of email confirmation being enabled: every signup
+ * sends a message, and the built-in mailer allows only a handful per hour.
+ * Turning off "Confirm email" removes the email step, and the limit with it.
+ */
+function humanSignupError(error: unknown): Error {
+  const raw = error instanceof Error ? error.message : String(error)
+
+  if (/rate limit/i.test(raw)) {
+    console.error(
+      'Signup hit the Supabase email rate limit. This happens because "Confirm ' +
+        'email" is enabled — each signup sends a message and the built-in mailer ' +
+        'is capped at a few per hour. Disable it under Authentication → Sign In / ' +
+        'Providers → Email, or configure custom SMTP.',
+      error,
+    )
+    return new Error(RATE_LIMITED)
+  }
+
+  if (/already registered|already been registered/i.test(raw)) {
+    return new Error('An account already exists for that email address. Try signing in instead.')
+  }
+
+  return error instanceof Error ? error : new Error(raw)
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -126,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: { data: { full_name: fullName.trim() } },
       })
-      if (error) throw error
+      if (error) throw humanSignupError(error)
       if (!data.session) throw new Error(NO_SESSION_AFTER_SIGNUP)
 
       const { data: redeemed, error: redeemError } = await supabase.rpc('redeem_code', {
@@ -148,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         options: { data: { full_name: fullName.trim() } },
       })
-      if (error) throw error
+      if (error) throw humanSignupError(error)
       if (!data.session) throw new Error(NO_SESSION_AFTER_SIGNUP)
       await fetchProfile(data.session.user.id)
     },
