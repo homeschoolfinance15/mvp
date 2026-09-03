@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage, supabase } from '../lib/supabase'
@@ -12,10 +12,15 @@ import type { CodeLookup } from '../lib/types'
  */
 export default function Join() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { session, profile, loading, joinWithCode } = useAuth()
 
-  const [code, setCode] = useState('')
-  const [lookup, setLookup] = useState<CodeLookup | null>(null)
+  const initialState = location.state as { code?: string; lookup?: CodeLookup } | null
+
+  const [code, setCode] = useState(initialState?.code ?? '')
+  const [lookup, setLookup] = useState<CodeLookup | null>(
+    initialState?.lookup?.valid ? initialState.lookup : null,
+  )
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -138,6 +143,7 @@ export default function Join() {
           onClick={() => {
             setLookup(null)
             setError('')
+            navigate('/join', { replace: true, state: null })
           }}
           className="transition-colors hover:text-fg"
         >

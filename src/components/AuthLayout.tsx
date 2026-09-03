@@ -16,7 +16,7 @@ export function AuthLayout({
   footer?: ReactNode
 }) {
   return (
-    <div className="ambient flex min-h-screen flex-col bg-ink">
+    <div className="flex min-h-screen flex-col bg-ink">
       <header className="relative z-20">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
           <Link to="/">
@@ -29,7 +29,7 @@ export function AuthLayout({
       </header>
 
       <main className="relative z-10 flex flex-1 items-center justify-center px-5 py-10 sm:py-16">
-        <div className="w-full max-w-lg rounded-3xl border border-line bg-surface/75 px-6 py-8 shadow-[0_24px_80px_rgba(66,47,32,0.08)] backdrop-blur-sm sm:px-10 sm:py-10">
+        <div className="w-full max-w-lg rounded-[6px] border border-line bg-white px-6 py-8 sm:px-10 sm:py-10">
           <p className="eyebrow">{eyebrow}</p>
           <h1 className="display mt-4 text-4xl sm:text-[2.75rem]">{title}</h1>
           {caption && (
