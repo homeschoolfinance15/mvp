@@ -14,10 +14,10 @@ import type { ConnectorStatus, InviteCodeStatus, ProfileStatus } from '../lib/ty
 /* -------------------------------------------------------------------------- */
 
 export function Wordmark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const scale = { sm: 'text-sm', md: 'text-base', lg: 'text-lg' }[size]
+  const scale = { sm: 'text-lg', md: 'text-xl', lg: 'text-2xl' }[size]
   return (
-    <span className={`${scale} font-medium tracking-[0.28em] text-fg uppercase`}>
-      Amazing<span className="text-gold">.</span>
+    <span className={`${scale} font-serif font-bold tracking-[-0.03em] text-fg uppercase`}>
+      Amazing<span className="text-gold-dim">.</span>
     </span>
   )
 }
@@ -36,12 +36,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-gold text-ink hover:bg-[#d8bb78] active:bg-gold-dim border border-transparent font-medium',
+    'bg-gold text-fg hover:bg-[#ffad43] active:bg-[#f09b31] border border-transparent font-semibold shadow-[0_8px_24px_rgba(198,109,0,0.16)]',
   secondary:
-    'bg-transparent text-fg border border-line hover:border-line-strong hover:bg-raised',
+    'bg-white/55 text-fg border border-line hover:border-line-strong hover:bg-white',
   ghost: 'bg-transparent text-muted border border-transparent hover:text-fg hover:bg-raised',
   danger:
-    'bg-transparent text-negative border border-[#3a2426] hover:bg-[#1c1214] hover:border-negative',
+    'bg-transparent text-negative border border-[#e6b5ad] hover:bg-[#fff0ec] hover:border-negative',
 }
 
 export function Button({
@@ -53,12 +53,12 @@ export function Button({
   className = '',
   ...rest
 }: ButtonProps) {
-  const sizing = size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm'
+  const sizing = size === 'sm' ? 'h-9 px-4 text-xs' : 'h-11 px-5 text-sm'
   return (
     <button
       {...rest}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-full transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
     >
       {loading && <Spinner />}
       {children}
@@ -83,8 +83,9 @@ export function Spinner() {
 // element — passing a width via className will not win, since Tailwind resolves
 // conflicting width utilities by stylesheet order, not by attribute order.
 const CONTROL =
-  'w-full rounded-sm border border-line bg-raised px-3 text-sm text-fg placeholder:text-dim ' +
-  'transition-colors duration-150 hover:border-line-strong focus:border-gold focus:outline-none ' +
+  'w-full rounded-xl border border-line bg-white/80 px-4 text-sm text-fg placeholder:text-dim/80 ' +
+  'transition-all duration-150 hover:border-line-strong focus:border-gold-dim focus:bg-white focus:outline-none ' +
+  'focus:shadow-[0_0_0_3px_rgba(255,187,99,0.2)] ' +
   'disabled:opacity-50'
 
 export function Field({
@@ -110,7 +111,7 @@ export function Field({
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   const { className = '', ...rest } = props
-  return <input {...rest} className={`${CONTROL} h-10 ${className}`} />
+  return <input {...rest} className={`${CONTROL} h-12 ${className}`} />
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -120,7 +121,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   const { className = '', ...rest } = props
-  return <select {...rest} className={`${CONTROL} h-9 cursor-pointer pr-8 ${className}`} />
+  return <select {...rest} className={`${CONTROL} h-10 cursor-pointer pr-8 ${className}`} />
 }
 
 /* -------------------------------------------------------------------------- */
@@ -159,7 +160,7 @@ export function SectionHeader({
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-sm border border-dashed border-line px-6 py-12 text-center text-sm text-dim">
+    <div className="rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center text-sm text-dim">
       {children}
     </div>
   )
@@ -184,12 +185,12 @@ type AnyStatus = ProfileStatus | ConnectorStatus | InviteCodeStatus
 // grey "inert". Kept in one map so the three status enums stay visually
 // consistent wherever they appear.
 const STATUS_TONE: Record<AnyStatus, string> = {
-  active: 'text-positive border-[#2a3a2e] bg-[#141a15]',
-  pending: 'text-gold border-[#3a3221] bg-gold-wash',
-  under_review: 'text-gold border-[#3a3221] bg-gold-wash',
-  limited: 'text-gold border-[#3a3221] bg-gold-wash',
-  restricted: 'text-negative border-[#3a2426] bg-[#1c1214]',
-  suspended: 'text-negative border-[#3a2426] bg-[#1c1214]',
+  active: 'text-positive border-[#b9d8c4] bg-[#eff8f2]',
+  pending: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
+  under_review: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
+  limited: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
+  restricted: 'text-negative border-[#e6b5ad] bg-[#fff0ec]',
+  suspended: 'text-negative border-[#e6b5ad] bg-[#fff0ec]',
   removed: 'text-dim border-line bg-raised',
   paused: 'text-dim border-line bg-raised',
   disabled: 'text-dim border-line bg-raised',
@@ -274,8 +275,8 @@ export function Notice({ tone, children }: { tone: 'error' | 'success'; children
   if (!children) return null
   const styles =
     tone === 'error'
-      ? 'border-[#3a2426] bg-[#1c1214] text-negative'
-      : 'border-[#2a3a2e] bg-[#141a15] text-positive'
+      ? 'border-[#e6b5ad] bg-[#fff0ec] text-negative'
+      : 'border-[#b9d8c4] bg-[#eff8f2] text-positive'
   return (
     <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-sm border px-3.5 py-2.5 text-sm ${styles}`}>
       {children}
@@ -316,7 +317,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-[2px]"
+      className="fixed inset-0 bg-[#191511]/35 backdrop-blur-[2px]"
         onClick={onClose}
         aria-hidden
       />
@@ -324,7 +325,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 my-auto w-full max-w-lg rounded-md border border-line bg-surface shadow-2xl shadow-black/60"
+        className="relative z-10 my-auto w-full max-w-lg rounded-3xl border border-line bg-ink shadow-2xl shadow-[#422f20]/20"
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
           <h2 className="text-sm font-medium tracking-tight text-fg">{title}</h2>
@@ -355,7 +356,7 @@ export function Initials({ name }: { name: string }) {
     .map((w) => w[0]?.toUpperCase())
     .join('')
   return (
-    <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-raised text-xs font-medium text-muted">
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#ead5ad] bg-surface text-xs font-semibold text-muted">
       {letters || '—'}
     </span>
   )

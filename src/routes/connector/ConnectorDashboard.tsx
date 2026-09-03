@@ -373,7 +373,7 @@ function PersonDetail({
                   type="checkbox"
                   checked={shareWithAdmin}
                   onChange={(e) => setShareWithAdmin(e.target.checked)}
-                  className="size-3.5 accent-[#c9a961]"
+                  className="size-3.5 accent-gold-dim"
                 />
                 Make searchable by an administrator
               </label>

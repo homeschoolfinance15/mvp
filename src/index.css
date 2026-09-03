@@ -1,33 +1,33 @@
 @import 'tailwindcss';
 
 /* ---------------------------------------------------------------------------
-   AMAZING — "Obsidian luxe"
-   Near-black canvas, hairline rules, muted gold used sparingly as punctuation.
-   Gold is reserved for: the wordmark dot, invite codes, and primary actions.
-   Everything else earns attention through spacing and type weight, not colour.
+   AMAZING — warm, editorial, and inviting.
+   The palette and typography mirror the supplied brand board: Times New Roman
+   for display moments, Helvetica Neue for everything functional.
 --------------------------------------------------------------------------- */
 @theme {
-  --color-ink: #0b0b0c;
-  --color-surface: #100f12;
-  --color-raised: #17161a;
-  --color-line: #232327;
-  --color-line-strong: #33333a;
-  --color-fg: #ededed;
-  --color-muted: #8a8a93;
-  --color-dim: #5c5c65;
-  --color-gold: #c9a961;
-  --color-gold-dim: #8a7442;
-  --color-gold-wash: #1e1a12;
-  --color-positive: #7ba888;
-  --color-negative: #c97b7d;
+  --color-ink: #fffdf7;
+  --color-surface: #fff3d4;
+  --color-raised: #fffaf0;
+  --color-line: #eadfce;
+  --color-line-strong: #cdbca8;
+  --color-fg: #191511;
+  --color-muted: #422f20;
+  --color-dim: #796b5f;
+  --color-gold: #ffbb63;
+  --color-gold-dim: #c66d00;
+  --color-gold-wash: #fff0d8;
+  --color-positive: #356749;
+  --color-negative: #9d3f32;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Times New Roman', Times, ui-serif, Georgia, serif;
 }
 
 @layer base {
   html {
     background-color: var(--color-ink);
-    color-scheme: dark;
+    color-scheme: light;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -36,8 +36,7 @@
     background-color: var(--color-ink);
     color: var(--color-fg);
     font-family: var(--font-sans);
-    font-feature-settings: 'cv11', 'ss01';
-    font-variant-ligatures: contextual;
+    min-width: 320px;
   }
 
   ::selection {
@@ -50,12 +49,12 @@
     outline-offset: 2px;
   }
 
-  /* Autofill in Chrome repaints inputs white; hold the dark surface. */
+  /* Keep browser autofill inside the warm form palette. */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
     -webkit-text-fill-color: var(--color-fg);
-    -webkit-box-shadow: 0 0 0 1000px var(--color-raised) inset;
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
     caret-color: var(--color-fg);
   }
 }
@@ -65,17 +64,18 @@
      section heading, table header, and field label. */
   .eyebrow {
     font-size: 0.6875rem;
-    font-weight: 500;
-    letter-spacing: 0.16em;
+    font-weight: 600;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: var(--color-dim);
   }
 
-  /* Display type: tight tracking is what makes this feel expensive. */
+  /* Display type follows the brand board exactly. */
   .display {
-    font-weight: 500;
-    letter-spacing: -0.035em;
-    line-height: 0.98;
+    font-family: var(--font-serif);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1;
   }
 
   .hairline {
@@ -85,7 +85,8 @@
   .panel {
     background-color: var(--color-surface);
     border: 1px solid var(--color-line);
-    border-radius: 0.375rem;
+    border-radius: 1.25rem;
+    box-shadow: 0 1rem 3rem rgba(66, 47, 32, 0.06);
   }
 
   /* Invite and claim codes. Always gold, always tabular, always selectable. */
@@ -98,8 +99,7 @@
   }
 }
 
-/* A slow, barely-there vignette so the near-black canvas has some depth
-   instead of reading as flat #000. */
+/* A restrained wash adds depth without competing with the content. */
 .ambient::before {
   content: '';
   position: fixed;
@@ -107,8 +107,8 @@
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(60rem 40rem at 50% -10%, rgba(201, 169, 97, 0.05), transparent 70%),
-    radial-gradient(50rem 50rem at 100% 100%, rgba(201, 169, 97, 0.025), transparent 70%);
+    radial-gradient(52rem 38rem at 10% 0%, rgba(255, 187, 99, 0.16), transparent 68%),
+    radial-gradient(44rem 34rem at 100% 100%, rgba(255, 243, 212, 0.75), transparent 72%);
 }
 
 @keyframes rise {

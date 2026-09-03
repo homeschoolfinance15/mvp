@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
-import { Button, CopyCode, Field, Input, Notice } from '../components/ui'
+import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage, supabase } from '../lib/supabase'
 import { homePathFor, useAuth } from '../context/AuthProvider'
 import type { CodeLookup } from '../lib/types'
@@ -77,11 +77,11 @@ export default function Join() {
     return (
       <AuthLayout
         eyebrow="By invitation"
-        title="Enter your code"
-        caption="AMAZING is invitation only. Enter the code you were given to begin."
+        title="Enter your invitation code"
+        caption="Use the code you received to continue."
         footer={
           <>
-            Already a member?{' '}
+            Already joined?{' '}
             <Link to="/signin" className="text-fg underline-offset-4 hover:underline">
               Sign in
             </Link>
@@ -104,7 +104,7 @@ export default function Join() {
           {error && <Notice tone="error">{error}</Notice>}
 
           <Button type="submit" variant="primary" loading={busy} className="w-full">
-            Continue
+            Check code
           </Button>
         </form>
       </AuthLayout>
@@ -116,19 +116,19 @@ export default function Join() {
 
   return (
     <AuthLayout
-      eyebrow={isConnector ? 'Connector invitation' : 'Member invitation'}
-      title={isConnector ? 'Claim your connector account' : 'Create your account'}
+      eyebrow={isConnector ? 'Connector access' : 'Your invitation'}
+      title={isConnector ? 'Create your connector account' : 'Create your account'}
       caption={
         isConnector ? (
           <>
-            An administrator created a connector account for you with{' '}
-            <span className="text-fg">{accepted.invite_capacity} invitations</span> to give out.
-            Set a password to claim it.
+            You can welcome up to{' '}
+            <span className="font-medium text-fg">{accepted.invite_capacity} people</span>. Add
+            your details to get started.
           </>
         ) : (
           <>
-            <span className="text-fg">{accepted.connector_name}</span> invited you to AMAZING.
-            Set up your account to accept.
+            <span className="font-medium text-fg">{accepted.connector_name}</span> invited you.
+            Add your details to join.
           </>
         )
       }
@@ -145,11 +145,6 @@ export default function Join() {
         </button>
       }
     >
-      <div className="mb-6 flex items-center justify-between rounded-sm border border-line bg-surface px-4 py-3">
-        <span className="eyebrow">Your code</span>
-        <CopyCode code={code.toUpperCase()} size="sm" />
-      </div>
-
       <form onSubmit={createAccount} className="space-y-5">
         <Field label="Full name">
           <Input
@@ -189,7 +184,7 @@ export default function Join() {
         {error && <Notice tone="error">{error}</Notice>}
 
         <Button type="submit" variant="primary" loading={busy} className="w-full">
-          {isConnector ? 'Claim account' : 'Accept invitation'}
+          {isConnector ? 'Create connector account' : 'Create account'}
         </Button>
       </form>
     </AuthLayout>

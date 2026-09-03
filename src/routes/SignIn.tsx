@@ -31,9 +31,8 @@ export default function SignIn() {
 
   return (
     <AuthLayout
-      eyebrow="Welcome back"
-      title="Sign in"
-      caption="Enter the details you used when you joined."
+      eyebrow="Member access"
+      title="Welcome back"
       footer={
         <>
           Have an invitation code?{' '}
