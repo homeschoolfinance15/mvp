@@ -36,9 +36,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-gold text-fg hover:bg-[#ffad43] active:bg-[#f09b31] border border-transparent font-semibold shadow-[0_8px_24px_rgba(198,109,0,0.16)]',
+    'bg-fg text-white hover:bg-[#353532] active:bg-black border border-fg font-medium',
   secondary:
-    'bg-white/55 text-fg border border-line hover:border-line-strong hover:bg-white',
+    'bg-white text-fg border border-line-strong hover:border-fg',
   ghost: 'bg-transparent text-muted border border-transparent hover:text-fg hover:bg-raised',
   danger:
     'bg-transparent text-negative border border-[#e6b5ad] hover:bg-[#fff0ec] hover:border-negative',
@@ -58,7 +58,7 @@ export function Button({
     <button
       {...rest}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-full transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[4px] transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
     >
       {loading && <Spinner />}
       {children}
@@ -83,9 +83,8 @@ export function Spinner() {
 // element — passing a width via className will not win, since Tailwind resolves
 // conflicting width utilities by stylesheet order, not by attribute order.
 const CONTROL =
-  'w-full rounded-xl border border-line bg-white/80 px-4 text-sm text-fg placeholder:text-dim/80 ' +
-  'transition-all duration-150 hover:border-line-strong focus:border-gold-dim focus:bg-white focus:outline-none ' +
-  'focus:shadow-[0_0_0_3px_rgba(255,187,99,0.2)] ' +
+  'w-full rounded-[4px] border border-line bg-white px-4 text-sm text-fg placeholder:text-dim/80 ' +
+  'transition-colors duration-300 hover:border-line-strong focus:border-fg focus:outline-none ' +
   'disabled:opacity-50'
 
 export function Field({
@@ -160,7 +159,7 @@ export function SectionHeader({
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-line-strong px-6 py-12 text-center text-sm text-dim">
+    <div className="rounded-[6px] border border-dashed border-line-strong px-6 py-12 text-center text-sm text-dim">
       {children}
     </div>
   )
@@ -317,7 +316,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
       <div
-      className="fixed inset-0 bg-[#191511]/35 backdrop-blur-[2px]"
+        className="fixed inset-0 bg-fg/45 backdrop-blur-[1px]"
         onClick={onClose}
         aria-hidden
       />
@@ -325,7 +324,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 my-auto w-full max-w-lg rounded-3xl border border-line bg-ink shadow-2xl shadow-[#422f20]/20"
+        className="relative z-10 my-auto w-full max-w-lg rounded-[6px] border border-line bg-white"
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
           <h2 className="text-sm font-medium tracking-tight text-fg">{title}</h2>
