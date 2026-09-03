@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
+import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import {
   Button,
   CopyCode,
@@ -203,6 +204,7 @@ function ConnectorsTab({
 }) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
+  const [connectorToDelete, setConnectorToDelete] = useState<ConnectorRow | null>(null)
 
   async function setStatus(id: string, status: ConnectorStatus) {
     setError('')
@@ -271,6 +273,14 @@ function ConnectorsTab({
                   ))}
                 </Select>
               </div>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={!connector.profiles}
+                onClick={() => setConnectorToDelete(connector)}
+              >
+                Delete
+              </Button>
             </div>
           ))}
         </Panel>
@@ -305,6 +315,18 @@ function ConnectorsTab({
       )}
 
       <CreateConnectorModal open={open} onClose={() => setOpen(false)} onCreated={onChanged} />
+      <DeleteProfileModal
+        open={Boolean(connectorToDelete?.profiles)}
+        profileId={connectorToDelete?.profile_id ?? null}
+        name={connectorToDelete?.profiles?.full_name ?? 'connector'}
+        impact={`This permanently removes the connector account, its invitation codes, and ${
+          invitedCount[connectorToDelete?.id ?? ''] ?? 0
+        } member profile${
+          (invitedCount[connectorToDelete?.id ?? ''] ?? 0) === 1 ? '' : 's'
+        } beneath it.`}
+        onClose={() => setConnectorToDelete(null)}
+        onDeleted={onChanged}
+      />
     </>
   )
 }
@@ -426,6 +448,7 @@ function MembersTab({
 }) {
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [memberToDelete, setMemberToDelete] = useState<Profile | null>(null)
 
   const filtered = members.filter((m) => {
     if (!query.trim()) return true
@@ -503,10 +526,22 @@ function MembersTab({
                   ))}
                 </Select>
               </div>
+              <Button variant="danger" size="sm" onClick={() => setMemberToDelete(member)}>
+                Delete
+              </Button>
             </div>
           ))}
         </Panel>
       )}
+
+      <DeleteProfileModal
+        open={Boolean(memberToDelete)}
+        profileId={memberToDelete?.id ?? null}
+        name={memberToDelete?.full_name ?? 'member'}
+        impact="This permanently removes the member account, its connector link, notes, and search data."
+        onClose={() => setMemberToDelete(null)}
+        onDeleted={onChanged}
+      />
     </>
   )
 }

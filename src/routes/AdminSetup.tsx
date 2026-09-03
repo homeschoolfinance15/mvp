@@ -38,8 +38,8 @@ export default function AdminSetup() {
   return (
     <AuthLayout
       eyebrow="Administration"
-      title="Set up your admin account"
-      caption="Only an email on the administrator allowlist will be granted access."
+      title="Create your admin account"
+      caption="Access is limited to approved administrator email addresses."
       footer={
         <>
           Not an administrator?{' '}

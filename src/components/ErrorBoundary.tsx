@@ -39,8 +39,8 @@ export class ErrorBoundary extends Component<Props, State> {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '1.5rem',
-          background: '#0b0b0c',
-          color: '#ededed',
+          background: '#fffdf7',
+          color: '#191511',
           fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
         }}
       >
@@ -50,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
               fontSize: '0.6875rem',
               letterSpacing: '0.16em',
               textTransform: 'uppercase',
-              color: '#5c5c65',
+              color: '#c66d00',
             }}
           >
             Amazing
@@ -58,7 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <h1 style={{ marginTop: '1.25rem', fontSize: '1.5rem', fontWeight: 500 }}>
             Something went wrong on this page
           </h1>
-          <p style={{ marginTop: '0.875rem', lineHeight: 1.65, color: '#8a8a93' }}>
+          <p style={{ marginTop: '0.875rem', lineHeight: 1.65, color: '#422f20' }}>
             The page failed to load rather than loading empty. Reloading often clears it. If it
             keeps happening, the message below is the useful part to pass on.
           </p>
@@ -66,10 +66,10 @@ export class ErrorBoundary extends Component<Props, State> {
             style={{
               marginTop: '1.5rem',
               padding: '0.875rem 1rem',
-              background: '#17161a',
-              border: '1px solid #232327',
+              background: '#fff0ec',
+              border: '1px solid #e6b5ad',
               borderRadius: '0.25rem',
-              color: '#c97b7d',
+              color: '#9d3f32',
               fontSize: '0.8125rem',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
@@ -84,8 +84,8 @@ export class ErrorBoundary extends Component<Props, State> {
               marginTop: '1.5rem',
               height: '2.5rem',
               padding: '0 1rem',
-              background: '#c9a961',
-              color: '#0b0b0c',
+              background: '#ffbb63',
+              color: '#191511',
               border: 'none',
               borderRadius: '0.125rem',
               fontSize: '0.875rem',

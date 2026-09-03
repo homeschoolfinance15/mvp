@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
+import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import {
   Button,
   CopyCode,
@@ -280,6 +281,7 @@ function PersonDetail({
   const [shareWithAdmin, setShareWithAdmin] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   async function addNote(e: FormEvent) {
     e.preventDefault()
@@ -314,7 +316,14 @@ function PersonDetail({
 
   return (
     <>
-      <SectionHeader title="Context" />
+      <SectionHeader
+        title="Context"
+        action={
+          <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
+            Delete profile
+          </Button>
+        }
+      />
 
       <Panel className="px-6 py-6">
         <div className="flex items-start gap-4">
@@ -364,7 +373,7 @@ function PersonDetail({
                   type="checkbox"
                   checked={shareWithAdmin}
                   onChange={(e) => setShareWithAdmin(e.target.checked)}
-                  className="size-3.5 accent-[#c9a961]"
+                  className="size-3.5 accent-gold-dim"
                 />
                 Make searchable by an administrator
               </label>
@@ -402,6 +411,15 @@ function PersonDetail({
           </ul>
         )}
       </div>
+
+      <DeleteProfileModal
+        open={confirmDelete}
+        profileId={person.profile.id}
+        name={person.profile.full_name}
+        impact="This permanently removes this member's account, your link to them, their notes, and their search data."
+        onClose={() => setConfirmDelete(false)}
+        onDeleted={onChanged}
+      />
     </>
   )
 }
