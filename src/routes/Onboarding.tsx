@@ -54,7 +54,9 @@ export default function Onboarding() {
     }
 
     await refreshProfile()
-    navigate(isConnector ? '/connector' : '/home', { replace: true })
+    // Straight into the curation questionnaire; the handoff puts it right
+    // after the account and location fields.
+    navigate('/questions', { replace: true })
   }
 
   return (

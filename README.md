@@ -113,6 +113,9 @@ The shared surfaces added on top:
 | `profile_reports` | A member's claim about another member's profile. Never readable by its subject. |
 | `recommendations` | Claude's picks for one member, each with the reason. |
 | `activity_log` | Append-only audit trail, written by triggers, readable only by an admin. |
+| `notifications` | Ten kinds of in-platform notice. Written only by triggers. |
+| `profile_tags` | The five seeded tag catalogs from the signup handoff, 134 entries with frozen ids. |
+| `profile_answers` | Questionnaire answers. The member, their connector and admins. Never another member. |
 
 And one view:
 
@@ -163,6 +166,7 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 | `/feed` | any member | The network-wide feed, with Claude's picks above it |
 | `/events` | any member | Events, RSVP, invitations, per-event threads |
 | `/circle` | any member | Your connector's room, live |
+| `/questions` | any member | The signup questionnaire, and where onboarding sends people |
 | `/profile` | any member | Edit your own record — members, connectors and admins alike |
 
 ---
@@ -203,6 +207,7 @@ and every hover-only control stays visible on a touch device.
 
 ```bash
 PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs
+PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-questionnaire.mjs
 ```
 
 ## The recommender

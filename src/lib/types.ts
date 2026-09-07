@@ -157,6 +157,63 @@ export interface Recommendation {
   created_at: string
 }
 
+export type TagField =
+  | 'current_focus'
+  | 'desired_outcomes'
+  | 'conversation_topics'
+  | 'outside_work_interests'
+  | 'strongest_skills'
+
+/** One seeded catalog entry. Ids are frozen; labels may be edited. */
+export interface ProfileTag {
+  id: string
+  field: TagField
+  label: string
+  position: number
+}
+
+/** The handoff storage contract, per tag field. */
+export interface TagAnswer {
+  selected_tag_ids: string[]
+  custom_tags: string[]
+}
+
+export type GatheringKind = 'big_events' | 'intimate_dinners' | 'one_on_ones'
+
+/**
+ * Signup questionnaire answers.
+ *
+ * Readable by the member, their connector and admins. Never by another
+ * member, which is why these live apart from profiles rather than as more
+ * columns on it.
+ */
+export interface ProfileAnswers {
+  profile_id: string
+  current_focus: TagAnswer
+  desired_outcomes: TagAnswer
+  conversation_topics: TagAnswer
+  outside_work_interests: TagAnswer
+  strongest_skills: TagAnswer
+  current_focus_details: string | null
+  desired_outcomes_details: string | null
+  current_project: string | null
+  background: string | null
+  room_contribution: string | null
+  current_conversation_need: string | null
+  curation_notes: string | null
+  home_city: string | null
+  travel_preference: string | null
+  phone: string | null
+  age_range: string | null
+  gathering_preference: GatheringKind[]
+  travels_often: boolean | null
+  travel_destinations: string | null
+  taxonomy_version: number
+  completed_at: string | null
+  updated_at: string
+  created_at: string
+}
+
 export type NotificationKind =
   | 'mention'
   | 'comment'

@@ -12,6 +12,7 @@ import ResetPassword from './routes/ResetPassword'
 import AdminSetup from './routes/AdminSetup'
 import Onboarding from './routes/Onboarding'
 import Profile from './routes/Profile'
+import Questions from './routes/Questions'
 import Feed from './routes/feed/Feed'
 import Events from './routes/events/Events'
 import Circle from './routes/circle/Circle'
@@ -127,6 +128,14 @@ export default function App() {
             element={
               <RequireRole>
                 <Circle />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/questions"
+            element={
+              <RequireRole>
+                <Questions />
               </RequireRole>
             }
           />

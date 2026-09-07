@@ -1,9 +1,26 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, errorMessage } from '../lib/supabase'
-import { Button, Field, Input, Modal, Notice, Wordmark } from '../components/ui'
-import type { CodeLookup } from '../lib/types'
+import { Button, Field, Input, Modal, Notice, Textarea, Wordmark } from '../components/ui'
+import { TagPicker } from '../components/TagPicker'
+import {
+  DISCLOSURE,
+  EMPTY_TAG_ANSWER,
+  TAG_QUESTIONS,
+  TEXT_QUESTIONS,
+  TRAVEL_OPTIONS,
+} from '../lib/questionnaire'
+import type { CodeLookup, ProfileTag, TagAnswer, TagField } from '../lib/types'
 
+/**
+ * The public waitlist form.
+ *
+ * The handoff says waitlist applicants answer the same questionnaire. It is
+ * asked in two steps, and everything past name and email is optional: a
+ * stranger asked thirty questions at the door leaves. Whatever they do answer
+ * is carried onto their profile when an admin lets them in, so nobody
+ * answers twice.
+ */
 function WaitlistForm({ onClose }: { onClose: () => void }) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -12,16 +29,41 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
+  const [step, setStep] = useState<'who' | 'about'>('who')
+  const [tags, setTags] = useState<ProfileTag[]>([])
+  const [answers, setAnswers] = useState<Record<string, TagAnswer>>({})
+  const [text, setText] = useState<Record<string, string>>({})
+  const [homeCity, setHomeCity] = useState('')
+  const [travel, setTravel] = useState('')
+
+  useEffect(() => {
+    if (step !== 'about' || tags.length > 0) return
+    void supabase
+      .from('profile_tags')
+      .select('*')
+      .order('field')
+      .order('position')
+      .then(({ data }) => setTags((data as ProfileTag[]) ?? []))
+  }, [step, tags.length])
+
+  const answerOf = (field: TagField) => answers[field] ?? EMPTY_TAG_ANSWER
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
     setBusy(true)
 
-    const { error: insertError } = await supabase.from('waitlist_entries').insert({
+    const body: Record<string, unknown> = {
       full_name: fullName.trim(),
       email: email.trim().toLowerCase(),
       linkedin_url: linkedin.trim() || null,
-    })
+      home_city: homeCity.trim() || null,
+      travel_preference: travel || null,
+    }
+    for (const q of TAG_QUESTIONS) body[q.field] = answerOf(q.field)
+    for (const q of TEXT_QUESTIONS) body[q.field] = text[q.field]?.trim() || null
+
+    const { error: insertError } = await supabase.from('waitlist_entries').insert(body)
 
     setBusy(false)
 
@@ -51,8 +93,98 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
     )
   }
 
+  if (step === 'about') {
+    return (
+      <form onSubmit={submit}>
+        <p className="mb-2 text-sm leading-6 text-muted">
+          A little more, so we can find you the right room. All of this is optional.
+        </p>
+        <p className="mb-8 text-xs leading-relaxed text-dim">{DISCLOSURE}</p>
+
+        <div className="space-y-7">
+          {TAG_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => (
+            <TagPicker
+              key={q.field}
+              label={q.prompt}
+              helper={q.helper}
+              tags={tags.filter((t) => t.field === q.field)}
+              value={answerOf(q.field)}
+              max={q.max}
+              allowCustom={q.allowCustom}
+              onChange={(next) => setAnswers((a) => ({ ...a, [q.field]: next }))}
+            />
+          ))}
+
+          {TEXT_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => (
+            <Field key={q.field} label={q.prompt} hint={q.helper}>
+              <Textarea
+                rows={3}
+                maxLength={q.maxLength}
+                placeholder={q.placeholder}
+                value={text[q.field] ?? ''}
+                onChange={(e) => setText((t) => ({ ...t, [q.field]: e.target.value }))}
+              />
+            </Field>
+          ))}
+
+          <Field label="Where are you based?" hint="City, region and country.">
+            <Input
+              value={homeCity}
+              placeholder="Manchester, England"
+              onChange={(e) => setHomeCity(e.target.value)}
+            />
+          </Field>
+
+          <fieldset className="border-0 p-0">
+            <legend className="eyebrow mb-3">How far are you willing to travel?</legend>
+            <ul className="flex flex-wrap gap-2">
+              {TRAVEL_OPTIONS.map((option) => (
+                <li key={option.id}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={travel === option.id}
+                    onClick={() => setTravel(option.id)}
+                    className={`rounded-sm border px-3 py-1.5 text-xs transition-colors ${
+                      travel === option.id
+                        ? 'border-gold bg-gold-wash text-fg'
+                        : 'border-line text-muted hover:text-fg'
+                    }`}
+                  >
+                    {travel === option.id && <span aria-hidden>&#10003; </span>}
+                    {option.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        </div>
+
+        {error && (
+          <div className="mt-6">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        )}
+
+        <div className="mt-8 flex flex-wrap justify-between gap-3">
+          <Button type="button" onClick={() => setStep('who')}>
+            Back
+          </Button>
+          <Button type="submit" variant="primary" loading={busy}>
+            Join the waitlist
+          </Button>
+        </div>
+      </form>
+    )
+  }
+
   return (
-    <form onSubmit={submit}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        setStep('about')
+      }}
+    >
       <p className="mb-8 text-sm leading-6 text-muted">
         Tell us a little about yourself. Every application is reviewed personally.
       </p>
@@ -97,8 +229,8 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      <Button type="submit" variant="primary" loading={busy} className="mt-7 w-full">
-        Submit application
+      <Button type="submit" variant="primary" className="mt-7 w-full">
+        Continue
       </Button>
       <p className="mt-4 text-center text-xs text-dim">
         Your information is only used to review your application.

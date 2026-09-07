@@ -169,6 +169,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       if (redeemError) throw redeemError
 
+      // Somebody who answered the questionnaire at the waitlist door should
+      // not be asked the same thirty questions again. Best effort: failing to
+      // copy old answers must not fail the join.
+      const { error: claimError } = await supabase.rpc('claim_waitlist_answers', {
+        p_email: email.trim(),
+      })
+      if (claimError) console.error('[amazing] waitlist answers:', claimError)
+
       await fetchProfile(data.session.user.id)
       return redeemed as RedeemResult
     },

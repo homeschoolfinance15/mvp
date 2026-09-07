@@ -1,6 +1,7 @@
 import { DashboardShell } from '../components/DashboardShell'
 import { ChangePassword } from '../components/ChangePassword'
 import { ProfileEditor } from '../components/ProfileEditor'
+import { QuestionnaireAnswers } from '../components/QuestionnaireAnswers'
 import { YourData } from '../components/YourData'
 import { useAuth } from '../context/AuthProvider'
 import { formatDate, Panel, StatusBadge } from '../components/ui'
@@ -27,6 +28,7 @@ export default function Profile() {
       <div className="grid gap-10 lg:grid-cols-[1fr_18rem]">
         <div>
           <ProfileEditor />
+          <QuestionnaireAnswers />
           <ChangePassword />
           <YourData />
         </div>
