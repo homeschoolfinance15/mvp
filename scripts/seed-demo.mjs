@@ -262,10 +262,48 @@ await insert(priya.token, 'profile_reports', {
 })
 console.log('   1 open correction, visible to Elena and admins only')
 
-console.log('10. a second connector, left unclaimed for demos')
-const pending = await rpc(admin.token, 'create_connector_invitation', {
+console.log('10. a second connector, with a circle of their own')
+// Two circles, not one. Without a second the isolation between them cannot be
+// demonstrated or tested: everyone would be in the same room by default.
+const secondInvitation = await rpc(admin.token, 'create_connector_invitation', {
   p_full_name: 'Daniel Abiodun',
   p_email: 'daniel.abiodun@ramedia.dev',
+  p_capacity: 5,
+})
+const daniel = await account('daniel.abiodun@ramedia.dev', 'Daniel Abiodun')
+const danielClaimed = await rpc(daniel.token, 'redeem_code', {
+  p_code: secondInvitation.claim_code,
+  p_full_name: 'Daniel Abiodun',
+})
+await patchProfile(daniel.token, daniel.id, {
+  current_profession: 'Founder, Kestrel Logistics',
+  semantic_summary:
+    'I move things that are awkward to move. Cold chain across three countries, and a growing interest in who actually carries the risk when a shipment sits at a border.',
+  interests: ['logistics', 'trade', 'operations'],
+})
+
+const sofia = await account('sofia.mensah@ramedia.dev', 'Sofia Mensah')
+await rpc(sofia.token, 'redeem_code', {
+  p_code: danielClaimed.invite_code,
+  p_full_name: 'Sofia Mensah',
+})
+await patchProfile(sofia.token, sofia.id, {
+  current_profession: 'Director of Trade Finance, Ashanti Bank',
+  semantic_summary:
+    'I underwrite the working capital behind physical trade. Most of my week is spent deciding which counterparties deserve terms they have not earned yet.',
+  interests: ['trade finance', 'risk', 'banking'],
+})
+await insert(daniel.token, 'circle_messages', {
+  connector_id: danielClaimed.connector_id,
+  author_id: daniel.id,
+  body: 'Welcome Sofia. This room is just us for now.',
+})
+console.log('   Daniel claimed, Sofia joined, second circle talking')
+
+console.log('11. a third connector, left unclaimed for demos')
+const pending = await rpc(admin.token, 'create_connector_invitation', {
+  p_full_name: 'Marta Reyes',
+  p_email: 'marta.reyes@ramedia.dev',
   p_capacity: 5,
 })
 console.log('   unclaimed claim code', pending.claim_code)

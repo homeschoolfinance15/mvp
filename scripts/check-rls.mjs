@@ -21,7 +21,7 @@ function headers(token) {
 
 async function get(token, path) {
   const r = await fetch(`${URL}/rest/v1/${path}`, { headers: headers(token) })
-  return { status: r.status, body: await r.json() }
+  return { ok: r.ok, status: r.status, body: await r.json() }
 }
 
 const results = []
@@ -34,6 +34,10 @@ const admin = await signIn('moshe@valued.ventures')
 const connector = await signIn('zalmytouger@gmail.com')
 const james = await signIn('mn26ventures@gmail.com')
 const priya = await signIn('priya.raghavan@ramedia.dev')
+// Sofia was invited by a different connector, so she is the only person here
+// who can prove that one circle cannot reach another. Priya and James share
+// Elena's circle, which is why using Priya for that check passed vacuously.
+const sofia = await signIn('sofia.mensah@ramedia.dev')
 
 // 1. A member sees only themselves and their connector — not other members.
 const jamesProfiles = await get(james.token, 'profiles?select=id,full_name,role')
@@ -217,19 +221,19 @@ check(
   String(resolveBody.message).slice(0, 70),
 )
 
-// 17. Circle chat is closed to anyone outside the circle. Priya was invited by
-// a different connector than James.
-const priyaCircle = await fetch(`${URL}/rest/v1/rpc/my_circle_id`, {
+// 17. Circle chat is closed to anyone outside the circle. Sofia belongs to the
+// second connector's circle, so James reaching into hers is a real crossing.
+const sofiaCircle = await fetch(`${URL}/rest/v1/rpc/my_circle_id`, {
   method: 'POST',
-  headers: headers(priya.token),
+  headers: headers(sofia.token),
   body: '{}',
 })
-const priyaCircleId = await priyaCircle.json()
+const sofiaCircleId = await sofiaCircle.json()
 const intrusion = await fetch(`${URL}/rest/v1/circle_messages`, {
   method: 'POST',
   headers: headers(james.token),
   body: JSON.stringify({
-    connector_id: priyaCircleId,
+    connector_id: sofiaCircleId,
     author_id: james.id,
     body: 'Speaking into a room I am not in.',
   }),
@@ -238,6 +242,14 @@ check(
   'member cannot speak into another circle',
   !intrusion.ok,
   `${intrusion.status}`,
+)
+
+// 17b. And cannot read it either.
+const eavesdrop = await get(james.token, `circle_messages?connector_id=eq.${sofiaCircleId}`)
+check(
+  'member cannot read another circle',
+  Array.isArray(eavesdrop.body) && eavesdrop.body.length === 0,
+  `saw ${Array.isArray(eavesdrop.body) ? eavesdrop.body.length : 'error'}`,
 )
 
 // 18. Recommendations are private to their subject, and a member cannot
