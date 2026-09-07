@@ -132,6 +132,25 @@ export interface ProfileReport {
   created_at: string
 }
 
+/**
+ * One suggestion for one member, with the reason it was made.
+ *
+ * Exactly one of member_id / post_id / event_id is set. acted_at is the
+ * feedback signal the next scheduled run learns from.
+ */
+export interface Recommendation {
+  id: string
+  profile_id: string
+  member_id: string | null
+  post_id: string | null
+  event_id: string | null
+  reason: string
+  rank: number
+  batch_id: string
+  acted_at: string | null
+  created_at: string
+}
+
 /** A row of the append-only audit trail. Admin-readable only. */
 export interface ActivityLogEntry {
   id: number

@@ -1,5 +1,8 @@
 name: Deploy database
 
+# The schema and the edge functions both live in this repo, and both deploy
+# from here — one workflow owns everything that runs on Supabase.
+#
 # The schema lives in this repo as ordered SQL files under supabase/migrations.
 # That IS the database deployment: this workflow replays any migration the
 # linked Supabase project has not applied yet. Migrations are append-only —
@@ -11,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/**'
+      - 'supabase/functions/**'
       - '.github/workflows/deploy-database.yml'
   # Lets you replay migrations by hand from the Actions tab.
   workflow_dispatch:
@@ -67,3 +71,13 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # The recommender. Its secrets (ANTHROPIC_API_KEY, RECOMMEND_SECRET) are
+      # set once with `supabase secrets set` and live in Supabase, not here —
+      # this step only ships the code.
+      - name: Deploy edge functions
+        if: steps.guard.outputs.ready == 'true'
+        run: supabase functions deploy recommend --project-ref "$SUPABASE_PROJECT_REF"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

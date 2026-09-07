@@ -395,7 +395,7 @@ function PostCard({
   }
 
   return (
-    <Panel className="px-5 py-5">
+    <Panel id={`post-${post.id}`} className="px-5 py-5">
       <header className="flex items-start gap-3">
         <Initials name={author?.full_name ?? '?'} />
         <div className="min-w-0 flex-1">

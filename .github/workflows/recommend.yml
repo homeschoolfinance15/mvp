@@ -1,0 +1,52 @@
+name: Recommendations
+
+# Asks the recommend edge function for a fresh batch of suggestions. This is
+# the "regularly" in recommending members their likely feed: one run a week,
+# each one handed the previous run's hits and misses so it can move towards
+# what people actually acted on.
+#
+# The schedule lives here rather than in pg_cron so it is visible in the repo,
+# runnable by hand from the Actions tab, and needs no database extension.
+
+on:
+  schedule:
+    # Monday 06:00 UTC — suggestions waiting at the start of the week.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: recommendations
+  cancel-in-progress: false
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      # Skip cleanly rather than failing a scheduled run every week while the
+      # secrets are unset, matching how the other two workflows behave.
+      - name: Check whether the recommender is configured
+        id: guard
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          RECOMMEND_SECRET: ${{ secrets.RECOMMEND_SECRET }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$RECOMMEND_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VITE_SUPABASE_URL or RECOMMEND_SECRET is not set — skipping."
+          fi
+
+      - name: Ask for a batch
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          RECOMMEND_SECRET: ${{ secrets.RECOMMEND_SECRET }}
+        run: |
+          curl -fsS --max-time 900 -X POST \
+            "${SUPABASE_URL%/}/functions/v1/recommend" \
+            -H "x-recommend-secret: ${RECOMMEND_SECRET}" \
+            -H 'content-type: application/json' \
+            | tee response.json
+          echo "::notice::$(jq -r '"\(.written) suggestions for \(.members) members, \(.failed) failed"' response.json)"

@@ -130,11 +130,18 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
 export function Panel({
   children,
   className = '',
+  id,
 }: {
   children: ReactNode
   className?: string
+  /** So a recommendation can scroll the feed to one particular post. */
+  id?: string
 }) {
-  return <div className={`panel ${className}`}>{children}</div>
+  return (
+    <div id={id} className={`panel ${className}`}>
+      {children}
+    </div>
+  )
 }
 
 export function SectionHeader({
