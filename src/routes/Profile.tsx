@@ -1,4 +1,5 @@
 import { DashboardShell } from '../components/DashboardShell'
+import { ChangePassword } from '../components/ChangePassword'
 import { ProfileEditor } from '../components/ProfileEditor'
 import { YourData } from '../components/YourData'
 import { useAuth } from '../context/AuthProvider'
@@ -26,6 +27,7 @@ export default function Profile() {
       <div className="grid gap-10 lg:grid-cols-[1fr_18rem]">
         <div>
           <ProfileEditor />
+          <ChangePassword />
           <YourData />
         </div>
 

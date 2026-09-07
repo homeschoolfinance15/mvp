@@ -64,6 +64,15 @@ export default function SignIn() {
           />
         </Field>
 
+        <div className="-mt-2 text-right">
+          <Link
+            to="/forgot-password"
+            className="text-xs text-dim underline-offset-4 transition-colors hover:text-fg hover:underline"
+          >
+            Forgotten your password?
+          </Link>
+        </div>
+
         {error && <Notice tone="error">{error}</Notice>}
 
         <Button type="submit" variant="primary" loading={busy || (!!session && loading)} className="w-full">

@@ -7,6 +7,8 @@ import type { AppRole } from './lib/types'
 import Landing from './routes/Landing'
 import Join from './routes/Join'
 import SignIn from './routes/SignIn'
+import ForgotPassword from './routes/ForgotPassword'
+import ResetPassword from './routes/ResetPassword'
 import AdminSetup from './routes/AdminSetup'
 import Onboarding from './routes/Onboarding'
 import Profile from './routes/Profile'
@@ -90,6 +92,9 @@ export default function App() {
           <Route path="/join" element={<Join />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/admin-setup" element={<AdminSetup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          {/* Where a recovery link lands. Public: the link is the credential. */}
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route
             path="/onboarding"
