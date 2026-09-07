@@ -167,6 +167,14 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 
 ---
 
+## Security and compliance
+
+[COMPLIANCE.md](COMPLIANCE.md) maps what the code enforces to the SOC 2 Trust
+Services Criteria, and lists what is missing. Read the top of it before
+describing this platform as compliant anywhere: SOC 2 is an audit of an
+organisation, not a property of a schema, and several of the remaining gaps
+are not engineering work.
+
 ## Security model
 
 Verified by `scripts/check-rls.mjs`, which asserts against the live project:

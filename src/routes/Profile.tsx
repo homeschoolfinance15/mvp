@@ -1,5 +1,6 @@
 import { DashboardShell } from '../components/DashboardShell'
 import { ProfileEditor } from '../components/ProfileEditor'
+import { YourData } from '../components/YourData'
 import { useAuth } from '../context/AuthProvider'
 import { formatDate, Panel, StatusBadge } from '../components/ui'
 
@@ -23,7 +24,10 @@ export default function Profile() {
       caption="What the network reads you by, and the parts of it only an administrator can move."
     >
       <div className="grid gap-10 lg:grid-cols-[1fr_18rem]">
-        <ProfileEditor />
+        <div>
+          <ProfileEditor />
+          <YourData />
+        </div>
 
         <aside>
           <Panel className="divide-y divide-line">
