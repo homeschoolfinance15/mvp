@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
 import { DeleteProfileModal } from '../../components/DeleteProfileModal'
+import { FlagsPanel } from '../../components/FlagsPanel'
 import {
   Button,
   CopyCode,
@@ -148,6 +149,7 @@ export default function AdminDashboard() {
     { id: 'members', label: 'Members', count: members.length },
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'waitlist', label: 'Waitlist', count: waitlist.length },
+    { id: 'flags', label: 'Raised' },
     { id: 'log', label: 'Log' },
   ]
 
@@ -197,6 +199,7 @@ export default function AdminDashboard() {
             {tab === 'notes' && (
               <NotesTab notes={notes} connectors={connectors} profilesById={profilesById} />
             )}
+            {tab === 'flags' && <FlagsPanel />}
             {tab === 'log' && <LogTab entries={activity} profilesById={profilesById} />}
             {tab === 'waitlist' && (
               <WaitlistTab

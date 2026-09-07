@@ -67,6 +67,38 @@ export interface PostComment {
   created_at: string
 }
 
+export type ReportKind = 'correction' | 'concern' | 'endorsement'
+export type ReportStatus = 'open' | 'resolved' | 'dismissed'
+
+export const REPORT_KINDS: ReportKind[] = ['correction', 'concern', 'endorsement']
+
+/** Which part of a profile is being disputed. Free text in the database. */
+export const REPORTABLE_FIELDS = [
+  { value: 'current_profession', label: 'Profession' },
+  { value: 'full_name', label: 'Name' },
+  { value: 'interests', label: 'Interests' },
+  { value: 'semantic_summary', label: 'Description' },
+]
+
+/**
+ * A member's claim about another member's profile.
+ *
+ * Readable by the reporter, an admin, and the connector who invited the
+ * subject — never by the subject themselves.
+ */
+export interface ProfileReport {
+  id: string
+  subject_id: string
+  reporter_id: string
+  kind: ReportKind
+  field: string | null
+  body: string
+  status: ReportStatus
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+}
+
 /** A row of the append-only audit trail. Admin-readable only. */
 export interface ActivityLogEntry {
   id: number

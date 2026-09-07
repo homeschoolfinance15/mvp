@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
+import { FlagsPanel } from '../../components/FlagsPanel'
 import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import {
   Button,
@@ -110,6 +111,7 @@ export default function ConnectorDashboard() {
   const tabs: Tab[] = [
     { id: 'people', label: 'Your people', count: people.length },
     { id: 'codes', label: 'Invitations', count: codes.length },
+    { id: 'flags', label: 'Raised' },
   ]
 
   const selected = people.find((p) => p.profile.id === selectedId) ?? null
@@ -137,7 +139,7 @@ export default function ConnectorDashboard() {
             liveCodes={liveCodes}
           />
 
-          {tab === 'people' ? (
+          {tab === 'people' && (
             <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
               <section>
                 <SectionHeader
@@ -205,13 +207,21 @@ export default function ConnectorDashboard() {
                 )}
               </section>
             </div>
-          ) : (
+          )}
+
+          {tab === 'codes' && (
             <InviteCodes
               codes={codes}
               remaining={remaining}
               canInvite={connector?.invite_status === 'active'}
               onChanged={load}
             />
+          )}
+
+          {tab === 'flags' && (
+            <div className="mt-10">
+              <FlagsPanel />
+            </div>
           )}
         </>
       )}

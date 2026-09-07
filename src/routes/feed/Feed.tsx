@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { DashboardShell } from '../../components/DashboardShell'
+import { MemberCard } from '../../components/MemberCard'
 import {
   Button,
   EmptyState,
@@ -44,6 +45,7 @@ export default function Feed() {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
 
   const load = useCallback(async () => {
     setError('')
@@ -172,10 +174,13 @@ export default function Feed() {
                     setComments((cs) => cs.filter((c) => c.id !== id))
                   }
                   onDeleted={load}
+                  onViewMember={setViewing}
                 />
               ))
             )}
           </div>
+
+          {viewing && <MemberCard member={viewing} onClose={() => setViewing(null)} />}
         </div>
       )}
     </DashboardShell>
@@ -302,6 +307,7 @@ function PostCard({
   onCommentAdded,
   onCommentRemoved,
   onDeleted,
+  onViewMember,
 }: {
   post: Post
   author?: DirectoryEntry
@@ -313,6 +319,7 @@ function PostCard({
   onCommentAdded: (comment: PostComment) => void
   onCommentRemoved: (id: string) => void
   onDeleted: () => Promise<void>
+  onViewMember: (member: DirectoryEntry) => void
 }) {
   const { profile } = useAuth()
   const [draft, setDraft] = useState('')
@@ -369,9 +376,19 @@ function PostCard({
       <header className="flex items-start gap-3">
         <Initials name={author?.full_name ?? '?'} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-fg">
-            {author?.full_name ?? 'Someone no longer on the network'}
-          </div>
+          {author ? (
+            <button
+              type="button"
+              onClick={() => onViewMember(author)}
+              className="max-w-full truncate text-sm font-medium text-fg transition-colors hover:text-gold"
+            >
+              {author.full_name}
+            </button>
+          ) : (
+            <div className="truncate text-sm font-medium text-fg">
+              Someone no longer on the network
+            </div>
+          )}
           <div className="truncate text-xs text-dim">
             {author?.current_profession ?? '—'} · {formatDate(post.created_at)}
           </div>
@@ -438,9 +455,17 @@ function PostCard({
               comment.author_id === profile?.id || mine || profile?.role === 'admin'
             return (
               <li key={comment.id} className="group flex items-baseline gap-2 text-sm">
-                <span className="shrink-0 font-medium text-fg">
-                  {who?.full_name ?? 'Someone'}
-                </span>
+                {who ? (
+                  <button
+                    type="button"
+                    onClick={() => onViewMember(who)}
+                    className="shrink-0 font-medium text-fg transition-colors hover:text-gold"
+                  >
+                    {who.full_name}
+                  </button>
+                ) : (
+                  <span className="shrink-0 font-medium text-fg">Someone</span>
+                )}
                 <span className="min-w-0 flex-1 break-words text-muted">{comment.body}</span>
                 {removable && (
                   <button
