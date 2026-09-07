@@ -109,7 +109,7 @@ const ROLE_WORD: Record<string, string> = {
 const KIND_HINT: Record<ReportKind, string> = {
   correction: "Something in their profile doesn't match what you know.",
   concern: 'Something about their conduct the connector should know.',
-  endorsement: "Something good — you've worked with them, or vouch for them.",
+  endorsement: "Something good. You've worked with them, or you vouch for them.",
 }
 
 function RaiseReport({
@@ -206,14 +206,14 @@ function RaiseReport({
           value={body}
           maxLength={2000}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Met them at the founders dinner — they mentioned they'd moved out of engineering last year."
+          placeholder="Met them at the founders dinner. They mentioned they'd moved out of engineering last year."
         />
       </Field>
 
       {error && <Notice tone="error">{error}</Notice>}
 
       <p className="text-xs leading-relaxed text-dim">
-        This goes to {member.full_name.split(' ')[0]}'s connector and to administrators — not
+        This goes to {member.full_name.split(' ')[0]}'s connector and to administrators, not
         to {member.full_name.split(' ')[0]}. Your name is attached, so whoever acts on it can
         weigh the source.
       </p>

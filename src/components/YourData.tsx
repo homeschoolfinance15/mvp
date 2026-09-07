@@ -71,7 +71,7 @@ export function YourData() {
             <p className="mt-1 max-w-md text-xs leading-relaxed text-dim">
               Your profile, posts, comments, messages, RSVPs and your own
               activity, as one file. What others have raised about you isn't
-              included — it would name who raised it.
+              included, because it would name who raised it.
             </p>
           </div>
           <Button size="sm" disabled={busy} onClick={exportData}>

@@ -10,7 +10,7 @@
 export const MAX_INTERESTS = 12
 export const MAX_INTEREST_LENGTH = 40
 
-export const INTERESTS_PLACEHOLDER = 'founder, climate, design — separate with commas'
+export const INTERESTS_PLACEHOLDER = 'founder, climate, design (separate with commas)'
 
 /** "Founder, climate, Climate " -> ['founder','climate'] */
 export function parseInterests(raw: string): string[] {

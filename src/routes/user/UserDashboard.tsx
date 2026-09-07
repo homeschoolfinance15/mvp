@@ -57,7 +57,7 @@ export default function UserDashboard() {
   return (
     <DashboardShell
       title={`Hello, ${profile?.full_name.split(' ')[0] ?? ''}`}
-      caption="Your place in the network — who brought you in, and how you're described to others."
+      caption="Your place in the network: who brought you in, and how you're described to others."
     >
       {loading ? (
         <div className="flex justify-center py-16 text-dim">
@@ -126,11 +126,11 @@ export default function UserDashboard() {
               </Row>
               <Row label="Joined">
                 <span className="text-sm text-muted">
-                  {membership ? formatDate(membership.created_at) : '—'}
+                  {membership ? formatDate(membership.created_at) : 'Not recorded'}
                 </span>
               </Row>
               <Row label="Email">
-                <span className="truncate text-sm text-muted">{profile?.email ?? '—'}</span>
+                <span className="truncate text-sm text-muted">{profile?.email ?? 'Not set'}</span>
               </Row>
             </Panel>
           </aside>

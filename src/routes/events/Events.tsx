@@ -332,7 +332,7 @@ function EventDetail({
           <h2 className="display text-2xl">{event.title}</h2>
           <p className="mt-2 text-sm text-muted">
             {formatDateTime(event.starts_at)}
-            {event.ends_at ? ` — ${formatDateTime(event.ends_at)}` : ''}
+            {event.ends_at ? ` to ${formatDateTime(event.ends_at)}` : ''}
             {event.location ? ` · ${event.location}` : ''}
           </p>
           <p className="mt-1 text-xs text-dim">

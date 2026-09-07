@@ -163,7 +163,7 @@ export default function Circle() {
         <div className="mx-auto max-w-2xl">
           <EmptyState>
             {profile?.role === 'admin'
-              ? "Administrators aren't part of a circle — nobody invited you in, so there's no room to join."
+              ? "Administrators aren't part of a circle. Nobody invited you in, so there's no room to join."
               : "You aren't in a circle yet."}
           </EmptyState>
         </div>

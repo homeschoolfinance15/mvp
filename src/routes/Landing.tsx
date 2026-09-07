@@ -176,7 +176,7 @@ export default function Landing() {
             The room you’re meant to be in.
           </h1>
           <p className="rise mt-8 max-w-2xl text-base leading-7 text-muted sm:text-lg sm:leading-8">
-            Bringing the right people together, in the right place, at the right time —
+            Bringing the right people together, in the right place, at the right time,
             creating moments worth showing up for.
           </p>
 

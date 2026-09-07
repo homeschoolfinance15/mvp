@@ -5,6 +5,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
@@ -109,12 +110,17 @@ export function Field({
   )
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+/** ref is a plain prop in React 19, so these forward it without ceremony. */
+export function Input(
+  props: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> },
+) {
   const { className = '', ...rest } = props
   return <input {...rest} className={`${CONTROL} h-12 ${className}`} />
 }
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea(
+  props: TextareaHTMLAttributes<HTMLTextAreaElement> & { ref?: Ref<HTMLTextAreaElement> },
+) {
   const { className = '', ...rest } = props
   return <textarea {...rest} className={`${CONTROL} resize-y py-2.5 leading-relaxed ${className}`} />
 }

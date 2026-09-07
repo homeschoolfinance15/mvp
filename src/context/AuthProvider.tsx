@@ -60,7 +60,7 @@ function humanSignupError(error: unknown): Error {
   if (/rate limit/i.test(raw)) {
     console.error(
       'Signup hit the Supabase email rate limit. This happens because "Confirm ' +
-        'email" is enabled — each signup sends a message and the built-in mailer ' +
+        'email" is enabled. Each signup sends a message and the built-in mailer ' +
         'is capped at a few per hour. Disable it under Authentication → Sign In / ' +
         'Providers → Email, or configure custom SMTP.',
       error,

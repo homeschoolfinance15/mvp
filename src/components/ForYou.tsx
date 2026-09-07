@@ -88,7 +88,7 @@ export function ForYou() {
     <section className="mb-10">
       <SectionHeader
         title="For you"
-        caption={`Picked out for you, ${profile?.full_name.split(' ')[0] ?? 'friend'} — with the reason.`}
+        caption={`Picked out for you, ${profile?.full_name.split(' ')[0] ?? 'friend'}, with the reason why.`}
       />
 
       {items.length === 0 ? (

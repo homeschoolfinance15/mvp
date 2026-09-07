@@ -55,6 +55,8 @@ export interface Post {
   media: MediaItem[]
   /** Set when the post is a note on an event rather than a plain feed post. */
   event_id: string | null
+  /** Profile ids tagged in the body. See the mentions migration. */
+  mentions: string[]
   created_at: string
 }
 
@@ -69,6 +71,7 @@ export interface PostComment {
   post_id: string
   author_id: string
   body: string
+  mentions: string[]
   created_at: string
 }
 

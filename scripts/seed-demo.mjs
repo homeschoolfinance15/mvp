@@ -112,7 +112,7 @@ console.log('   first invitation code', claimed.invite_code)
 await patchProfile(connector.token, connector.id, {
   current_profession: 'Partner, Meridian Capital',
   semantic_summary:
-    'I back founders building infrastructure for the energy transition. Twenty years between operating and investing, and I care most about the unglamorous middle layer — the software that makes physical projects financeable.',
+    'I back founders building infrastructure for the energy transition. Twenty years between operating and investing, and I care most about the unglamorous middle layer, the software that makes physical projects financeable.',
 })
 
 console.log('4. connector mints a shared code')
@@ -129,7 +129,7 @@ const MEMBERS = [
       'Building distribution-level grid software for utilities across West Africa. Previously ten years in power systems engineering. Curious about how regulation actually moves, and looking for operators who have taken hardware into regulated markets.',
     interests: ['energy', 'hardware', 'regulation', 'west africa'],
     code: claimed.invite_code,
-    note: 'Met James through the Lagos energy cohort. Genuinely rare combination — deep power systems background and a real commercial instinct. Worth introducing to anyone in grid-adjacent infrastructure.',
+    note: 'Met James through the Lagos energy cohort. Genuinely rare combination of deep power systems background and real commercial instinct. Worth introducing to anyone in grid-adjacent infrastructure.',
     shareNote: true,
   },
   {
@@ -140,7 +140,7 @@ const MEMBERS = [
       'I design clinical software that nurses actually want to use. Spent five years watching good products fail on the ward because nobody watched the ward. Interested in people working where design meets regulated environments.',
     interests: ['design', 'health', 'regulation'],
     code: shared.code,
-    note: 'Priya is the most rigorous design thinker I know in health tech. She is quietly looking at what is next — do not surface that broadly.',
+    note: 'Priya is the most rigorous design thinker I know in health tech. She is quietly looking at what is next, so do not surface that broadly.',
     shareNote: false,
   },
   {
@@ -187,7 +187,7 @@ const tomas = sessions['Tomas Lindqvist']
 
 const post = await insert(james.token, 'posts', {
   author_id: james.id,
-  body: "Spent the week in Accra with two distribution utilities. The technical problem is nowhere near the hard part — the hard part is that nobody owns the meter data. If you have taken hardware into a regulated market and lived through this, I would like to buy you a coffee.",
+  body: "Spent the week in Accra with two distribution utilities. The technical problem is nowhere near the hard part. The hard part is that nobody owns the meter data. If you have taken hardware into a regulated market and lived through this, I would like to buy you a coffee.",
 })
 const secondPost = await insert(connector.token, 'posts', {
   author_id: connector.id,
@@ -216,7 +216,7 @@ const inAWeek = new Date(Date.now() + 7 * 864e5)
 inAWeek.setHours(18, 30, 0, 0)
 const event = await insert(connector.token, 'events', {
   host_id: connector.id,
-  title: 'Founders dinner — infrastructure that has to touch the ground',
+  title: 'Founders dinner: infrastructure that has to touch the ground',
   description:
     'Twelve people, one long table, no panel. Bring a problem you are actually stuck on. Dinner is covered; getting there is not.',
   location: 'The Hoxton, Shoreditch',
@@ -242,7 +242,7 @@ console.log('8. the circle talks')
 for (const [who, text] of [
   [james, 'Anyone going to the dinner on the 14th?'],
   [tomas, 'I am. Coming in the afternoon before if anyone wants to get there early.'],
-  [connector, 'Good — bring the minerals traceability question, Tomas. James will have opinions.'],
+  [connector, 'Good. Bring the minerals traceability question, Tomas. James will have opinions.'],
 ]) {
   await insert(who.token, 'circle_messages', {
     connector_id: claimed.connector_id,

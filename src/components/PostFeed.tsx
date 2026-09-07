@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { MemberCard } from './MemberCard'
 import {
+  applyMention,
+  MentionPicker,
+  MentionText,
+  useCaret,
+  useMentions,
+} from './Mentions'
+import {
   Button,
   ConfirmModal,
   EmptyState,
@@ -177,7 +184,7 @@ export function PostFeed({ eventId }: { eventId?: string }) {
             </div>
           )}
 
-          <Composer eventId={eventId} onPosted={load} />
+          <Composer eventId={eventId} directory={directory} onPosted={load} />
 
           <div className="mt-10 space-y-5">
             {posts.length === 0 ? (
@@ -224,13 +231,17 @@ export function PostFeed({ eventId }: { eventId?: string }) {
 
 function Composer({
   eventId,
+  directory,
   onPosted,
 }: {
   eventId?: string
+  directory: Record<string, DirectoryEntry>
   onPosted: () => Promise<void>
 }) {
   const { profile } = useAuth()
   const fileInput = useRef<HTMLInputElement>(null)
+  const { ref: bodyRef, caret, setCaret, sync } = useCaret()
+  const { mentioned, setMentioned, people, resolve, reset } = useMentions(directory)
 
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -256,7 +267,13 @@ function Composer({
 
     const { error: insertError } = await supabase
       .from('posts')
-      .insert({ author_id: profile.id, body: body.trim(), media, event_id: eventId ?? null })
+      .insert({
+        author_id: profile.id,
+        body: body.trim(),
+        media,
+        event_id: eventId ?? null,
+        mentions: resolve(body),
+      })
 
     if (insertError) {
       // The row failed, so the objects it would have pointed at are orphans.
@@ -268,6 +285,7 @@ function Composer({
 
     setBody('')
     setFiles([])
+    reset()
     if (fileInput.current) fileInput.current.value = ''
     setBusy(false)
     await onPosted()
@@ -276,17 +294,40 @@ function Composer({
   return (
     <Panel className="px-5 py-5">
       <form onSubmit={submit} className="space-y-4">
-        <Textarea
-          rows={3}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          maxLength={5000}
-          placeholder={
-            eventId
-              ? 'Say something about this event'
-              : `What's on your mind, ${profile?.full_name.split(' ')[0] ?? 'friend'}?`
-          }
-        />
+        <div className="relative">
+          <Textarea
+            ref={bodyRef as React.RefObject<HTMLTextAreaElement>}
+            rows={3}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value)
+              setCaret(e.target.selectionStart ?? 0)
+            }}
+            onKeyUp={sync}
+            onClick={sync}
+            maxLength={5000}
+            placeholder={
+              eventId
+                ? 'Say something about this event. Use @ to tag someone.'
+                : `What's on your mind, ${profile?.full_name.split(' ')[0] ?? 'friend'}? Use @ to tag someone.`
+            }
+          />
+          <MentionPicker
+            value={body}
+            caret={caret}
+            people={people}
+            onPick={(person, from, query) => {
+              const next = applyMention(body, person, from, query)
+              setBody(next.text)
+              setCaret(next.caret)
+              setMentioned([...mentioned, person.id])
+              requestAnimationFrame(() => {
+                bodyRef.current?.focus()
+                bodyRef.current?.setSelectionRange(next.caret, next.caret)
+              })
+            }}
+          />
+        </div>
 
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-2">
@@ -364,6 +405,19 @@ function PostCard({
 }) {
   const { profile } = useAuth()
   const [draft, setDraft] = useState('')
+  const {
+    ref: draftRef,
+    caret: draftCaret,
+    setCaret: setDraftCaret,
+    sync: syncDraft,
+  } = useCaret()
+  const {
+    mentioned: draftMentions,
+    setMentioned: setDraftMentions,
+    people: commentPeople,
+    resolve: resolveComment,
+    reset: resetComment,
+  } = useMentions(directory)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // Nothing is destroyed on a single tap — those buttons sit under a thumb.
@@ -383,7 +437,12 @@ function PostCard({
 
     const { data, error: insertError } = await supabase
       .from('post_comments')
-      .insert({ post_id: post.id, author_id: profile.id, body: draft.trim() })
+      .insert({
+        post_id: post.id,
+        author_id: profile.id,
+        body: draft.trim(),
+        mentions: resolveComment(draft),
+      })
       .select()
       .single()
 
@@ -393,6 +452,7 @@ function PostCard({
       return
     }
     setDraft('')
+    resetComment()
     onCommentAdded(data as PostComment)
   }
 
@@ -441,7 +501,8 @@ function PostCard({
             </div>
           )}
           <div className="truncate text-xs text-dim">
-            {author?.current_profession ?? '—'} · {formatDate(post.created_at)}
+            {author?.current_profession ? `${author.current_profession} · ` : ''}
+            {formatDate(post.created_at)}
           </div>
         </div>
         {canModerate && (
@@ -456,7 +517,14 @@ function PostCard({
       </header>
 
       {post.body && (
-        <p className="mt-4 text-sm leading-relaxed whitespace-pre-wrap text-fg">{post.body}</p>
+        <p className="mt-4 text-sm leading-relaxed whitespace-pre-wrap text-fg">
+          <MentionText
+            body={post.body}
+            mentions={post.mentions}
+            directory={directory}
+            onOpen={onViewMember}
+          />
+        </p>
       )}
 
       {(post.media ?? []).length > 0 && (
@@ -518,7 +586,14 @@ function PostCard({
                 ) : (
                   <span className="shrink-0 font-medium text-fg">Someone</span>
                 )}
-                <span className="min-w-0 flex-1 break-words text-muted">{comment.body}</span>
+                <span className="min-w-0 flex-1 break-words text-muted">
+                  <MentionText
+                    body={comment.body}
+                    mentions={comment.mentions}
+                    directory={directory}
+                    onOpen={onViewMember}
+                  />
+                </span>
                 {removable && (
                   <button
                     type="button"
@@ -556,13 +631,39 @@ function PostCard({
       />
 
       <form onSubmit={addComment} className="mt-3.5 flex items-center gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={2000}
-          placeholder="Add a comment"
-          className="h-9 min-w-0 flex-1 rounded-sm border border-line bg-transparent px-3 text-sm text-fg placeholder:text-dim focus:border-gold focus:outline-none"
-        />
+        <div className="relative min-w-0 flex-1">
+          <input
+            ref={draftRef as React.RefObject<HTMLInputElement>}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setDraftCaret(e.target.selectionStart ?? 0)
+            }}
+            onKeyUp={syncDraft}
+            onClick={syncDraft}
+            maxLength={2000}
+            placeholder="Add a comment. Use @ to tag someone."
+            className="h-9 w-full rounded-sm border border-line bg-transparent px-3 text-sm text-fg placeholder:text-dim focus:border-gold focus:outline-none"
+          />
+          <MentionPicker
+            value={draft}
+            caret={draftCaret}
+            people={commentPeople}
+            onPick={(person, from, query) => {
+              const next = applyMention(draft, person, from, query)
+              setDraft(next.text)
+              setDraftCaret(next.caret)
+              setDraftMentions([...draftMentions, person.id])
+              requestAnimationFrame(() => {
+                draftRef.current?.focus()
+                ;(draftRef.current as HTMLInputElement | null)?.setSelectionRange(
+                  next.caret,
+                  next.caret,
+                )
+              })
+            }}
+          />
+        </div>
         <Button type="submit" size="sm" disabled={!draft.trim() || busy}>
           Reply
         </Button>

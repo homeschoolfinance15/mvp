@@ -147,7 +147,7 @@ export default function AdminDashboard() {
   const connectorByMember = useMemo(() => {
     const map: Record<string, string> = {}
     for (const link of links) {
-      map[link.user_profile_id] = link.connectors?.profiles?.full_name ?? '—'
+      map[link.user_profile_id] = link.connectors?.profiles?.full_name ?? 'an unknown connector'
     }
     return map
   }, [links])
@@ -301,7 +301,7 @@ function ConnectorsTab({
                   {connector.profiles?.full_name ?? 'Unknown'}
                 </div>
                 <div className="truncate text-xs text-dim">
-                  {connector.profiles?.email ?? '—'}
+                  {connector.profiles?.email ?? 'No email'}
                   {connector.profiles?.current_profession
                     ? ` · ${connector.profiles.current_profession}`
                     : ''}
@@ -560,7 +560,7 @@ function MembersTab({
                 </div>
               </div>
               <div className="min-w-0 text-right text-xs text-muted">
-                <div className="truncate">via {connectorByMember[member.id] ?? '—'}</div>
+                <div className="truncate">via {connectorByMember[member.id] ?? 'an unknown connector'}</div>
                 <div className="text-dim">{formatDate(member.created_at)}</div>
               </div>
               <div className="w-36 shrink-0">
@@ -1003,7 +1003,7 @@ function CirclesTab({
                                 {member.full_name}
                               </span>
                               <span className="block truncate text-xs text-dim">
-                                {member.current_profession ?? '—'}
+                                {member.current_profession ?? 'No profession listed'}
                               </span>
                             </span>
                             <span className="ml-auto shrink-0">

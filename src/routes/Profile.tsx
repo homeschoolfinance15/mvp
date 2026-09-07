@@ -32,23 +32,23 @@ export default function Profile() {
         <aside>
           <Panel className="divide-y divide-line">
             <Row label="Role">
-              <span className="text-sm text-muted">{ROLE_LABEL[profile?.role ?? ''] ?? '—'}</span>
+              <span className="text-sm text-muted">{ROLE_LABEL[profile?.role ?? ''] ?? 'Not set'}</span>
             </Row>
             <Row label="Membership">
               <StatusBadge status={profile?.profile_status ?? 'active'} />
             </Row>
             <Row label="Email">
-              <span className="truncate text-sm text-muted">{profile?.email ?? '—'}</span>
+              <span className="truncate text-sm text-muted">{profile?.email ?? 'Not set'}</span>
             </Row>
             <Row label="Joined">
               <span className="text-sm text-muted">
-                {profile ? formatDate(profile.created_at) : '—'}
+                {profile ? formatDate(profile.created_at) : 'Not recorded'}
               </span>
             </Row>
           </Panel>
 
           <p className="mt-4 text-xs leading-relaxed text-dim">
-            Role and membership status aren't yours to change — the
+            Role and membership status aren't yours to change. The
             protect_profile_fields trigger pins them on every update that isn't
             made by an administrator.
           </p>

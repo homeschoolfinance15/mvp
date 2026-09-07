@@ -133,7 +133,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
     <section>
       <SectionHeader
         title="How you're described"
-        caption="This is the context the network reads you by. Keep it current — other members can raise a correction if it drifts."
+        caption="This is the context the network reads you by. Keep it current. Other members can raise a correction if it drifts."
       />
       <Panel className="px-6 py-6">
         <div className="mb-6 flex items-center gap-4 border-b border-line pb-6">
