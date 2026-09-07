@@ -157,6 +157,39 @@ export interface Recommendation {
   created_at: string
 }
 
+export type NotificationKind =
+  | 'mention'
+  | 'comment'
+  | 'like'
+  | 'event_invited'
+  | 'event_rsvp'
+  | 'circle_message'
+  | 'member_joined'
+  | 'report_raised'
+  | 'report_resolved'
+  | 'recommendations'
+
+/**
+ * Something worth telling somebody, inside the platform.
+ *
+ * Written only by database triggers, so a notification cannot be forged.
+ * Exactly one of the source columns is set, or none at all when the
+ * notification points at a screen rather than an object.
+ */
+export interface Notification {
+  id: string
+  profile_id: string
+  kind: NotificationKind
+  actor_id: string | null
+  post_id: string | null
+  comment_id: string | null
+  event_id: string | null
+  circle_message_id: string | null
+  report_id: string | null
+  read_at: string | null
+  created_at: string
+}
+
 /** A row of the append-only audit trail. Admin-readable only. */
 export interface ActivityLogEntry {
   id: number

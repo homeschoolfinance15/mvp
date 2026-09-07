@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { homePathFor, useAuth } from '../context/AuthProvider'
+import { NotificationBell } from './NotificationBell'
 import { Wordmark } from './ui'
 
 export interface Tab {
@@ -110,7 +111,7 @@ export function DashboardShell({
     <div className="ambient min-h-screen bg-ink">
       <header className="sticky top-0 z-30 border-b border-line bg-ink/85 backdrop-blur-md">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
-          <div className="flex h-14 items-center justify-between gap-4">
+          <div className="flex h-14 items-center justify-between gap-2 sm:gap-4">
             <div className="flex min-w-0 items-center gap-7">
               <Wordmark size="sm" />
               <nav className="hidden items-center gap-5 lg:flex">
@@ -121,6 +122,11 @@ export function DashboardShell({
                 ))}
               </nav>
             </div>
+
+            {/* One bell, at every width. Rendering it twice — once per
+                breakpoint group — gave two channels the same name, and the
+                second .on() after subscribe() throws. */}
+            <NotificationBell />
 
             {/* Wide: name, role and sign out sit in the bar. */}
             <div className="hidden shrink-0 items-center gap-4 lg:flex">
