@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthProvider'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { homePathFor, useAuth } from '../context/AuthProvider'
 import { Wordmark } from './ui'
 
 export interface Tab {
@@ -13,6 +13,22 @@ const ROLE_LABEL: Record<string, string> = {
   admin: 'Administrator',
   connector: 'Connector',
   user: 'Member',
+}
+
+function NavItem({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      end
+      className={({ isActive }) =>
+        `shrink-0 text-xs tracking-[0.1em] uppercase transition-colors ${
+          isActive ? 'text-gold' : 'text-dim hover:text-fg'
+        }`
+      }
+    >
+      {children}
+    </NavLink>
+  )
 }
 
 export function DashboardShell({
@@ -41,9 +57,17 @@ export function DashboardShell({
   return (
     <div className="ambient min-h-screen bg-ink">
       <header className="sticky top-0 z-30 border-b border-line bg-ink/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 sm:px-8">
-          <Wordmark size="sm" />
-          <div className="flex items-center gap-4">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-5 sm:px-8">
+          <div className="flex min-w-0 items-center gap-7">
+            <Wordmark size="sm" />
+            {/* Feed, events and the circle are shared by all three roles, so
+                the nav lives here rather than being rebuilt per dashboard. */}
+            <nav className="flex items-center gap-5 overflow-x-auto">
+              <NavItem to={homePathFor(profile)}>Dashboard</NavItem>
+              <NavItem to="/profile">Profile</NavItem>
+            </nav>
+          </div>
+          <div className="flex shrink-0 items-center gap-4">
             <div className="hidden text-right sm:block">
               <div className="text-xs font-medium text-fg">{profile?.full_name}</div>
               <div className="text-[0.6875rem] tracking-wide text-dim">

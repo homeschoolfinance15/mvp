@@ -131,6 +131,21 @@ check(
   connectorBody.message,
 )
 
+// 10. A connector cannot assign someone off the waitlist — that is admin-only.
+// The admin guard fires before the ids are looked at, so placeholders are fine.
+const NIL = '00000000-0000-0000-0000-000000000000'
+const assignAttempt = await fetch(`${URL}/rest/v1/rpc/assign_waitlist_entry`, {
+  method: 'POST',
+  headers: headers(connector.token),
+  body: JSON.stringify({ p_entry_id: NIL, p_connector_id: NIL }),
+})
+const assignBody = await assignAttempt.json()
+check(
+  'connector cannot assign waitlist entries',
+  !assignAttempt.ok && String(assignBody.message).includes('Only an admin'),
+  assignBody.message,
+)
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 if (failed.length) process.exit(1)

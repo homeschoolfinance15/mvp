@@ -20,6 +20,40 @@ export interface Profile {
   current_profession: string | null
   semantic_summary: string | null
   profile_status: ProfileStatus
+  interests: string[]
+  created_at: string
+}
+
+/**
+ * What one member may see of another: name, profession, role, interests.
+ * Served by the `member_directory` view, which deliberately omits email and
+ * profile_status so the guarantee on the `profiles` table itself is unchanged.
+ */
+export interface DirectoryEntry {
+  id: string
+  full_name: string
+  current_profession: string | null
+  role: AppRole
+  interests: string[]
+  created_at: string
+}
+
+/** One uploaded image or video, stored as an element of `posts.media`. */
+export interface MediaItem {
+  path: string
+  mime: string
+  kind: 'image' | 'video'
+}
+
+/** A row of the append-only audit trail. Admin-readable only. */
+export interface ActivityLogEntry {
+  id: number
+  actor_id: string | null
+  /** `<table>.<insert|update|delete>`, e.g. `profiles.update`. */
+  action: string
+  entity: string
+  entity_id: string | null
+  detail: Record<string, unknown> | null
   created_at: string
 }
 
@@ -76,6 +110,10 @@ export interface WaitlistEntry {
   email: string
   linkedin_url: string | null
   created_at: string
+  /** Set once an admin has vetted this person and handed them to a connector. */
+  assigned_at: string | null
+  assigned_connector_id: string | null
+  assigned_code_id: string | null
 }
 
 /** Shape returned by the `lookup_code` RPC on the /join screen. */

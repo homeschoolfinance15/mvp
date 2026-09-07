@@ -26,6 +26,7 @@ import {
   type ConnectorNote,
   type ConnectorStatus,
   type InviteCode,
+  type ActivityLogEntry,
   type Profile,
   type ProfileStatus,
   type WaitlistEntry,
@@ -55,6 +56,7 @@ export default function AdminDashboard() {
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
   const [notes, setNotes] = useState<ConnectorNote[]>([])
+  const [activity, setActivity] = useState<ActivityLogEntry[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
 
   const load = useCallback(async () => {
@@ -67,6 +69,7 @@ export default function AdminDashboard() {
       codesRes,
       waitlistRes,
       notesRes,
+      activityRes,
     ] = await Promise.all([
       supabase.from('connectors').select('*, profiles(*)').order('created_at', { ascending: false }),
       supabase.from('connector_invitations').select('*').order('created_at', { ascending: false }),
@@ -77,6 +80,13 @@ export default function AdminDashboard() {
       supabase.from('invite_codes').select('*'),
       supabase.from('waitlist_entries').select('*').order('created_at', { ascending: false }),
       supabase.from('connector_notes').select('*').order('created_at', { ascending: false }),
+      // ponytail: newest 200, no pagination. The log is a record to consult,
+      // not a screen to scroll forever; add a range() when someone asks.
+      supabase
+        .from('activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200),
     ])
 
     const firstError = [
@@ -87,6 +97,7 @@ export default function AdminDashboard() {
       codesRes.error,
       waitlistRes.error,
       notesRes.error,
+      activityRes.error,
     ].find(Boolean)
     if (firstError) setError(errorMessage(firstError))
 
@@ -100,6 +111,7 @@ export default function AdminDashboard() {
     setCodes((codesRes.data as InviteCode[]) ?? [])
     setWaitlist((waitlistRes.data as WaitlistEntry[]) ?? [])
     setNotes((notesRes.data as ConnectorNote[]) ?? [])
+    setActivity((activityRes.data as ActivityLogEntry[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -114,6 +126,11 @@ export default function AdminDashboard() {
     }
     return counts
   }, [links])
+
+  const codesById = useMemo(
+    () => Object.fromEntries(codes.map((c) => [c.id, c])),
+    [codes],
+  )
 
   const connectorByMember = useMemo(() => {
     const map: Record<string, string> = {}
@@ -131,6 +148,7 @@ export default function AdminDashboard() {
     { id: 'members', label: 'Members', count: members.length },
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'waitlist', label: 'Waitlist', count: waitlist.length },
+    { id: 'log', label: 'Log' },
   ]
 
   return (
@@ -179,7 +197,15 @@ export default function AdminDashboard() {
             {tab === 'notes' && (
               <NotesTab notes={notes} connectors={connectors} profilesById={profilesById} />
             )}
-            {tab === 'waitlist' && <WaitlistTab entries={waitlist} />}
+            {tab === 'log' && <LogTab entries={activity} profilesById={profilesById} />}
+            {tab === 'waitlist' && (
+              <WaitlistTab
+                entries={waitlist}
+                connectors={connectors}
+                codesById={codesById}
+                onChanged={load}
+              />
+            )}
           </div>
         </>
       )}
@@ -601,39 +627,274 @@ function NotesTab({
 /* Waitlist                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function WaitlistTab({ entries }: { entries: WaitlistEntry[] }) {
+function WaitlistTab({
+  entries,
+  connectors,
+  codesById,
+  onChanged,
+}: {
+  entries: WaitlistEntry[]
+  connectors: ConnectorRow[]
+  codesById: Record<string, InviteCode>
+  onChanged: () => Promise<void>
+}) {
+  const [assigning, setAssigning] = useState<WaitlistEntry | null>(null)
+
+  const connectorNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        connectors.map((c) => [c.id, c.profiles?.full_name ?? 'Unknown']),
+      ) as Record<string, string>,
+    [connectors],
+  )
+
   return (
     <>
-      <SectionHeader title="Waitlist" caption="People who asked to be let in from the public page." />
+      <SectionHeader
+        title="Waitlist"
+        caption="People who asked to be let in from the public page. Vet them, then hand them to a connector."
+      />
 
       {entries.length === 0 ? (
         <EmptyState>Nobody on the waitlist yet.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+          {entries.map((entry) => {
+            const code = entry.assigned_code_id ? codesById[entry.assigned_code_id] : undefined
+            return (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-fg">{entry.full_name}</div>
+                  <div className="truncate text-xs text-dim">
+                    {entry.email}
+                    {entry.assigned_connector_id
+                      ? ` · assigned to ${connectorNameById[entry.assigned_connector_id] ?? 'a removed connector'}`
+                      : ''}
+                  </div>
+                </div>
+                <div className="flex items-center gap-5 text-xs">
+                  {entry.linkedin_url && (
+                    <a
+                      href={entry.linkedin_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-gold underline-offset-4 hover:underline"
+                    >
+                      LinkedIn
+                    </a>
+                  )}
+                  <span className="text-dim">{formatDate(entry.created_at)}</span>
+                  {entry.assigned_at ? (
+                    code ? (
+                      <CopyCode code={code.code} size="sm" />
+                    ) : (
+                      <span className="text-dim">code withdrawn</span>
+                    )
+                  ) : (
+                    <Button variant="primary" size="sm" onClick={() => setAssigning(entry)}>
+                      Assign
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </Panel>
+      )}
+
+      {assigning && (
+        <AssignWaitlistModal
+          key={assigning.id}
+          entry={assigning}
+          connectors={connectors}
+          onClose={() => setAssigning(null)}
+          onAssigned={onChanged}
+        />
+      )}
+    </>
+  )
+}
+
+function AssignWaitlistModal({
+  entry,
+  connectors,
+  onClose,
+  onAssigned,
+}: {
+  entry: WaitlistEntry
+  connectors: ConnectorRow[]
+  onClose: () => void
+  onAssigned: () => Promise<void>
+}) {
+  // ponytail: only the obvious filter here. Capacity is enforced by
+  // assign_waitlist_entry, not re-derived in the browser.
+  const eligible = connectors.filter((c) => c.invite_status === 'active' && c.profiles)
+
+  const [connectorId, setConnectorId] = useState(eligible[0]?.id ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [code, setCode] = useState<string | null>(null)
+
+  const firstName = entry.full_name.split(' ')[0] || 'them'
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+
+    const { data, error: rpcError } = await supabase.rpc('assign_waitlist_entry', {
+      p_entry_id: entry.id,
+      p_connector_id: connectorId,
+    })
+
+    setBusy(false)
+    if (rpcError) {
+      setError(errorMessage(rpcError))
+      return
+    }
+    setCode((data as { code: string }).code)
+    await onAssigned()
+  }
+
+  return (
+    <Modal open title={`Assign ${entry.full_name}`} onClose={onClose}>
+      {code ? (
+        <div className="text-center">
+          <p className="eyebrow">Invitation code for {entry.full_name}</p>
+          <div className="mt-4 flex justify-center">
+            <CopyCode code={code} size="lg" />
+          </div>
+          <p className="mx-auto mt-5 max-w-sm text-sm leading-relaxed text-muted">
+            Send this to {firstName}. They'll enter it at the join page to create their account
+            under this connector.
+          </p>
+          <Button variant="primary" className="mt-7 w-full" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      ) : eligible.length === 0 ? (
+        <div>
+          <Notice tone="error">
+            No connector is currently active. Activate one before assigning anybody.
+          </Notice>
+          <Button className="mt-6 w-full" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-5">
+          <Field label="Connector">
+            <Select
+              required
+              value={connectorId}
+              onChange={(e) => setConnectorId(e.target.value)}
             >
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-fg">{entry.full_name}</div>
-                <div className="truncate text-xs text-dim">{entry.email}</div>
-              </div>
-              <div className="flex items-center gap-5 text-xs">
-                {entry.linkedin_url && (
-                  <a
-                    href={entry.linkedin_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-gold underline-offset-4 hover:underline"
-                  >
-                    LinkedIn
-                  </a>
+              {eligible.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.profiles?.full_name ?? 'Unknown'}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <p className="text-sm leading-relaxed text-muted">
+            This mints a single-use invitation code out of that connector's remaining capacity.
+            {' '}{firstName} joins as their member once they redeem it.
+          </p>
+
+          {error && <Notice tone="error">{error}</Notice>}
+
+          <div className="flex gap-3 pt-1">
+            <Button type="button" className="flex-1" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" className="flex-1" disabled={busy}>
+              {busy ? 'Assigning…' : 'Assign'}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Activity log                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** `profiles.update` -> `update`, for the badge. */
+function verbOf(action: string): string {
+  return action.split('.').pop() ?? action
+}
+
+const VERB_TONE: Record<string, string> = {
+  insert: 'text-gold',
+  update: 'text-muted',
+  delete: 'text-red-400',
+}
+
+/**
+ * Everything the platform did, newest first. Written by the log_activity()
+ * trigger rather than by application code, so it records a change made
+ * straight against the database too — and cannot be forgotten at a call site.
+ */
+function LogTab({
+  entries,
+  profilesById,
+}: {
+  entries: ActivityLogEntry[]
+  profilesById: Record<string, Profile>
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Activity"
+        caption="An append-only record of every change. Nothing writes here but the database itself."
+      />
+
+      {entries.length === 0 ? (
+        <EmptyState>Nothing recorded yet.</EmptyState>
+      ) : (
+        <Panel className="divide-y divide-line">
+          {entries.map((entry) => {
+            const actor = entry.actor_id ? profilesById[entry.actor_id] : undefined
+            const verb = verbOf(entry.action)
+            const changed = verb === 'update' ? Object.keys(entry.detail ?? {}) : []
+
+            return (
+              <div key={entry.id} className="px-5 py-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <div className="min-w-0 text-sm text-fg">
+                    <span className={`${VERB_TONE[verb] ?? 'text-muted'} tabular-nums`}>
+                      {verb}
+                    </span>{' '}
+                    <span className="text-muted">{entry.entity}</span>
+                    {changed.length > 0 && (
+                      <span className="text-dim"> · {changed.join(', ')}</span>
+                    )}
+                  </div>
+                  <div className="text-xs whitespace-nowrap text-dim">
+                    {actor?.full_name ?? (entry.actor_id ? 'a removed account' : 'the system')} ·{' '}
+                    {formatDate(entry.created_at)}
+                  </div>
+                </div>
+
+                {entry.detail && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-dim hover:text-muted">
+                      Detail
+                    </summary>
+                    <pre className="mt-2 overflow-x-auto rounded-sm border border-line bg-ink/40 p-3 text-[0.6875rem] leading-relaxed text-muted">
+                      {JSON.stringify(entry.detail, null, 2)}
+                    </pre>
+                  </details>
                 )}
-                <span className="text-dim">{formatDate(entry.created_at)}</span>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </Panel>
       )}
     </>

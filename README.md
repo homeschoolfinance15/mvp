@@ -101,6 +101,7 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 | `create_connector_invitation` | admin | Stages a connector and returns the claim code. |
 | `create_invite_code` | connector | Mints a code out of remaining capacity. |
 | `set_invite_code_status` | connector | Disables or re-activates one of their own codes. |
+| `assign_waitlist_entry` | admin | Vets a waitlist entry and mints a code for it out of a connector's capacity. |
 
 ---
 
@@ -130,7 +131,8 @@ Verified by `scripts/check-rls.mjs`, which asserts against the live project:
   `protect_profile_fields` trigger, which strips those columns on update for
   anyone who is not an admin).
 - Anonymous visitors can write to the waitlist but never read it.
-- Only connectors can mint invitation codes; only admins can create connectors.
+- Only connectors can mint invitation codes; only admins can create connectors
+  or assign someone off the waitlist.
 
 ```bash
 PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs

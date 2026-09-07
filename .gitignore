@@ -30,3 +30,6 @@ dist-ssr
 # Supabase CLI scratch
 supabase/.temp
 supabase/.branches
+
+# Local operator notes — hosting credentials, never committed
+.local/

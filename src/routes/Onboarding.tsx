@@ -2,12 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, CopyCode, Field, Input, Notice, Textarea } from '../components/ui'
+import { INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { errorMessage, supabase } from '../lib/supabase'
 import { homePathFor, needsOnboarding, useAuth } from '../context/AuthProvider'
 
 /**
- * Collects the two fields that make someone findable: what they do now, and how
- * they'd describe themselves. `semantic_summary` is the text that will later be
+ * Collects what makes someone findable: what they do now, what they care
+ * about, and how they'd describe themselves. `semantic_summary` and
+ * `interests` are the cold-start signal for matching — the text that will be
  * embedded into `search_documents`.
  */
 export default function Onboarding() {
@@ -20,6 +22,7 @@ export default function Onboarding() {
 
   const [profession, setProfession] = useState(profile?.current_profession ?? '')
   const [summary, setSummary] = useState(profile?.semantic_summary ?? '')
+  const [interests, setInterests] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -40,6 +43,7 @@ export default function Onboarding() {
       .update({
         current_profession: profession.trim(),
         semantic_summary: summary.trim() || null,
+        interests: parseInterests(interests),
       })
       .eq('id', profile.id)
 
@@ -83,6 +87,17 @@ export default function Onboarding() {
             value={profession}
             onChange={(e) => setProfession(e.target.value)}
             placeholder="Founder & CEO, Northwind Labs"
+          />
+        </Field>
+
+        <Field
+          label="Interests"
+          hint="A few words each. These are what the network matches you on."
+        >
+          <Input
+            value={interests}
+            onChange={(e) => setInterests(e.target.value)}
+            placeholder={INTERESTS_PLACEHOLDER}
           />
         </Field>
 

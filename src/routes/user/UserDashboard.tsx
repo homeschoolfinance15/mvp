@@ -1,21 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { DashboardShell } from '../../components/DashboardShell'
+import { ProfileEditor } from '../../components/ProfileEditor'
 import {
-  Button,
   CopyCode,
   EmptyState,
-  Field,
   formatDate,
   Initials,
-  Input,
-  Notice,
   Panel,
   SectionHeader,
   Spinner,
   StatusBadge,
-  Textarea,
 } from '../../components/ui'
-import { errorMessage, supabase } from '../../lib/supabase'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthProvider'
 
 interface Membership {
@@ -150,86 +146,5 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="eyebrow">{label}</span>
       {children}
     </div>
-  )
-}
-
-function ProfileEditor({ onSaved }: { onSaved: () => Promise<void> }) {
-  const { profile } = useAuth()
-  const [profession, setProfession] = useState(profile?.current_profession ?? '')
-  const [summary, setSummary] = useState(profile?.semantic_summary ?? '')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
-
-  const dirty =
-    profession !== (profile?.current_profession ?? '') ||
-    summary !== (profile?.semantic_summary ?? '')
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    if (!profile) return
-    setError('')
-    setSaved(false)
-    setBusy(true)
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        current_profession: profession.trim(),
-        semantic_summary: summary.trim() || null,
-      })
-      .eq('id', profile.id)
-
-    setBusy(false)
-    if (updateError) {
-      setError(errorMessage(updateError))
-      return
-    }
-    await onSaved()
-    setSaved(true)
-  }
-
-  return (
-    <section>
-      <SectionHeader
-        title="How you're described"
-        caption="This is the context the network sees. Keep it current."
-      />
-      <Panel className="px-6 py-6">
-        <form onSubmit={submit} className="space-y-5">
-          <Field label="Current profession">
-            <Input
-              required
-              value={profession}
-              onChange={(e) => {
-                setProfession(e.target.value)
-                setSaved(false)
-              }}
-            />
-          </Field>
-
-          <Field label="A little more">
-            <Textarea
-              rows={6}
-              value={summary}
-              onChange={(e) => {
-                setSummary(e.target.value)
-                setSaved(false)
-              }}
-              placeholder="What you're building, what you're curious about, what you're looking for."
-            />
-          </Field>
-
-          {error && <Notice tone="error">{error}</Notice>}
-          {saved && !dirty && <Notice tone="success">Saved.</Notice>}
-
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" loading={busy} disabled={!dirty}>
-              Save changes
-            </Button>
-          </div>
-        </form>
-      </Panel>
-    </section>
   )
 }
