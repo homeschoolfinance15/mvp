@@ -69,6 +69,15 @@ export interface PostComment {
   created_at: string
 }
 
+/** One message in a connector's circle. */
+export interface CircleMessage {
+  id: string
+  connector_id: string
+  author_id: string
+  body: string
+  created_at: string
+}
+
 export type RsvpStatus = 'invited' | 'going' | 'declined'
 
 export interface Event {

@@ -12,6 +12,7 @@ import Onboarding from './routes/Onboarding'
 import Profile from './routes/Profile'
 import Feed from './routes/feed/Feed'
 import Events from './routes/events/Events'
+import Circle from './routes/circle/Circle'
 import AdminDashboard from './routes/admin/AdminDashboard'
 import ConnectorDashboard from './routes/connector/ConnectorDashboard'
 import UserDashboard from './routes/user/UserDashboard'
@@ -113,6 +114,14 @@ export default function App() {
             element={
               <RequireRole>
                 <Events />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/circle"
+            element={
+              <RequireRole>
+                <Circle />
               </RequireRole>
             }
           />
