@@ -92,7 +92,14 @@ name the reporter and undo the rule the trust layer depends on.
 
 ### Authentication
 
-- Minimum password length 12, mixed case, digits and symbols required.
+- Minimum password length 12, mixed case, digits and symbols required, and
+  enforced by the auth server rather than only by the form. Verified: 8
+  characters, 12 lowercase-only and 12 without a symbol are all refused.
+- A signed-in person can change their password, and the app re-authenticates
+  before it does. `secure_password_change` enforces the same server side.
+- A forgotten password can be recovered, and the request answers identically
+  for an address that exists and one that does not, so the form cannot be
+  used to test who is a member.
 - JWTs expire in an hour; refresh token rotation is on with a 10 second reuse
   interval.
 - TOTP is enabled at the backend. **There is no enrolment screen, so nobody
@@ -115,8 +122,9 @@ Ordered by how much they matter.
 | 7 | **No access review** | organisational | Nobody periodically re-checks who is an admin. `admin_allowlist` is a table nobody audits. |
 | 8 | **No backup restore test** | organisational | Supabase backs up; nobody has proven a restore works. |
 | 9 | **No penetration test** | organisational | Expected for Type II. |
-| 10 | **Leaked-password protection off** | config | A dashboard setting in hosted Supabase (Auth → Password security), not in `config.toml`. |
-| 11 | **`.local/hosting.md` holds SSH details** | practice | Gitignored and never committed, but it is a plaintext credential file on a laptop. A password manager is the right home. |
+| 10 | **No production SMTP** | config | Supabase's built-in mailer is rate limited to a few messages an hour and is not for production, so password recovery effectively does not work for real users yet. A transactional provider is needed, plus SPF, DKIM and DMARC on goamazing.ai. The provider then becomes another subprocessor for row 5. |
+| 11 | **Leaked-password protection off** | config | A dashboard setting in hosted Supabase (Auth → Password security), not in `config.toml`. |
+| 12 | **`.local/hosting.md` holds SSH details** | practice | Gitignored and never committed, but it is a plaintext credential file on a laptop. A password manager is the right home. |
 
 Items 4 through 9 are the bulk of a SOC 2 engagement and none of them are
 engineering work.
