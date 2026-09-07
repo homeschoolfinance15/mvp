@@ -65,6 +65,7 @@ export function DashboardShell({
             <nav className="flex items-center gap-5 overflow-x-auto">
               <NavItem to={homePathFor(profile)}>Dashboard</NavItem>
               <NavItem to="/feed">Feed</NavItem>
+              <NavItem to="/events">Events</NavItem>
               <NavItem to="/profile">Profile</NavItem>
             </nav>
           </div>

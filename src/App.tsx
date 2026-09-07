@@ -11,6 +11,7 @@ import AdminSetup from './routes/AdminSetup'
 import Onboarding from './routes/Onboarding'
 import Profile from './routes/Profile'
 import Feed from './routes/feed/Feed'
+import Events from './routes/events/Events'
 import AdminDashboard from './routes/admin/AdminDashboard'
 import ConnectorDashboard from './routes/connector/ConnectorDashboard'
 import UserDashboard from './routes/user/UserDashboard'
@@ -104,6 +105,14 @@ export default function App() {
             element={
               <RequireRole>
                 <Feed />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/events"
+            element={
+              <RequireRole>
+                <Events />
               </RequireRole>
             }
           />

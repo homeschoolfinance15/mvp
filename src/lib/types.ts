@@ -50,6 +50,8 @@ export interface Post {
   author_id: string
   body: string
   media: MediaItem[]
+  /** Set when the post is a note on an event rather than a plain feed post. */
+  event_id: string | null
   created_at: string
 }
 
@@ -64,6 +66,28 @@ export interface PostComment {
   post_id: string
   author_id: string
   body: string
+  created_at: string
+}
+
+export type RsvpStatus = 'invited' | 'going' | 'declined'
+
+export interface Event {
+  id: string
+  host_id: string
+  title: string
+  description: string | null
+  location: string | null
+  starts_at: string
+  ends_at: string | null
+  cover_path: string | null
+  created_at: string
+}
+
+export interface EventInvitation {
+  event_id: string
+  profile_id: string
+  status: RsvpStatus
+  responded_at: string | null
   created_at: string
 }
 
