@@ -146,6 +146,134 @@ check(
   assignBody.message,
 )
 
+// ---------------------------------------------------------------------------
+// The shared surfaces: feed, events, circle chat, trust layer, recommender.
+// These assert the state of a deployed project — they fail until the
+// 20260907 migrations have been applied.
+// ---------------------------------------------------------------------------
+
+// 11. The directory widening is surgical: a member can put a name to anyone on
+// the network, and still cannot read anybody's email. This is the whole reason
+// member_directory exists instead of an open profiles_select, so it is the one
+// check worth caring about most.
+const jamesDirectory = await get(james.token, 'member_directory?select=id,full_name')
+const jamesProfilesAgain = await get(james.token, 'profiles?select=id,email')
+check(
+  'member sees the whole directory but only two profiles',
+  Array.isArray(jamesDirectory.body) &&
+    jamesDirectory.body.length > 2 &&
+    Array.isArray(jamesProfilesAgain.body) &&
+    jamesProfilesAgain.body.length === 2,
+  `directory ${jamesDirectory.body?.length}, profiles ${jamesProfilesAgain.body?.length}`,
+)
+
+// 12. And the view itself must not carry an email column at all.
+const directoryLeak = await get(james.token, 'member_directory?select=email')
+check(
+  'member_directory exposes no email column',
+  !directoryLeak.ok || (Array.isArray(directoryLeak.body) && directoryLeak.body.length === 0),
+  directoryLeak.ok ? 'column resolved' : String(directoryLeak.body.message).slice(0, 60),
+)
+
+// 13. Anonymous visitors cannot read the feed.
+const anonPosts = await get(null, 'posts?select=*')
+check(
+  'anon cannot read the feed',
+  Array.isArray(anonPosts.body) ? anonPosts.body.length === 0 : anonPosts.status >= 400,
+  Array.isArray(anonPosts.body) ? `saw ${anonPosts.body.length}` : `${anonPosts.status}`,
+)
+
+// 14. A member cannot post in somebody else's name.
+const spoof = await fetch(`${URL}/rest/v1/posts`, {
+  method: 'POST',
+  headers: headers(james.token),
+  body: JSON.stringify({ author_id: connector.id, body: 'Posted as my connector.' }),
+})
+check(
+  'member cannot post as another author',
+  !spoof.ok,
+  `${spoof.status}`,
+)
+
+// 15. The subject of a report cannot read it. Rule 1 of the trust layer, and
+// the reason anybody would ever raise one.
+const reportsAboutMe = await get(james.token, `profile_reports?subject_id=eq.${james.id}`)
+check(
+  'a member cannot read a report filed about them',
+  Array.isArray(reportsAboutMe.body) && reportsAboutMe.body.length === 0,
+  `saw ${Array.isArray(reportsAboutMe.body) ? reportsAboutMe.body.length : 'error'}`,
+)
+
+// 16. Nor resolve one. The RPC is the only way status moves, and it refuses.
+const resolveAttempt = await fetch(`${URL}/rest/v1/rpc/resolve_profile_report`, {
+  method: 'POST',
+  headers: headers(james.token),
+  body: JSON.stringify({ p_report_id: '00000000-0000-0000-0000-000000000000', p_status: 'resolved' }),
+})
+const resolveBody = await resolveAttempt.json()
+check(
+  'member cannot resolve reports',
+  !resolveAttempt.ok,
+  String(resolveBody.message).slice(0, 70),
+)
+
+// 17. Circle chat is closed to anyone outside the circle. Priya was invited by
+// a different connector than James.
+const priyaCircle = await fetch(`${URL}/rest/v1/rpc/my_circle_id`, {
+  method: 'POST',
+  headers: headers(priya.token),
+  body: '{}',
+})
+const priyaCircleId = await priyaCircle.json()
+const intrusion = await fetch(`${URL}/rest/v1/circle_messages`, {
+  method: 'POST',
+  headers: headers(james.token),
+  body: JSON.stringify({
+    connector_id: priyaCircleId,
+    author_id: james.id,
+    body: 'Speaking into a room I am not in.',
+  }),
+})
+check(
+  'member cannot speak into another circle',
+  !intrusion.ok,
+  `${intrusion.status}`,
+)
+
+// 18. Recommendations are private to their subject, and a member cannot
+// manufacture one for themselves.
+const forgery = await fetch(`${URL}/rest/v1/recommendations`, {
+  method: 'POST',
+  headers: headers(james.token),
+  body: JSON.stringify({
+    profile_id: james.id,
+    member_id: connector.id,
+    reason: 'I recommended myself.',
+    rank: 1,
+    batch_id: '00000000-0000-0000-0000-000000000000',
+  }),
+})
+check(
+  'member cannot write their own recommendations',
+  !forgery.ok,
+  `${forgery.status}`,
+)
+
+// 19. The audit log is readable by admins and nobody else.
+const memberLog = await get(james.token, 'activity_log?select=*')
+check(
+  'member cannot read the activity log',
+  Array.isArray(memberLog.body) ? memberLog.body.length === 0 : memberLog.status >= 400,
+  Array.isArray(memberLog.body) ? `saw ${memberLog.body.length}` : `${memberLog.status}`,
+)
+
+const adminLog = await get(admin.token, 'activity_log?select=id&limit=1')
+check(
+  'admin can read the activity log',
+  adminLog.ok && Array.isArray(adminLog.body),
+  adminLog.ok ? 'readable' : `${adminLog.status}`,
+)
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 if (failed.length) process.exit(1)

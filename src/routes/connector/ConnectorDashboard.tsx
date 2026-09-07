@@ -165,7 +165,18 @@ export default function ConnectorDashboard() {
                         <button
                           key={person.linkId}
                           type="button"
-                          onClick={() => setSelectedId(person.profile.id)}
+                          onClick={() => {
+                            setSelectedId(person.profile.id)
+                            // Below lg the context panel is under the list,
+                            // off the bottom of the screen.
+                            if (window.innerWidth < 1024) {
+                              requestAnimationFrame(() =>
+                                document
+                                  .getElementById('person-detail')
+                                  ?.scrollIntoView({ behavior: 'smooth' }),
+                              )
+                            }
+                          }}
                           className={`flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors ${
                             active ? 'bg-raised' : 'hover:bg-raised/60'
                           }`}
@@ -191,7 +202,7 @@ export default function ConnectorDashboard() {
                 )}
               </section>
 
-              <section>
+              <section id="person-detail" className="scroll-mt-20">
                 {selected && connector ? (
                   <PersonDetail
                     person={selected}

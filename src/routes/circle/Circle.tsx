@@ -3,6 +3,7 @@ import { DashboardShell } from '../../components/DashboardShell'
 import { MemberCard } from '../../components/MemberCard'
 import {
   Button,
+  ConfirmModal,
   EmptyState,
   Initials,
   Notice,
@@ -35,8 +36,9 @@ export default function Circle() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
-  const bottom = useRef<HTMLDivElement>(null)
+  const thread = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setError('')
@@ -86,8 +88,11 @@ export default function Circle() {
     }
   }, [circleId])
 
+  // Scroll the thread, not the page: scrollIntoView on a nested scroller
+  // drags the whole document with it and the header jumps.
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' })
+    const el = thread.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [messages.length])
 
   async function send(e: FormEvent) {
@@ -116,6 +121,7 @@ export default function Circle() {
   }
 
   async function remove(id: string) {
+    setConfirmingId(null)
     const { error: deleteError } = await supabase.from('circle_messages').delete().eq('id', id)
     if (deleteError) {
       setError(errorMessage(deleteError))
@@ -134,12 +140,18 @@ export default function Circle() {
           <Spinner />
         </div>
       ) : !circleId ? (
+        // An error here must not read as an empty room: "you aren't in a
+        // circle" and "we couldn't find out" are different facts.
         <div className="mx-auto max-w-2xl">
-          <EmptyState>
-            {profile?.role === 'admin'
-              ? "Administrators aren't part of a circle — nobody invited you in, so there's no room to join."
-              : "You aren't in a circle yet."}
-          </EmptyState>
+          {error ? (
+            <Notice tone="error">{error}</Notice>
+          ) : (
+            <EmptyState>
+              {profile?.role === 'admin'
+                ? "Administrators aren't part of a circle — nobody invited you in, so there's no room to join."
+                : "You aren't in a circle yet."}
+            </EmptyState>
+          )}
         </div>
       ) : (
         <div className="mx-auto flex max-w-2xl flex-col">
@@ -150,7 +162,10 @@ export default function Circle() {
           )}
 
           <Panel className="flex min-h-0 flex-col">
-            <div className="max-h-[60vh] min-h-[16rem] flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5">
+            <div
+              ref={thread}
+              className="max-h-[60vh] min-h-[16rem] flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5"
+            >
               {messages.length === 0 ? (
                 <p className="py-10 text-center text-sm text-dim">
                   Nothing said yet. Start it off.
@@ -191,8 +206,8 @@ export default function Circle() {
                       {mine && (
                         <button
                           type="button"
-                          onClick={() => remove(message.id)}
-                          className="self-center text-xs text-dim opacity-0 transition group-hover:opacity-100 hover:text-red-400"
+                          onClick={() => setConfirmingId(message.id)}
+                          className="self-center text-xs text-dim transition hover:text-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                           aria-label="Delete message"
                         >
                           ×
@@ -202,7 +217,7 @@ export default function Circle() {
                   )
                 })
               )}
-              <div ref={bottom} />
+
             </div>
 
             <form
@@ -223,6 +238,14 @@ export default function Circle() {
           </Panel>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmingId !== null}
+        title="Delete this message?"
+        body="It disappears for everyone in the circle. This cannot be undone."
+        onConfirm={() => confirmingId && remove(confirmingId)}
+        onClose={() => setConfirmingId(null)}
+      />
 
       {viewing && <MemberCard member={viewing} onClose={() => setViewing(null)} />}
     </DashboardShell>

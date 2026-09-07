@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { MemberCard } from './MemberCard'
 import {
   Button,
+  ConfirmModal,
   EmptyState,
   formatDate,
   Initials,
@@ -348,6 +349,10 @@ function PostCard({
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Nothing is destroyed on a single tap — those buttons sit under a thumb.
+  const [confirming, setConfirming] = useState<
+    { kind: 'post' } | { kind: 'comment'; id: string } | null
+  >(null)
 
   const liked = likes.some((l) => l.profile_id === profile?.id)
   const mine = post.author_id === profile?.id
@@ -375,6 +380,7 @@ function PostCard({
   }
 
   async function removeComment(id: string) {
+    setConfirming(null)
     const { error: deleteError } = await supabase.from('post_comments').delete().eq('id', id)
     if (deleteError) {
       setError(errorMessage(deleteError))
@@ -384,6 +390,7 @@ function PostCard({
   }
 
   async function deletePost() {
+    setConfirming(null)
     const { error: deleteError } = await supabase.from('posts').delete().eq('id', post.id)
     if (deleteError) {
       setError(errorMessage(deleteError))
@@ -419,7 +426,7 @@ function PostCard({
         {canModerate && (
           <button
             type="button"
-            onClick={deletePost}
+            onClick={() => setConfirming({ kind: 'post' })}
             className="shrink-0 text-xs text-dim transition-colors hover:text-red-400"
           >
             Delete
@@ -441,7 +448,8 @@ function PostCard({
                 key={item.path}
                 src={mediaUrls[item.path]}
                 controls
-                className="w-full rounded-sm border border-line"
+                preload="metadata"
+                className="aspect-video w-full rounded-sm border border-line bg-fg/[0.03]"
               />
             ) : (
               <img
@@ -449,7 +457,7 @@ function PostCard({
                 src={mediaUrls[item.path]}
                 alt=""
                 loading="lazy"
-                className="w-full rounded-sm border border-line object-cover"
+                className="aspect-[4/3] w-full rounded-sm border border-line bg-fg/[0.03] object-cover"
               />
             ),
           )}
@@ -493,8 +501,8 @@ function PostCard({
                 {removable && (
                   <button
                     type="button"
-                    onClick={() => removeComment(comment.id)}
-                    className="shrink-0 text-xs text-dim opacity-0 transition group-hover:opacity-100 hover:text-red-400"
+                    onClick={() => setConfirming({ kind: 'comment', id: comment.id })}
+                    className="shrink-0 text-xs text-dim transition hover:text-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                     aria-label="Delete comment"
                   >
                     ×
@@ -511,6 +519,20 @@ function PostCard({
           <Notice tone="error">{error}</Notice>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirming !== null}
+        title={confirming?.kind === 'comment' ? 'Delete this comment?' : 'Delete this post?'}
+        body={
+          confirming?.kind === 'comment'
+            ? 'The comment is removed for everyone. This cannot be undone.'
+            : 'The post, its images, its likes and its comments all go. This cannot be undone.'
+        }
+        onConfirm={() =>
+          confirming?.kind === 'comment' ? removeComment(confirming.id) : deletePost()
+        }
+        onClose={() => setConfirming(null)}
+      />
 
       <form onSubmit={addComment} className="mt-3.5 flex items-center gap-2">
         <input

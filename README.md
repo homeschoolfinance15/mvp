@@ -17,16 +17,32 @@ admin ──creates──▶ connector ──invites──▶ member
 - **Member** — sees who invited them, the code they joined with, and the profile
   the network reads them by.
 
+On top of that invitation graph the network runs as a place rather than a
+directory: a shared feed with media, events anyone can RSVP to, a private room
+per connector circle, a way for members to correct each other's profiles, and a
+weekly set of recommendations written by Claude explaining who is worth meeting
+and why.
+
+| Surface | Who | What |
+| --- | --- | --- |
+| Feed | everyone | Posts with images and video, likes, comments. Network-wide. |
+| Events | everyone | Anyone may RSVP; connectors and admins host. Each event has its own thread. |
+| Circle | members and connectors | A room shared with everyone one connector brought in. |
+| Raised | members raise, connectors act | Corrections and endorsements about another member's profile. |
+| For you | everyone | Claude's weekly picks, each with the reason it was chosen. |
+
 ---
 
 ## Stack
 
-Vite · React 19 · TypeScript · React Router 7 · Tailwind CSS 4 · Supabase (Postgres + Auth)
+Vite · React 19 · TypeScript · React Router 7 · Tailwind CSS 4 · Supabase (Postgres +
+Auth + Storage + Realtime + Edge Functions) · Claude Opus 5
 
 The browser holds only the publishable key. Every privileged write goes through a
 `SECURITY DEFINER` Postgres function behind row level security, so there is no
 service-role key anywhere in the client — which is what makes this repo safe to
-keep public.
+keep public. The Anthropic key follows the same rule: it lives in a Supabase edge
+function and is never shipped to a browser.
 
 ---
 
@@ -84,6 +100,26 @@ Three tables were added because the MVP needs them:
 | `connector_invitations` | `connectors.profile_id` is `NOT NULL`, but an admin creates a connector *before* that person has an account. This staging row holds the claim code until it is redeemed into a real profile + connector pair. |
 | `admin_allowlist` | Admins have no invitation code. An email listed here is promoted to an admin profile automatically on first signup. |
 
+The shared surfaces added on top:
+
+| Table | Holds |
+| --- | --- |
+| `posts` | Feed posts. `media` is a jsonb array of storage paths; `event_id` is set when the post is a note on an event. |
+| `post_likes` | Composite primary key, so liking twice is a constraint violation rather than something the client checks. |
+| `post_comments` | Flat. No threading until somebody asks for a reply to a reply. |
+| `events` | Hosted by connectors and admins, visible to everyone. |
+| `event_invitations` | One row per person per event, carrying both a host's invitation and a member's own RSVP. |
+| `circle_messages` | The room shared by everyone one connector invited. |
+| `profile_reports` | A member's claim about another member's profile. Never readable by its subject. |
+| `recommendations` | Claude's picks for one member, each with the reason. |
+| `activity_log` | Append-only audit trail, written by triggers, readable only by an admin. |
+
+And one view:
+
+| View | Why |
+| --- | --- |
+| `member_directory` | Name, profession, role, interests — network-wide. It exists so the feed can name an author **without** opening `profiles_select`, which also holds email and sanction status. |
+
 ### Invitation capacity
 
 Capacity is spent when someone **actually joins**, not when a code is issued. A
@@ -102,6 +138,13 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 | `create_invite_code` | connector | Mints a code out of remaining capacity. |
 | `set_invite_code_status` | connector | Disables or re-activates one of their own codes. |
 | `assign_waitlist_entry` | admin | Vets a waitlist entry and mints a code for it out of a connector's capacity. |
+| `is_member` | anyone | The read gate: a profile that isn't suspended or removed. |
+| `can_post` | anyone | The write gate: an active profile. |
+| `can_host_events` | anyone | Connectors and admins. |
+| `my_circle_id` | anyone | Which connector's room you belong to. Null for admins, who were invited by nobody. |
+| `connects_to` | connector | Whether the caller invited that profile. |
+| `resolve_profile_report` | connector, admin | Closes a report. Exists because RLS can gate a row but cannot pin a column. |
+| `log_activity` | trigger | Writes the audit trail. Nothing else may insert into it. |
 
 ---
 
@@ -117,6 +160,10 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 | `/admin` | admin | Administration |
 | `/connector` | connector | People, notes, and invitation codes |
 | `/home` | member | Who invited you, your code, your profile |
+| `/feed` | any member | The network-wide feed, with Claude's picks above it |
+| `/events` | any member | Events, RSVP, invitations, per-event threads |
+| `/circle` | any member | Your connector's room, live |
+| `/profile` | any member | Edit your own record — members, connectors and admins alike |
 
 ---
 
@@ -124,7 +171,11 @@ a second one — see `20260902000002_capacity_on_join.sql`.)
 
 Verified by `scripts/check-rls.mjs`, which asserts against the live project:
 
-- A member sees only themselves and the connector who invited them.
+- A member sees only themselves and the connector who invited them **in
+  `profiles`**. The feed needs to put a name to an author, so `member_directory`
+  exposes name, profession, role and interests network-wide — and nothing else.
+  `profiles_select` is unchanged, so a member still cannot read another
+  member's email. That separation is the whole reason the view exists.
 - A member cannot read the notes written about them.
 - An admin sees only notes a connector flagged as searchable.
 - A member cannot promote themselves or clear their own status (enforced by the
@@ -133,9 +184,51 @@ Verified by `scripts/check-rls.mjs`, which asserts against the live project:
 - Anonymous visitors can write to the waitlist but never read it.
 - Only connectors can mint invitation codes; only admins can create connectors
   or assign someone off the waitlist.
+- A member cannot read a report filed about them, and cannot resolve one.
+- A member cannot speak into a circle they were not invited into.
+- A member cannot post in somebody else's name, or write their own
+  recommendations.
+- Only an admin can read the activity log.
+
+Deleting is confirmed everywhere it destroys something other people can see,
+and every hover-only control stays visible on a touch device.
 
 ```bash
 PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs
+```
+
+## The recommender
+
+`supabase/functions/recommend` asks Claude Opus 5, once a week, which people,
+posts and events are worth each member's attention — and writes the reason
+alongside the pick. Members see it as **For you** at the top of the feed.
+
+It runs as an edge function rather than in the browser for the same reason
+there is no service-role key in the client: the Anthropic key must never ship
+to a browser. The scheduled caller authenticates with its own
+`RECOMMEND_SECRET`, so the service-role key never leaves Supabase either.
+
+**No embeddings, deliberately.** `search_documents` has held an unused pgvector
+column since the first migration. It is the right substrate at scale and the
+wrong tool at this size: a few hundred people fit in a prompt, and ranking them
+directly produces the thing a cosine distance cannot — a sentence saying why two
+people should talk. When the candidate set outgrows a prompt, `search_documents`
+becomes the retrieval stage and `recommendations` does not change.
+
+**What "it learns" means.** Nothing is trained. Each run is handed what that
+member was shown last time and what they acted on, and adjusts in context.
+Whether it is working is a query, not a feeling:
+
+```sql
+select * from public.recommendation_performance order by ran_at desc;
+```
+
+The candidate pool is identical for every member in a run, so it sits in a
+cached prompt prefix — member two onward reads the bulk of it from cache.
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=... RECOMMEND_SECRET=...
+supabase functions deploy recommend
 ```
 
 ## Deployment
@@ -146,7 +239,8 @@ push to `main`.
 | Piece | Lives on | Workflow |
 | --- | --- | --- |
 | Static site | Hostinger | `.github/workflows/deploy-frontend.yml` |
-| Schema, RLS, functions | Supabase | `.github/workflows/deploy-database.yml` |
+| Schema, RLS, functions, edge functions | Supabase | `.github/workflows/deploy-database.yml` |
+| Weekly recommendations | Supabase edge function | `.github/workflows/recommend.yml` |
 
 ### The database *is* in this repo
 
@@ -181,6 +275,10 @@ Settings → Secrets and variables → Actions.
 | `FTP_USERNAME` | Hostinger | same |
 | `FTP_PASSWORD` | Hostinger | same |
 | `FTP_SERVER_DIR` | Hostinger | optional; defaults to `/public_html/` |
+| `RECOMMEND_SECRET` | recommendations | any random string; must match the value set with `supabase secrets set` |
+
+`ANTHROPIC_API_KEY` is **not** a repository secret — it is set on the Supabase
+function with `supabase secrets set`, so it never enters GitHub or a build.
 
 The frontend build runs on pull requests too, so a broken build is caught before
 merge. The FTP step is skipped until `FTP_SERVER` is set, so the workflow is

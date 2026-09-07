@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -154,12 +155,12 @@ export function SectionHeader({
   action?: ReactNode
 }) {
   return (
-    <div className="mb-4 flex items-end justify-between gap-4">
-      <div>
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
         <h2 className="eyebrow">{title}</h2>
         {caption && <p className="mt-1.5 text-sm text-muted">{caption}</p>}
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   )
 }
@@ -305,16 +306,27 @@ export function Modal({
   onClose: () => void
   children: ReactNode
 }) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     if (!open) return
+    const previouslyFocused = document.activeElement as HTMLElement | null
+
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
+
+    // The first field, or the panel itself, so a keyboard starts inside.
+    panelRef.current
+      ?.querySelector<HTMLElement>('input, textarea, select, button')
+      ?.focus({ preventScroll: true })
+
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
+      previouslyFocused?.focus?.()
     }
   }, [open, onClose])
 
@@ -328,6 +340,7 @@ export function Modal({
         aria-hidden
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -376,10 +389,60 @@ export function formatDate(iso: string): string {
   })
 }
 
+/** For anything that happens at a moment rather than on a day — events. */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 export function PageLoader() {
   return (
     <div className="flex min-h-screen items-center justify-center text-dim">
       <Spinner />
     </div>
+  )
+}
+
+/**
+ * Confirmation for a destructive action.
+ *
+ * Deleting a post, an event or a comment takes something away from other
+ * people, and on a phone those buttons sit under a thumb. Everything
+ * irreversible asks first.
+ */
+export function ConfirmModal({
+  open,
+  title,
+  body,
+  confirmLabel = 'Delete',
+  busy = false,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean
+  title: string
+  body: ReactNode
+  confirmLabel?: string
+  busy?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <Modal open={open} title={title} onClose={onClose}>
+      <div className="text-sm leading-relaxed text-muted">{body}</div>
+      <div className="mt-7 flex gap-3">
+        <Button className="flex-1" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="danger" className="flex-1" loading={busy} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </Modal>
   )
 }

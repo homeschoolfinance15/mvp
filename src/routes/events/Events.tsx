@@ -4,9 +4,10 @@ import { MemberCard } from '../../components/MemberCard'
 import { PostFeed } from '../../components/PostFeed'
 import {
   Button,
+  ConfirmModal,
   EmptyState,
   Field,
-  formatDate,
+  formatDateTime,
   Initials,
   Input,
   Modal,
@@ -93,6 +94,15 @@ export default function Events() {
     [events, now],
   )
 
+  // Below lg the detail sits under the list, off the bottom of the screen.
+  // Selecting something has to take you to it.
+  function revealDetail() {
+    if (window.innerWidth >= 1024) return
+    requestAnimationFrame(() =>
+      document.getElementById('event-detail')?.scrollIntoView({ behavior: 'smooth' }),
+    )
+  }
+
   const shown = tab === 'upcoming' ? upcoming : past
   const selected = events.find((e) => e.id === selectedId) ?? null
 
@@ -151,14 +161,17 @@ export default function Events() {
                       <button
                         key={event.id}
                         type="button"
-                        onClick={() => setSelectedId(event.id)}
+                        onClick={() => {
+                          setSelectedId(event.id)
+                          revealDetail()
+                        }}
                         className={`block w-full px-5 py-4 text-left transition-colors ${
                           event.id === selectedId ? 'bg-gold-wash' : 'hover:bg-fg/[0.02]'
                         }`}
                       >
                         <div className="truncate text-sm font-medium text-fg">{event.title}</div>
                         <div className="mt-1 truncate text-xs text-dim">
-                          {formatDate(event.starts_at)}
+                          {formatDateTime(event.starts_at)}
                           {event.location ? ` · ${event.location}` : ''}
                         </div>
                         <div className="mt-1 text-xs text-muted tabular-nums">
@@ -171,7 +184,7 @@ export default function Events() {
               )}
             </section>
 
-            <section>
+            <section id="event-detail" className="scroll-mt-20">
               {selected ? (
                 <EventDetail
                   key={selected.id}
@@ -226,6 +239,7 @@ function EventDetail({
   const [busy, setBusy] = useState(false)
   const [inviteId, setInviteId] = useState('')
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const mine = invitations.find((i) => i.profile_id === profile?.id)
   const going = invitations.filter((i) => i.status === 'going')
@@ -276,6 +290,7 @@ function EventDetail({
   }
 
   async function remove() {
+    setConfirmingDelete(false)
     const { error: deleteError } = await supabase.from('events').delete().eq('id', event.id)
     if (deleteError) {
       setError(errorMessage(deleteError))
@@ -297,7 +312,8 @@ function EventDetail({
         <div className="px-6 py-6">
           <h2 className="display text-2xl">{event.title}</h2>
           <p className="mt-2 text-sm text-muted">
-            {formatDate(event.starts_at)}
+            {formatDateTime(event.starts_at)}
+            {event.ends_at ? ` — ${formatDateTime(event.ends_at)}` : ''}
             {event.location ? ` · ${event.location}` : ''}
           </p>
           <p className="mt-1 text-xs text-dim">
@@ -331,7 +347,7 @@ function EventDetail({
             {isHost && (
               <button
                 type="button"
-                onClick={remove}
+                onClick={() => setConfirmingDelete(true)}
                 className="ml-auto text-xs text-dim transition-colors hover:text-red-400"
               >
                 Delete event
@@ -390,6 +406,15 @@ function EventDetail({
         <SectionHeader title="About this event" caption="Posts here also show in the feed." />
         <PostFeed eventId={event.id} />
       </div>
+
+      <ConfirmModal
+        open={confirmingDelete}
+        title={`Delete ${event.title}?`}
+        body="Everyone's RSVPs and everything posted about this event go with it. This cannot be undone."
+        confirmLabel="Delete event"
+        onConfirm={remove}
+        onClose={() => setConfirmingDelete(false)}
+      />
 
       {viewing && <MemberCard member={viewing} onClose={() => setViewing(null)} />}
     </div>
