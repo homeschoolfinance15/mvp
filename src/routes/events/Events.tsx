@@ -10,6 +10,7 @@ import {
   formatDateTime,
   Initials,
   Input,
+  LoadFailed,
   Modal,
   Notice,
   Panel,
@@ -20,7 +21,7 @@ import {
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { ACCEPT_ATTR, signMedia, uploadMedia } from '../../lib/media'
-import { errorMessage, supabase } from '../../lib/supabase'
+import { errorMessage, loadFailed, supabase } from '../../lib/supabase'
 import type {
   DirectoryEntry,
   Event,
@@ -47,12 +48,14 @@ export default function Events() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [error, setError] = useState('')
 
   const canHost = profile?.role === 'admin' || profile?.role === 'connector'
 
   const load = useCallback(async () => {
     setError('')
+    setFailed(false)
     const [eventsRes, invitesRes, dirRes] = await Promise.all([
       supabase.from('events').select('*').order('starts_at', { ascending: true }),
       supabase.from('event_invitations').select('*'),
@@ -60,7 +63,12 @@ export default function Events() {
     ])
 
     const firstError = [eventsRes.error, invitesRes.error, dirRes.error].find(Boolean)
-    if (firstError) setError(errorMessage(firstError))
+    if (firstError) {
+      loadFailed(firstError, 'events')
+      setFailed(true)
+      setLoading(false)
+      return
+    }
 
     const rows = (eventsRes.data as Event[]) ?? []
     setEvents(rows)
@@ -126,6 +134,8 @@ export default function Events() {
         <div className="flex justify-center py-16 text-dim">
           <Spinner />
         </div>
+      ) : failed ? (
+        <LoadFailed what="events" onRetry={load} />
       ) : (
         <>
           {error && (

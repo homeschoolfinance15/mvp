@@ -48,3 +48,21 @@ export function errorMessage(error: unknown): string {
   const e = error as { message?: string; error_description?: string }
   return e.message || e.error_description || 'Something went wrong.'
 }
+
+/**
+ * For a page that failed to load.
+ *
+ * `errorMessage` is right for an action somebody just took — the RPCs raise
+ * text written to be read ("You have no invitations left to allocate"). It is
+ * wrong for a fetch that failed: "Could not find the table 'public.posts' in
+ * the schema cache" tells a member nothing they can act on and makes a
+ * working product look broken.
+ *
+ * So loading failures say something calm and offer to try again, the way
+ * every other platform does, and the real reason goes to the console for
+ * whoever is debugging.
+ */
+export function loadFailed(error: unknown, subject: string): string {
+  console.error(`[amazing] could not load ${subject}:`, error)
+  return subject
+}

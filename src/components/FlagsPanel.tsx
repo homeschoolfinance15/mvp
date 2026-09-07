@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthProvider'
-import { errorMessage, supabase } from '../lib/supabase'
+import { errorMessage, loadFailed, supabase } from '../lib/supabase'
 import type { Profile, ProfileReport, ReportStatus } from '../lib/types'
 import {
   Button,
   EmptyState,
   formatDate,
+  LoadFailed,
   Notice,
   Panel,
   SectionHeader,
@@ -29,16 +30,23 @@ export function FlagsPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
 
   const load = useCallback(async () => {
     setError('')
+    setFailed(false)
     const [reportsRes, peopleRes] = await Promise.all([
       supabase.from('profile_reports').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*'),
     ])
 
     const firstError = [reportsRes.error, peopleRes.error].find(Boolean)
-    if (firstError) setError(errorMessage(firstError))
+    if (firstError) {
+      loadFailed(firstError, 'what people have raised')
+      setFailed(true)
+      setLoading(false)
+      return
+    }
 
     setReports((reportsRes.data as ProfileReport[]) ?? [])
     setPeople(
@@ -90,7 +98,9 @@ export function FlagsPanel() {
         </div>
       )}
 
-      {open.length === 0 ? (
+      {failed ? (
+        <LoadFailed what="what people have raised" onRetry={load} />
+      ) : open.length === 0 ? (
         <EmptyState>Nothing outstanding.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">

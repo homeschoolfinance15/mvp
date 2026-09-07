@@ -6,6 +6,7 @@ import {
   EmptyState,
   formatDate,
   Initials,
+  LoadFailed,
   Notice,
   Panel,
   Spinner,
@@ -13,7 +14,7 @@ import {
 } from './ui'
 import { useAuth } from '../context/AuthProvider'
 import { ACCEPT_ATTR, removeMedia, signMedia, uploadMedia } from '../lib/media'
-import { errorMessage, supabase } from '../lib/supabase'
+import { errorMessage, loadFailed, supabase } from '../lib/supabase'
 import type {
   DirectoryEntry,
   MediaItem,
@@ -50,10 +51,14 @@ export function PostFeed({ eventId }: { eventId?: string }) {
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // A page that failed to load is a different thing from an action that
+  // failed, and gets a different, quieter treatment.
+  const [failed, setFailed] = useState(false)
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
 
   const load = useCallback(async () => {
     setError('')
+    setFailed(false)
 
     // Scoped to one event, or the whole network when eventId is absent.
     const postsQuery = supabase
@@ -69,7 +74,8 @@ export function PostFeed({ eventId }: { eventId?: string }) {
 
     const firstError = [postsRes.error, dirRes.error].find(Boolean)
     if (firstError) {
-      setError(errorMessage(firstError))
+      loadFailed(firstError, eventId ? 'this thread' : 'the feed')
+      setFailed(true)
       setLoading(false)
       return
     }
@@ -156,6 +162,10 @@ export function PostFeed({ eventId }: { eventId?: string }) {
         </div>
       ) : (
         <div className="mx-auto max-w-2xl">
+          {failed ? (
+            <LoadFailed what={eventId ? 'this thread' : 'the feed'} onRetry={load} />
+          ) : (
+            <>
           {error && (
             <div className="mb-6">
               <Notice tone="error">{error}</Notice>
@@ -192,6 +202,8 @@ export function PostFeed({ eventId }: { eventId?: string }) {
               ))
             )}
           </div>
+            </>
+          )}
 
           {viewing && <MemberCard member={viewing} onClose={() => setViewing(null)} />}
         </div>

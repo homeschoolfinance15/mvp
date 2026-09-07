@@ -446,3 +446,29 @@ export function ConfirmModal({
     </Modal>
   )
 }
+
+/**
+ * Shown in place of content that could not be fetched.
+ *
+ * Deliberately looks like an empty state rather than an alarm: quiet border,
+ * no red, no jargon, and a way forward. A person who cannot fix a schema
+ * cache should not be shown one.
+ */
+export function LoadFailed({
+  what,
+  onRetry,
+}: {
+  what: string
+  onRetry?: () => void
+}) {
+  return (
+    <div className="rounded-[6px] border border-dashed border-line-strong px-6 py-12 text-center">
+      <p className="text-sm text-dim">We couldn't load {what} just now.</p>
+      {onRetry && (
+        <Button size="sm" className="mt-5" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </div>
+  )
+}

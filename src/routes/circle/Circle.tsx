@@ -6,12 +6,13 @@ import {
   ConfirmModal,
   EmptyState,
   Initials,
+  LoadFailed,
   Notice,
   Panel,
   Spinner,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
-import { errorMessage, supabase } from '../../lib/supabase'
+import { errorMessage, loadFailed, supabase } from '../../lib/supabase'
 import type { CircleMessage, DirectoryEntry } from '../../lib/types'
 
 /**
@@ -35,6 +36,7 @@ export default function Circle() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [failed, setFailed] = useState(false)
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
@@ -42,6 +44,7 @@ export default function Circle() {
 
   const load = useCallback(async () => {
     setError('')
+    setFailed(false)
     const [circleRes, messagesRes, dirRes] = await Promise.all([
       supabase.rpc('my_circle_id'),
       supabase.from('circle_messages').select('*').order('created_at', { ascending: true }),
@@ -49,7 +52,12 @@ export default function Circle() {
     ])
 
     const firstError = [circleRes.error, messagesRes.error, dirRes.error].find(Boolean)
-    if (firstError) setError(errorMessage(firstError))
+    if (firstError) {
+      loadFailed(firstError, 'your circle')
+      setFailed(true)
+      setLoading(false)
+      return
+    }
 
     setCircleId((circleRes.data as string | null) ?? null)
     setMessages((messagesRes.data as CircleMessage[]) ?? [])
@@ -139,19 +147,19 @@ export default function Circle() {
         <div className="flex justify-center py-16 text-dim">
           <Spinner />
         </div>
-      ) : !circleId ? (
-        // An error here must not read as an empty room: "you aren't in a
-        // circle" and "we couldn't find out" are different facts.
+      ) : failed ? (
+        // "You aren't in a circle" and "we couldn't find out" are different
+        // facts, and a person deserves to be told which one it is.
         <div className="mx-auto max-w-2xl">
-          {error ? (
-            <Notice tone="error">{error}</Notice>
-          ) : (
-            <EmptyState>
-              {profile?.role === 'admin'
-                ? "Administrators aren't part of a circle — nobody invited you in, so there's no room to join."
-                : "You aren't in a circle yet."}
-            </EmptyState>
-          )}
+          <LoadFailed what="your circle" onRetry={load} />
+        </div>
+      ) : !circleId ? (
+        <div className="mx-auto max-w-2xl">
+          <EmptyState>
+            {profile?.role === 'admin'
+              ? "Administrators aren't part of a circle — nobody invited you in, so there's no room to join."
+              : "You aren't in a circle yet."}
+          </EmptyState>
         </div>
       ) : (
         <div className="mx-auto flex max-w-2xl flex-col">
