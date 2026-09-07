@@ -71,12 +71,19 @@ async function patchProfile(token, id, fields) {
 }
 
 async function insertNote(token, note) {
-  const res = await fetch(`${BASE}/rest/v1/connector_notes`, {
+  return insert(token, 'connector_notes', note)
+}
+
+/** Insert and return the row, so seeded ids can be referenced afterwards. */
+async function insert(token, table, body) {
+  const res = await fetch(`${BASE}/rest/v1/${table}`, {
     method: 'POST',
-    headers: { ...authed(token), Prefer: 'return=minimal' },
-    body: JSON.stringify(note),
+    headers: { ...authed(token), Prefer: 'return=representation' },
+    body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`insertNote: ${await res.text()}`)
+  const rows = await res.json()
+  if (!res.ok) throw new Error(`${table}: ${JSON.stringify(rows)}`)
+  return Array.isArray(rows) ? rows[0] : rows
 }
 
 /* -------------------------------------------------------------------------- */
@@ -120,6 +127,7 @@ const MEMBERS = [
     profession: 'Founder & CEO, Northwind Grid',
     summary:
       'Building distribution-level grid software for utilities across West Africa. Previously ten years in power systems engineering. Curious about how regulation actually moves, and looking for operators who have taken hardware into regulated markets.',
+    interests: ['energy', 'hardware', 'regulation', 'west africa'],
     code: claimed.invite_code,
     note: 'Met James through the Lagos energy cohort. Genuinely rare combination — deep power systems background and a real commercial instinct. Worth introducing to anyone in grid-adjacent infrastructure.',
     shareNote: true,
@@ -130,6 +138,7 @@ const MEMBERS = [
     profession: 'Head of Design, Lumen Health',
     summary:
       'I design clinical software that nurses actually want to use. Spent five years watching good products fail on the ward because nobody watched the ward. Interested in people working where design meets regulated environments.',
+    interests: ['design', 'health', 'regulation'],
     code: shared.code,
     note: 'Priya is the most rigorous design thinker I know in health tech. She is quietly looking at what is next — do not surface that broadly.',
     shareNote: false,
@@ -140,18 +149,23 @@ const MEMBERS = [
     profession: 'General Counsel, Aster Materials',
     summary:
       'Commercial lawyer by training, increasingly pulled into strategy. I spend my time on supply agreements for critical minerals and I am trying to understand the technical side properly rather than nodding along.',
+    interests: ['minerals', 'supply chain', 'legal'],
     code: shared.code,
     note: 'Tomas asked to be introduced to people working on minerals traceability. Reliable, low-ego, follows up.',
     shareNote: true,
   },
 ]
 
+const sessions = {}
+
 for (const member of MEMBERS) {
   const session = await account(member.email, member.name)
+  sessions[member.name] = session
   await rpc(session.token, 'redeem_code', { p_code: member.code, p_full_name: member.name })
   await patchProfile(session.token, session.id, {
     current_profession: member.profession,
     semantic_summary: member.summary,
+    interests: member.interests,
   })
   await insertNote(connector.token, {
     connector_id: claimed.connector_id,
@@ -162,7 +176,93 @@ for (const member of MEMBERS) {
   console.log(`   ${member.name} joined on ${member.code}`)
 }
 
-console.log('6. a second connector, left unclaimed for demos')
+await patchProfile(connector.token, connector.id, {
+  interests: ['energy', 'infrastructure', 'investing'],
+})
+
+console.log('6. the feed')
+const james = sessions['James Oduya']
+const priya = sessions['Priya Raghavan']
+const tomas = sessions['Tomas Lindqvist']
+
+const post = await insert(james.token, 'posts', {
+  author_id: james.id,
+  body: "Spent the week in Accra with two distribution utilities. The technical problem is nowhere near the hard part — the hard part is that nobody owns the meter data. If you have taken hardware into a regulated market and lived through this, I would like to buy you a coffee.",
+})
+const secondPost = await insert(connector.token, 'posts', {
+  author_id: connector.id,
+  body: 'Reading week. Three things worth your time if you invest in anything physical: the IEA electricity report, the FERC interconnection order, and any conversation with somebody who has actually built a substation.',
+})
+
+await insert(priya.token, 'post_likes', { post_id: post.id, profile_id: priya.id })
+await insert(tomas.token, 'post_likes', { post_id: post.id, profile_id: tomas.id })
+await insert(connector.token, 'post_likes', { post_id: post.id, profile_id: connector.id })
+await insert(james.token, 'post_likes', { post_id: secondPost.id, profile_id: james.id })
+
+await insert(tomas.token, 'post_comments', {
+  post_id: post.id,
+  author_id: tomas.id,
+  body: 'Metering data ownership is a contract problem before it is a technical one. Happy to walk you through how we structured ours.',
+})
+await insert(priya.token, 'post_comments', {
+  post_id: post.id,
+  author_id: priya.id,
+  body: 'This is the same shape as clinical records. Nobody owns the data and everybody depends on it.',
+})
+console.log('   2 posts, 4 likes, 2 comments')
+
+console.log('7. an event, with people going')
+const inAWeek = new Date(Date.now() + 7 * 864e5)
+inAWeek.setHours(18, 30, 0, 0)
+const event = await insert(connector.token, 'events', {
+  host_id: connector.id,
+  title: 'Founders dinner — infrastructure that has to touch the ground',
+  description:
+    'Twelve people, one long table, no panel. Bring a problem you are actually stuck on. Dinner is covered; getting there is not.',
+  location: 'The Hoxton, Shoreditch',
+  starts_at: inAWeek.toISOString(),
+})
+await insert(james.token, 'event_invitations', {
+  event_id: event.id, profile_id: james.id, status: 'going', responded_at: new Date().toISOString(),
+})
+await insert(tomas.token, 'event_invitations', {
+  event_id: event.id, profile_id: tomas.id, status: 'going', responded_at: new Date().toISOString(),
+})
+await insert(connector.token, 'event_invitations', {
+  event_id: event.id, profile_id: priya.id, status: 'invited',
+})
+await insert(james.token, 'posts', {
+  author_id: james.id,
+  event_id: event.id,
+  body: 'Is anyone driving up from Bristol? Happy to split the trip.',
+})
+console.log('   1 event, 2 going, 1 invited, 1 note on it')
+
+console.log('8. the circle talks')
+for (const [who, text] of [
+  [james, 'Anyone going to the dinner on the 14th?'],
+  [tomas, 'I am. Coming in the afternoon before if anyone wants to get there early.'],
+  [connector, 'Good — bring the minerals traceability question, Tomas. James will have opinions.'],
+]) {
+  await insert(who.token, 'circle_messages', {
+    connector_id: claimed.connector_id,
+    author_id: who.id,
+    body: text,
+  })
+}
+console.log('   3 messages')
+
+console.log('9. somebody raises a correction')
+await insert(priya.token, 'profile_reports', {
+  subject_id: tomas.id,
+  reporter_id: priya.id,
+  kind: 'correction',
+  field: 'current_profession',
+  body: 'Tomas mentioned at the last dinner that he moved out of the GC role in the spring and is consulting now. His profile still says General Counsel.',
+})
+console.log('   1 open correction, visible to Elena and admins only')
+
+console.log('10. a second connector, left unclaimed for demos')
 const pending = await rpc(admin.token, 'create_connector_invitation', {
   p_full_name: 'Daniel Abiodun',
   p_email: 'daniel.abiodun@ramedia.dev',

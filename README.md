@@ -296,7 +296,8 @@ like `/join` and `/admin` return 404 on refresh.
 
 `scripts/seed-demo.mjs` builds a populated demo by driving the real code paths —
 admin creates a connector, the connector claims their account and mints codes,
-members join and are annotated. It needs the service-role key, which is used only
+members join and are annotated, then post to the feed, like and comment on each
+other, RSVP to a dinner, talk in their circle, and raise one correction. It needs the service-role key, which is used only
 to pre-confirm the seeded emails so the script can run regardless of the email
 confirmation setting.
 
