@@ -1,8 +1,18 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthProvider'
 import { formatInterests, INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
+import { forgetSigned, removeMedia, signMedia, uploadMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
-import { Button, Field, Input, Notice, Panel, SectionHeader, Textarea } from './ui'
+import {
+  Button,
+  Field,
+  Initials,
+  Input,
+  Notice,
+  Panel,
+  SectionHeader,
+  Textarea,
+} from './ui'
 
 /**
  * Everyone's own record, editable by them.
@@ -28,6 +38,56 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+
+  // The picture saves on its own rather than waiting for the form: choosing a
+  // file is the whole gesture, and nobody expects to press Save afterwards.
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const path = profile?.avatar_path
+    if (!path) {
+      setAvatarUrl(null)
+      return
+    }
+    let live = true
+    void signMedia([path])
+      .then((urls) => { if (live) setAvatarUrl(urls[path] ?? null) })
+      .catch(() => { if (live) setAvatarUrl(null) })
+    return () => { live = false }
+  }, [profile?.avatar_path])
+
+  async function chooseAvatar(file: File | undefined) {
+    if (!file || !profile) return
+    setError('')
+    setUploading(true)
+    const previous = profile.avatar_path
+
+    try {
+      const [uploaded] = await uploadMedia([file])
+      if (!uploaded) throw new Error('Nothing was uploaded.')
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_path: uploaded.path })
+        .eq('id', profile.id)
+      if (updateError) throw updateError
+
+      // Only once the row points at the new one — otherwise a failure here
+      // would leave the profile referencing a picture that no longer exists.
+      if (previous) {
+        forgetSigned(previous)
+        await removeMedia([previous])
+      }
+      await refreshProfile()
+    } catch (uploadError) {
+      setError(errorMessage(uploadError))
+    } finally {
+      setUploading(false)
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
 
   const dirty =
     fullName !== (profile?.full_name ?? '') ||
@@ -76,6 +136,31 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
         caption="This is the context the network reads you by. Keep it current — other members can raise a correction if it drifts."
       />
       <Panel className="px-6 py-6">
+        <div className="mb-6 flex items-center gap-4 border-b border-line pb-6">
+          <Initials
+            name={profile?.full_name ?? '?'}
+            url={avatarUrl ?? undefined}
+            role={profile?.role}
+            size="lg"
+          />
+          <div className="min-w-0">
+            <label className="cursor-pointer text-xs tracking-[0.1em] text-gold uppercase transition-colors hover:text-fg">
+              {uploading ? 'Uploading…' : avatarUrl ? 'Change picture' : 'Add a picture'}
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => chooseAvatar(e.target.files?.[0])}
+              />
+            </label>
+            <p className="mt-1.5 text-xs text-dim">
+              A photograph of you. Saves as soon as you choose it.
+            </p>
+          </div>
+        </div>
+
         <form onSubmit={submit} className="space-y-5">
           <Field label="Full name">
             <Input

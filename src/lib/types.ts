@@ -21,6 +21,8 @@ export interface Profile {
   semantic_summary: string | null
   profile_status: ProfileStatus
   interests: string[]
+  /** Object path in the media bucket. Null means fall back to initials. */
+  avatar_path: string | null
   created_at: string
 }
 
@@ -36,6 +38,7 @@ export interface DirectoryEntry {
   role: AppRole
   interests: string[]
   created_at: string
+  avatar_path: string | null
 }
 
 /** One uploaded image or video, stored as an element of `posts.media`. */

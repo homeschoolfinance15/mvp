@@ -367,16 +367,69 @@ export function Modal({
 /* Misc                                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function Initials({ name }: { name: string }) {
+/**
+ * Somebody's face, or their initials when they have not added one — framed by
+ * what they are.
+ *
+ * The ring is the whole point: in a network where a connector's word is what
+ * lets somebody in, you should be able to tell an administrator from a
+ * connector from a member without opening anything. Three weights of the same
+ * idea rather than three different colours, so a feed of faces still reads as
+ * one thing.
+ *
+ *   administrator   two-weight gold ring
+ *   connector       single gold ring
+ *   member          hairline, the quiet default
+ *
+ * The title carries it for anyone who cannot see a colour, and every member
+ * card spells the role out in words underneath.
+ */
+const ROLE_RING: Record<string, string> = {
+  admin: 'ring-2 ring-gold',
+  connector: 'ring-1 ring-gold/55',
+  user: 'ring-1 ring-line-strong',
+}
+
+const ROLE_TITLE: Record<string, string> = {
+  admin: 'Administrator',
+  connector: 'Connector',
+  user: 'Member',
+}
+
+export function Initials({
+  name,
+  url,
+  role,
+  size = 'md',
+}: {
+  name: string
+  url?: string
+  role?: string
+  size?: 'md' | 'lg'
+}) {
   const letters = name
-    .split(/\s+/)
+    .split(' ')
     .filter(Boolean)
     .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
+    .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
+
+  const box = size === 'lg' ? 'h-16 w-16 text-sm' : 'h-9 w-9 text-[0.6875rem]'
+  const ring = ROLE_RING[role ?? ''] ?? ''
+  const title = role ? `${name} · ${ROLE_TITLE[role] ?? role}` : name
+
+  const shared = `${box} ${ring} shrink-0 rounded-full ring-offset-1 ring-offset-ink`
+
+  if (url) {
+    return <img src={url} alt="" title={title} className={`${shared} border border-line object-cover`} />
+  }
+
   return (
-    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#ead5ad] bg-surface text-xs font-semibold text-muted">
-      {letters || '—'}
+    <span
+      title={title}
+      className={`${shared} flex items-center justify-center border border-line tracking-wide text-muted`}
+    >
+      {letters}
     </span>
   )
 }

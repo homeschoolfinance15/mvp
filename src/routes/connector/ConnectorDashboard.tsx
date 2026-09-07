@@ -181,7 +181,7 @@ export default function ConnectorDashboard() {
                             active ? 'bg-raised' : 'hover:bg-raised/60'
                           }`}
                         >
-                          <Initials name={person.profile.full_name} />
+                          <Initials name={person.profile.full_name} role={person.profile.role} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium text-fg">
                               {person.profile.full_name}

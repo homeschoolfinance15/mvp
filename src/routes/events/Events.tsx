@@ -77,7 +77,12 @@ export default function Events() {
       Object.fromEntries(((dirRes.data as DirectoryEntry[]) ?? []).map((d) => [d.id, d])),
     )
 
-    const paths = rows.map((e) => e.cover_path).filter((p): p is string => Boolean(p))
+    // Event covers and every member's picture, signed together.
+    const directoryRows = (dirRes.data as DirectoryEntry[]) ?? []
+    const paths = [
+      ...rows.map((e) => e.cover_path),
+      ...directoryRows.map((d) => d.avatar_path),
+    ].filter((p): p is string => Boolean(p))
     if (paths.length) {
       try {
         setCovers(await signMedia(paths))
@@ -202,6 +207,7 @@ export default function Events() {
                   coverUrl={selected.cover_path ? covers[selected.cover_path] : undefined}
                   invitations={invitations.filter((i) => i.event_id === selected.id)}
                   directory={directory}
+                  avatars={covers}
                   onChanged={load}
                 />
               ) : (
@@ -236,12 +242,15 @@ function EventDetail({
   coverUrl,
   invitations,
   directory,
+  avatars,
   onChanged,
 }: {
   event: Event
   coverUrl?: string
   invitations: EventInvitation[]
   directory: Record<string, DirectoryEntry>
+  /** Covers and faces share one signed-URL map — see the load above. */
+  avatars: Record<string, string>
   onChanged: () => Promise<void>
 }) {
   const { profile } = useAuth()
@@ -382,7 +391,11 @@ function EventDetail({
                     onClick={() => who && setViewing(who)}
                     className="flex items-center gap-2 rounded-sm border border-line px-2.5 py-1.5 text-xs text-muted transition-colors hover:text-fg"
                   >
-                    <Initials name={who?.full_name ?? '?'} />
+                    <Initials
+                      name={who?.full_name ?? '?'}
+                      url={who?.avatar_path ? avatars[who.avatar_path] : undefined}
+                      role={who?.role}
+                    />
                     {who?.full_name ?? 'Someone'}
                   </button>
                 </li>

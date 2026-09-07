@@ -72,7 +72,7 @@ export default function UserDashboard() {
               {connectorProfile ? (
                 <Panel className="px-6 py-6">
                   <div className="flex items-start gap-4">
-                    <Initials name={connectorProfile.full_name} />
+                    <Initials name={connectorProfile.full_name} role="connector" />
                     <div className="min-w-0 flex-1">
                       <div className="text-base font-medium tracking-tight text-fg">
                         {connectorProfile.full_name}

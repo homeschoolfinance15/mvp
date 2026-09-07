@@ -17,6 +17,7 @@ import {
   Select,
   Spinner,
   StatTile,
+  StatusBadge,
 } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
 import {
@@ -28,6 +29,7 @@ import {
   type ConnectorStatus,
   type InviteCode,
   type ActivityLogEntry,
+  type CircleMessage,
   type Profile,
   type ProfileStatus,
   type WaitlistEntry,
@@ -58,6 +60,7 @@ export default function AdminDashboard() {
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
   const [notes, setNotes] = useState<ConnectorNote[]>([])
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
+  const [circleMessages, setCircleMessages] = useState<CircleMessage[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
 
   const load = useCallback(async () => {
@@ -71,6 +74,7 @@ export default function AdminDashboard() {
       waitlistRes,
       notesRes,
       activityRes,
+      circlesRes,
     ] = await Promise.all([
       supabase.from('connectors').select('*, profiles(*)').order('created_at', { ascending: false }),
       supabase.from('connector_invitations').select('*').order('created_at', { ascending: false }),
@@ -88,6 +92,11 @@ export default function AdminDashboard() {
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200),
+      supabase
+        .from('circle_messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(500),
     ])
 
     const firstError = [
@@ -99,6 +108,7 @@ export default function AdminDashboard() {
       waitlistRes.error,
       notesRes.error,
       activityRes.error,
+      circlesRes.error,
     ].find(Boolean)
     if (firstError) setError(errorMessage(firstError))
 
@@ -113,6 +123,7 @@ export default function AdminDashboard() {
     setWaitlist((waitlistRes.data as WaitlistEntry[]) ?? [])
     setNotes((notesRes.data as ConnectorNote[]) ?? [])
     setActivity((activityRes.data as ActivityLogEntry[]) ?? [])
+    setCircleMessages((circlesRes.data as CircleMessage[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -149,6 +160,7 @@ export default function AdminDashboard() {
     { id: 'members', label: 'Members', count: members.length },
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'waitlist', label: 'Waitlist', count: waitlist.length },
+    { id: 'circles', label: 'Circles', count: connectors.length },
     { id: 'flags', label: 'Raised' },
     { id: 'log', label: 'Log' },
   ]
@@ -198,6 +210,14 @@ export default function AdminDashboard() {
             )}
             {tab === 'notes' && (
               <NotesTab notes={notes} connectors={connectors} profilesById={profilesById} />
+            )}
+            {tab === 'circles' && (
+              <CirclesTab
+                connectors={connectors}
+                links={links}
+                profilesById={profilesById}
+                messages={circleMessages}
+              />
             )}
             {tab === 'flags' && <FlagsPanel />}
             {tab === 'log' && <LogTab entries={activity} profilesById={profilesById} />}
@@ -275,7 +295,7 @@ function ConnectorsTab({
               key={connector.id}
               className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap"
             >
-              <Initials name={connector.profiles?.full_name ?? '?'} />
+              <Initials name={connector.profiles?.full_name ?? '?'} role="connector" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-fg">
                   {connector.profiles?.full_name ?? 'Unknown'}
@@ -532,7 +552,7 @@ function MembersTab({
         <Panel className="divide-y divide-line">
           {filtered.map((member) => (
             <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap">
-              <Initials name={member.full_name} />
+              <Initials name={member.full_name} role={member.role} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-fg">{member.full_name}</div>
                 <div className="truncate text-xs text-dim">
@@ -899,6 +919,127 @@ function LogTab({
             )
           })}
         </Panel>
+      )}
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Circles                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The network as it is actually shaped: every connector, and beneath each one
+ * the people they brought in.
+ *
+ * The hierarchy is not stored anywhere. connector_user_links already records
+ * who invited whom, so this is that fact drawn out rather than a second copy
+ * of it. Collapsing uses a native <details>, which needs no state.
+ *
+ * Conversations appear here because an administrator was given read access on
+ * purpose (20260907000007_admin_reads_circles.sql). Reading a room is still
+ * not speaking in it: the insert policy requires being inside one, and an
+ * admin belongs to no circle.
+ */
+function CirclesTab({
+  connectors,
+  links,
+  profilesById,
+  messages,
+}: {
+  connectors: ConnectorRow[]
+  links: LinkRow[]
+  profilesById: Record<string, Profile>
+  messages: CircleMessage[]
+}) {
+  return (
+    <>
+      <SectionHeader
+        title="Circles"
+        caption="Every connector, the people beneath them, and what is being said in each room."
+      />
+
+      {connectors.length === 0 ? (
+        <EmptyState>No connectors yet, so there are no circles.</EmptyState>
+      ) : (
+        <div className="space-y-4">
+          {connectors.map((connector) => {
+            const members = links
+              .filter((l) => l.connector_id === connector.id)
+              .map((l) => profilesById[l.user_profile_id])
+              .filter(Boolean)
+            const said = messages.filter((m) => m.connector_id === connector.id)
+
+            return (
+              <Panel key={connector.id} className="overflow-hidden">
+                <details>
+                  <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 transition-colors hover:bg-fg/[0.02]">
+                    <Initials name={connector.profiles?.full_name ?? '?'} role="connector" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-fg">
+                        {connector.profiles?.full_name ?? 'Unknown'}
+                      </span>
+                      <span className="block truncate text-xs text-dim">
+                        {members.length} of {connector.invite_capacity} invited{' '}
+                        &middot; {said.length}{' '}
+                        {said.length === 1 ? 'message' : 'messages'}
+                      </span>
+                    </span>
+                    <StatusBadge status={connector.invite_status} />
+                  </summary>
+
+                  <div className="border-t border-line">
+                    {members.length === 0 ? (
+                      <p className="px-5 py-4 text-sm text-dim">
+                        Nobody has joined on their codes yet.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-line">
+                        {members.map((member) => (
+                          <li key={member.id} className="flex items-center gap-3 py-3 pr-5 pl-10">
+                            <Initials name={member.full_name} role={member.role} />
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm text-fg">
+                                {member.full_name}
+                              </span>
+                              <span className="block truncate text-xs text-dim">
+                                {member.current_profession ?? '—'}
+                              </span>
+                            </span>
+                            <span className="ml-auto shrink-0">
+                              <StatusBadge status={member.profile_status} />
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {said.length > 0 && (
+                      <details className="border-t border-line">
+                        <summary className="cursor-pointer px-5 py-3 text-xs tracking-[0.1em] text-dim uppercase hover:text-fg">
+                          Conversation &middot; {said.length}
+                        </summary>
+                        <ul className="space-y-3 bg-fg/[0.015] px-5 py-4">
+                          {said.map((message) => (
+                            <li key={message.id} className="text-sm">
+                              <span className="text-xs text-dim">
+                                {profilesById[message.author_id]?.full_name ?? 'Someone'}{' '}
+                                &middot; {formatDate(message.created_at)}
+                              </span>
+                              <p className="mt-0.5 leading-relaxed break-words whitespace-pre-wrap text-muted">
+                                {message.body}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                </details>
+              </Panel>
+            )
+          })}
+        </div>
       )}
     </>
   )

@@ -75,22 +75,44 @@ export async function uploadMedia(files: File[]): Promise<MediaItem[]> {
  * The bucket is private, so every render needs signed URLs. Batched into one
  * request per page of content rather than one per image.
  *
- * ponytail: an hour-long signature, refreshed by the next fetch. Long enough
- * that nothing expires while someone reads; short enough that a link pasted
- * elsewhere stops working. Cache these if the feed ever refetches often.
+ * Signatures last an hour — long enough that nothing expires while somebody
+ * reads, short enough that a link pasted elsewhere stops working — and are
+ * cached below, because the same avatars reappear on every screen.
  */
+const signed = new Map<string, { url: string; until: number }>()
+
 export async function signMedia(paths: string[]): Promise<Record<string, string>> {
   if (paths.length === 0) return {}
 
-  const unique = [...new Set(paths)]
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(unique, 3600)
+  const now = Date.now()
+  const urls: Record<string, string> = {}
+  const missing: string[] = []
+
+  // Avatars repeat on every screen and across every route change. Cached a
+  // little short of the signature's own hour, so a page never renders a URL
+  // that expires while somebody is looking at it.
+  for (const path of new Set(paths)) {
+    const hit = signed.get(path)
+    if (hit && hit.until > now) urls[path] = hit.url
+    else missing.push(path)
+  }
+  if (missing.length === 0) return urls
+
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrls(missing, 3600)
   if (error) throw error
 
-  const urls: Record<string, string> = {}
   for (const row of data ?? []) {
-    if (row.signedUrl && row.path) urls[row.path] = row.signedUrl
+    if (row.signedUrl && row.path) {
+      urls[row.path] = row.signedUrl
+      signed.set(row.path, { url: row.signedUrl, until: now + 50 * 60 * 1000 })
+    }
   }
   return urls
+}
+
+/** Replacing a picture should not leave the old one in the bucket. */
+export function forgetSigned(path: string): void {
+  signed.delete(path)
 }
 
 /** Removing the row leaves the object behind, so callers clean up explicitly. */

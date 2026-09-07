@@ -12,6 +12,7 @@ import {
   Spinner,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { signMedia } from '../../lib/media'
 import { errorMessage, loadFailed, supabase } from '../../lib/supabase'
 import type { CircleMessage, DirectoryEntry } from '../../lib/types'
 
@@ -37,6 +38,7 @@ export default function Circle() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [failed, setFailed] = useState(false)
+  const [avatars, setAvatars] = useState<Record<string, string>>({})
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
@@ -61,9 +63,13 @@ export default function Circle() {
 
     setCircleId((circleRes.data as string | null) ?? null)
     setMessages((messagesRes.data as CircleMessage[]) ?? [])
-    setDirectory(
-      Object.fromEntries(((dirRes.data as DirectoryEntry[]) ?? []).map((d) => [d.id, d])),
-    )
+    const directoryRows = (dirRes.data as DirectoryEntry[]) ?? []
+    setDirectory(Object.fromEntries(directoryRows.map((d) => [d.id, d])))
+
+    const faces = directoryRows.map((d) => d.avatar_path).filter((p): p is string => Boolean(p))
+    if (faces.length) {
+      try { setAvatars(await signMedia(faces)) } catch { setAvatars({}) }
+    }
     setLoading(false)
   }, [])
 
@@ -193,7 +199,11 @@ export default function Circle() {
                         className="mt-0.5 shrink-0"
                         aria-label={who?.full_name ?? 'Member'}
                       >
-                        <Initials name={who?.full_name ?? '?'} />
+                        <Initials
+                          name={who?.full_name ?? '?'}
+                          url={who?.avatar_path ? avatars[who.avatar_path] : undefined}
+                          role={who?.role}
+                        />
                       </button>
 
                       <div className={`min-w-0 max-w-[80%] ${mine ? 'text-right' : ''}`}>

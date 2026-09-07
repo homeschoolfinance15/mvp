@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../context/AuthProvider'
+import { signMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
 import {
   REPORT_KINDS,
@@ -28,6 +29,16 @@ export function MemberCard({
 }) {
   const { profile } = useAuth()
   const [raising, setRaising] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!member.avatar_path) return
+    let live = true
+    void signMedia([member.avatar_path])
+      .then((urls) => { if (live) setAvatarUrl(urls[member.avatar_path!] ?? null) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [member.avatar_path])
 
   const isSelf = member.id === profile?.id
 
@@ -38,11 +49,17 @@ export function MemberCard({
       ) : (
         <div>
           <div className="flex items-center gap-4">
-            <Initials name={member.full_name} />
+            <Initials
+              name={member.full_name}
+              url={avatarUrl ?? undefined}
+              role={member.role}
+              size="lg"
+            />
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-fg">{member.full_name}</div>
               <div className="truncate text-xs text-dim">
-                {member.current_profession ?? 'No profession listed'}
+                {ROLE_WORD[member.role] ?? 'Member'}
+                {member.current_profession ? ` · ${member.current_profession}` : ''}
               </div>
             </div>
           </div>
@@ -80,6 +97,13 @@ export function MemberCard({
       )}
     </Modal>
   )
+}
+
+/** Spelled out, so the ring on the picture never has to be guessed at. */
+const ROLE_WORD: Record<string, string> = {
+  admin: 'Administrator',
+  connector: 'Connector',
+  user: 'Member',
 }
 
 const KIND_HINT: Record<ReportKind, string> = {

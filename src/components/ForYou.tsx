@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { MemberCard } from './MemberCard'
 import { EmptyState, Initials, Panel, SectionHeader } from './ui'
 import { useAuth } from '../context/AuthProvider'
+import { signMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
 import type { DirectoryEntry, Event, Recommendation } from '../lib/types'
 
@@ -26,6 +27,7 @@ export function ForYou() {
   const [events, setEvents] = useState<Record<string, Event>>({})
   const [viewing, setViewing] = useState<DirectoryEntry | null>(null)
   const [error, setError] = useState('')
+  const [avatars, setAvatars] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     const { data, error: fetchError } = await supabase
@@ -49,9 +51,12 @@ export function ForYou() {
       supabase.from('member_directory').select('*'),
       supabase.from('events').select('*'),
     ])
-    setDirectory(
-      Object.fromEntries(((dirRes.data as DirectoryEntry[]) ?? []).map((d) => [d.id, d])),
-    )
+    const directoryRows = (dirRes.data as DirectoryEntry[]) ?? []
+    setDirectory(Object.fromEntries(directoryRows.map((d) => [d.id, d])))
+    const faces = directoryRows.map((d) => d.avatar_path).filter((p): p is string => Boolean(p))
+    if (faces.length) {
+      try { setAvatars(await signMedia(faces)) } catch { /* a face is not worth failing over */ }
+    }
     setEvents(Object.fromEntries(((eventsRes.data as Event[]) ?? []).map((e) => [e.id, e])))
   }, [])
 
@@ -103,7 +108,11 @@ export function ForYou() {
                 className="flex w-full items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-fg/[0.02]"
               >
                 {who ? (
-                  <Initials name={who.full_name} />
+                  <Initials
+                    name={who.full_name}
+                    url={who.avatar_path ? avatars[who.avatar_path] : undefined}
+                    role={who.role}
+                  />
                 ) : (
                   <span className="mt-0.5 shrink-0 text-xs tracking-[0.1em] text-gold uppercase">
                     {event ? 'Event' : 'Post'}

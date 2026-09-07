@@ -104,7 +104,12 @@ export function PostFeed({ eventId }: { eventId?: string }) {
     setLikes((likesRes.data as PostLike[]) ?? [])
     setComments((commentsRes.data as PostComment[]) ?? [])
 
-    const paths = rows.flatMap((p) => (p.media ?? []).map((m) => m.path))
+    // Post media and every author's picture, signed in one request.
+    const directoryRows = (dirRes.data as DirectoryEntry[]) ?? []
+    const paths = [
+      ...rows.flatMap((p) => (p.media ?? []).map((m) => m.path)),
+      ...directoryRows.map((d) => d.avatar_path).filter((p): p is string => Boolean(p)),
+    ]
     if (paths.length) {
       try {
         setMediaUrls(await signMedia(paths))
@@ -416,7 +421,11 @@ function PostCard({
   return (
     <Panel id={`post-${post.id}`} className="px-5 py-5">
       <header className="flex items-start gap-3">
-        <Initials name={author?.full_name ?? '?'} />
+        <Initials
+          name={author?.full_name ?? '?'}
+          url={author?.avatar_path ? mediaUrls[author.avatar_path] : undefined}
+          role={author?.role}
+        />
         <div className="min-w-0 flex-1">
           {author ? (
             <button
