@@ -45,6 +45,28 @@ export interface MediaItem {
   kind: 'image' | 'video'
 }
 
+export interface Post {
+  id: string
+  author_id: string
+  body: string
+  media: MediaItem[]
+  created_at: string
+}
+
+export interface PostLike {
+  post_id: string
+  profile_id: string
+  created_at: string
+}
+
+export interface PostComment {
+  id: string
+  post_id: string
+  author_id: string
+  body: string
+  created_at: string
+}
+
 /** A row of the append-only audit trail. Admin-readable only. */
 export interface ActivityLogEntry {
   id: number

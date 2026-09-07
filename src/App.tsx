@@ -10,6 +10,7 @@ import SignIn from './routes/SignIn'
 import AdminSetup from './routes/AdminSetup'
 import Onboarding from './routes/Onboarding'
 import Profile from './routes/Profile'
+import Feed from './routes/feed/Feed'
 import AdminDashboard from './routes/admin/AdminDashboard'
 import ConnectorDashboard from './routes/connector/ConnectorDashboard'
 import UserDashboard from './routes/user/UserDashboard'
@@ -98,6 +99,14 @@ export default function App() {
           />
           {/* Shared by every role. RequireRole with no role prop is exactly
               the right guard: session + profile + onboarding complete. */}
+          <Route
+            path="/feed"
+            element={
+              <RequireRole>
+                <Feed />
+              </RequireRole>
+            }
+          />
           <Route
             path="/profile"
             element={
