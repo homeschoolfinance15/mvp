@@ -241,12 +241,16 @@ supabase functions deploy recommend
 
 ## Deployment
 
+See **[DEPLOY.md](DEPLOY.md)** before pushing to `main`. There is one ordering
+trap: Hostinger deploys the frontend on push, the database does not follow
+automatically, and getting that backwards takes the site down.
+
 The frontend and the database deploy separately, from the same repo, on every
 push to `main`.
 
 | Piece | Lives on | Workflow |
 | --- | --- | --- |
-| Static site | Hostinger | `.github/workflows/deploy-frontend.yml` |
+| Static site | Hostinger | **Hostinger Deployments**, which builds from `main` on the server. The FTP workflow in `.github/workflows/deploy-frontend.yml` has never run and should stay that way; see DEPLOY.md. |
 | Schema, RLS, functions, edge functions | Supabase | `.github/workflows/deploy-database.yml` |
 | Weekly recommendations | Supabase edge function | `.github/workflows/recommend.yml` |
 
