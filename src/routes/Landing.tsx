@@ -87,6 +87,15 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
       )
       return
     }
+
+    // The acknowledgement email. Deliberately not awaited into the outcome:
+    // they are on the list either way, and a mail provider having a bad
+    // minute is not a reason to show somebody an error about an application
+    // that succeeded. The function refuses to send twice.
+    void supabase.functions.invoke('waitlist-email', {
+      body: { email: body.email },
+    })
+
     setDone(true)
   }
 

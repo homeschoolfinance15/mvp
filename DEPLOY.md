@@ -130,6 +130,14 @@ production until this is done. See `COMPLIANCE.md` gap 10.
 - Add SPF, DKIM and DMARC in hPanel → Advanced → DNS Zone Editor. The domain
   currently has **no MX, no SPF, no DKIM and no DMARC** at all.
 - Put the SMTP credentials in Supabase → Project Settings → Auth → SMTP.
+- The waitlist acknowledgement is a separate path from auth mail. It is an
+  edge function calling Resend directly, and it needs its own key:
+
+      supabase secrets set RESEND_API_KEY=re_...
+      supabase functions deploy waitlist-email --no-verify-jwt
+
+  Without that secret the function answers 500 and the applicant hears
+  nothing; the application itself is unaffected either way.
 
 ### 8. The recommender, when you are ready
 
