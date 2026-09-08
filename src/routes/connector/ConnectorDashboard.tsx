@@ -5,6 +5,7 @@ import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import {
   Button,
   CopyCode,
+  ConfirmModal,
   EmptyState,
   Field,
   formatDate,
@@ -303,6 +304,10 @@ function PersonDetail({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // A note is somebody's written record of a person. Removing one asks first,
+  // like every other delete in the app.
+  const [noteToDelete, setNoteToDelete] = useState<ConnectorNote | null>(null)
+  const [noteBusy, setNoteBusy] = useState(false)
 
   async function addNote(e: FormEvent) {
     e.preventDefault()
@@ -326,12 +331,20 @@ function PersonDetail({
     await onChanged()
   }
 
-  async function removeNote(id: string) {
-    const { error: deleteError } = await supabase.from('connector_notes').delete().eq('id', id)
+  async function removeNote() {
+    if (!noteToDelete) return
+    setError('')
+    setNoteBusy(true)
+    const { error: deleteError } = await supabase
+      .from('connector_notes')
+      .delete()
+      .eq('id', noteToDelete.id)
+    setNoteBusy(false)
     if (deleteError) {
       setError(errorMessage(deleteError))
       return
     }
+    setNoteToDelete(null)
     await onChanged()
   }
 
@@ -421,7 +434,7 @@ function PersonDetail({
                   </span>
                   <button
                     type="button"
-                    onClick={() => removeNote(note.id)}
+                    onClick={() => setNoteToDelete(note)}
                     className="transition-colors hover:text-negative"
                   >
                     Delete
@@ -432,6 +445,15 @@ function PersonDetail({
           </ul>
         )}
       </div>
+
+      <ConfirmModal
+        open={Boolean(noteToDelete)}
+        title="Delete this note?"
+        body="The note is removed for good. If it was visible to an admin, it disappears from their view too."
+        busy={noteBusy}
+        onConfirm={() => void removeNote()}
+        onClose={() => setNoteToDelete(null)}
+      />
 
       <DeleteProfileModal
         open={confirmDelete}

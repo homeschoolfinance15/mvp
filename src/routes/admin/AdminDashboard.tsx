@@ -780,9 +780,28 @@ function WaitlistTab({
   const [viewing, setViewing] = useState<WaitlistEntry | null>(null)
   const [decliningId, setDecliningId] = useState<string | null>(null)
   const [declineError, setDeclineError] = useState('')
+  const [deleting, setDeleting] = useState<WaitlistEntry | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const waiting = entries.filter((e) => !e.declined_at)
   const declined = entries.filter((e) => e.declined_at)
+
+  async function removeEntry() {
+    if (!deleting) return
+    setDeleteError('')
+    setDeleteBusy(true)
+    const { error: rpcError } = await supabase.rpc('delete_waitlist_entry', {
+      p_entry_id: deleting.id,
+    })
+    setDeleteBusy(false)
+    if (rpcError) {
+      setDeleteError(errorMessage(rpcError))
+      return
+    }
+    setDeleting(null)
+    await onChanged()
+  }
 
   async function setDeclined(entry: WaitlistEntry, declined_: boolean) {
     setDeclineError('')
@@ -873,6 +892,9 @@ function WaitlistTab({
                       >
                         Decline
                       </Button>
+                      <Button variant="danger" size="sm" onClick={() => setDeleting(entry)}>
+                        Delete
+                      </Button>
                       <Button variant="primary" size="sm" onClick={() => setAssigning(entry)}>
                         Assign
                       </Button>
@@ -916,12 +938,33 @@ function WaitlistTab({
                   >
                     Undo
                   </Button>
+                  <Button variant="danger" size="sm" onClick={() => setDeleting(entry)}>
+                    Delete
+                  </Button>
                 </div>
               </div>
             ))}
           </Panel>
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(deleting)}
+        title={deleting ? `Delete ${deleting.full_name}'s application?` : ''}
+        body={
+          deleting?.assigned_at
+            ? 'This removes the application and everything they answered. The invitation code they were already given still works — withdraw it from the connector if that is not what you want.'
+            : 'This removes the application and everything they answered. Declining keeps the row and the record of the decision; this does not.'
+        }
+        confirmLabel="Delete application"
+        busy={deleteBusy}
+        error={deleteError}
+        onConfirm={() => void removeEntry()}
+        onClose={() => {
+          setDeleting(null)
+          setDeleteError('')
+        }}
+      />
 
       {viewing && (
         <WaitlistEntryModal
