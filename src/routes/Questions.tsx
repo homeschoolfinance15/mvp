@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { DashboardShell } from '../components/DashboardShell'
 import { QuestionnaireForm } from '../components/QuestionnaireForm'
-import { useAuth } from '../context/AuthProvider'
+import { homePathFor, useAuth } from '../context/AuthProvider'
 import { INTRO } from '../lib/questionnaire'
 
 /**
@@ -23,7 +23,7 @@ export default function Questions() {
         <QuestionnaireForm
           profileId={profile.id}
           mode="signup"
-          onComplete={() => navigate('/feed', { replace: true })}
+          onComplete={() => navigate(homePathFor(profile), { replace: true })}
         />
       </div>
     </DashboardShell>

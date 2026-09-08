@@ -19,6 +19,7 @@ import Circle from './routes/circle/Circle'
 import AdminDashboard from './routes/admin/AdminDashboard'
 import ConnectorDashboard from './routes/connector/ConnectorDashboard'
 import UserDashboard from './routes/user/UserDashboard'
+import { FEATURES } from './lib/features'
 
 /**
  * An auth account with no profile row means signup completed but code
@@ -74,6 +75,21 @@ function RequireRole({ role, children }: { role?: AppRole; children: ReactNode }
   return <>{children}</>
 }
 
+/**
+ * Where a switched-off feature sends you.
+ *
+ * Home for whoever you are, rather than a 404 or the public landing page: the
+ * address was valid before and will be again, so an old bookmark or a stale
+ * notification should land somewhere that works.
+ */
+function ToHome() {
+  const { session, profile, loading } = useAuth()
+
+  if (loading) return <PageLoader />
+  if (!session || !profile) return <Navigate to="/" replace />
+  return <Navigate to={homePathFor(profile)} replace />
+}
+
 function RequireSession({ children }: { children: ReactNode }) {
   const { session, profile, loading } = useAuth()
 
@@ -107,20 +123,32 @@ export default function App() {
           />
           {/* Shared by every role. RequireRole with no role prop is exactly
               the right guard: session + profile + onboarding complete. */}
+          {/* Switched off in src/lib/features.ts until the client signs them
+              off. Sent home rather than 404: the address was valid yesterday
+              and will be again, and a member following an old link should
+              land somewhere that works. */}
           <Route
             path="/feed"
             element={
-              <RequireRole>
-                <Feed />
-              </RequireRole>
+              FEATURES.feed ? (
+                <RequireRole>
+                  <Feed />
+                </RequireRole>
+              ) : (
+                <ToHome />
+              )
             }
           />
           <Route
             path="/events"
             element={
-              <RequireRole>
-                <Events />
-              </RequireRole>
+              FEATURES.events ? (
+                <RequireRole>
+                  <Events />
+                </RequireRole>
+              ) : (
+                <ToHome />
+              )
             }
           />
           <Route

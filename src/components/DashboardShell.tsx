@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { homePathFor, useAuth } from '../context/AuthProvider'
 import { NotificationBell } from './NotificationBell'
 import { Wordmark } from './ui'
+import { FEATURES } from '../lib/features'
 
 export interface Tab {
   id: string
@@ -30,8 +31,9 @@ const ROLE_LABEL: Record<string, string> = {
 function navLinks(profile: Parameters<typeof homePathFor>[0]) {
   return [
     { to: homePathFor(profile), label: 'Dashboard' },
-    { to: '/feed', label: 'Feed' },
-    { to: '/events', label: 'Events' },
+    // Held back until the client signs them off. See src/lib/features.ts.
+    ...(FEATURES.feed ? [{ to: '/feed', label: 'Feed' }] : []),
+    ...(FEATURES.events ? [{ to: '/events', label: 'Events' }] : []),
     { to: '/circle', label: 'Circle' },
     { to: '/profile', label: 'Profile' },
   ]

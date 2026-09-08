@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthProvider'
 import { signMedia } from '../lib/media'
 import { supabase } from '../lib/supabase'
+import { FEATURES } from '../lib/features'
 import type { DirectoryEntry, Notification, NotificationKind } from '../lib/types'
 import { formatDate, Initials } from './ui'
 
@@ -52,14 +53,16 @@ function sentence(kind: NotificationKind, who: string): string {
 /** Where pressing it should take you. */
 function destination(notification: Notification): string {
   switch (notification.kind) {
+    // A switched-off feature has no page to open, so pressing the row just
+    // marks it read rather than bouncing through a redirect.
     case 'mention':
     case 'comment':
     case 'like':
     case 'recommendations':
-      return '/feed'
+      return FEATURES.feed ? '/feed' : ''
     case 'event_invited':
     case 'event_rsvp':
-      return '/events'
+      return FEATURES.events ? '/events' : ''
     case 'circle_message':
       return '/circle'
     case 'waitlist_joined':

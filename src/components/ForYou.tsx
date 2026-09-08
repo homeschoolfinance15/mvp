@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthProvider'
 import { signMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
 import type { DirectoryEntry, Event, Recommendation } from '../lib/types'
+import { FEATURES } from '../lib/features'
 
 /**
  * What the recommender thinks this member should look at, and why.
@@ -75,7 +76,7 @@ export function ForYou() {
     if (item.member_id) {
       const who = directory[item.member_id]
       if (who) setViewing(who)
-    } else if (item.event_id) {
+    } else if (item.event_id && FEATURES.events) {
       navigate('/events')
     } else if (item.post_id) {
       document.getElementById(`post-${item.post_id}`)?.scrollIntoView({ behavior: 'smooth' })
