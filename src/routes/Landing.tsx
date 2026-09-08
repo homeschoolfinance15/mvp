@@ -7,6 +7,7 @@ import { TagPicker } from '../components/TagPicker'
 import {
   DISCLOSURE,
   EMPTY_TAG_ANSWER,
+  INITIAL_ORDER,
   TAG_QUESTIONS,
   TEXT_QUESTIONS,
   TRAVEL_OPTIONS,
@@ -14,13 +15,21 @@ import {
 import type { CodeLookup, ProfileTag, TagAnswer, TagField } from '../lib/types'
 
 /**
+ * One question to a page, in the handoff's initial order, then location.
+ *
+ * A single page holding all of it reads as a wall and gets abandoned; the same
+ * questions arriving one at a time read as a short conversation. Nothing here
+ * is required past name and email, so Next doubles as Skip.
+ */
+const STEPS = ['who', ...INITIAL_ORDER, 'where'] as const
+
+/**
  * The public waitlist form.
  *
- * The handoff says waitlist applicants answer the same questionnaire. It is
- * asked in two steps, and everything past name and email is optional: a
- * stranger asked thirty questions at the door leaves. Whatever they do answer
- * is carried onto their profile when an admin lets them in, so nobody
- * answers twice.
+ * The handoff says waitlist applicants answer the same questionnaire. Everything
+ * past name and email is optional: a stranger asked thirty questions at the door
+ * leaves. Whatever they do answer is carried onto their profile when an admin
+ * lets them in, so nobody answers twice.
  */
 function WaitlistForm({ onClose }: { onClose: () => void }) {
   const [fullName, setFullName] = useState('')
@@ -30,27 +39,29 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
-  const [step, setStep] = useState<'who' | 'about'>('who')
+  const [page, setPage] = useState(0)
   const [tags, setTags] = useState<ProfileTag[]>([])
   const [answers, setAnswers] = useState<Record<string, TagAnswer>>({})
   const [text, setText] = useState<Record<string, string>>({})
   const [homeCity, setHomeCity] = useState('')
   const [travel, setTravel] = useState('')
 
+  const last = STEPS.length - 1
+  const stepKey = STEPS[page]
+
   useEffect(() => {
-    if (step !== 'about' || tags.length > 0) return
+    if (page === 0 || tags.length > 0) return
     void supabase
       .from('profile_tags')
       .select('*')
       .order('field')
       .order('position')
       .then(({ data }) => setTags((data as ProfileTag[]) ?? []))
-  }, [step, tags.length])
+  }, [page, tags.length])
 
   const answerOf = (field: TagField) => answers[field] ?? EMPTY_TAG_ANSWER
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function submit() {
     setError('')
     setBusy(true)
 
@@ -94,40 +105,48 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
     )
   }
 
-  if (step === 'about') {
-    return (
-      <form onSubmit={submit}>
-        <p className="mb-2 text-sm leading-6 text-muted">
-          A little more, so we can find you the right room. All of this is optional.
-        </p>
-        <p className="mb-8 text-xs leading-relaxed text-dim">{DISCLOSURE}</p>
-
-        <div className="space-y-7">
-          {TAG_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => (
-            <TagPicker
-              key={q.field}
-              label={q.prompt}
-              helper={q.helper}
-              tags={tags.filter((t) => t.field === q.field)}
-              value={answerOf(q.field)}
-              max={q.max}
-              allowCustom={q.allowCustom}
-              onChange={(next) => setAnswers((a) => ({ ...a, [q.field]: next }))}
+  function renderStep() {
+    if (stepKey === 'who') {
+      return (
+        <div className="space-y-5">
+          <Field label="Full name">
+            <Input
+              required
+              autoFocus
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Jane Okonkwo"
+              autoComplete="name"
             />
-          ))}
+          </Field>
 
-          {TEXT_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => (
-            <Field key={q.field} label={q.prompt} hint={q.helper}>
-              <Textarea
-                rows={3}
-                maxLength={q.maxLength}
-                placeholder={q.placeholder}
-                value={text[q.field] ?? ''}
-                onChange={(e) => setText((t) => ({ ...t, [q.field]: e.target.value }))}
-              />
-            </Field>
-          ))}
+          <Field label="Email address">
+            <Input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jane@company.com"
+              autoComplete="email"
+            />
+          </Field>
 
+          <Field label="LinkedIn" hint="Optional">
+            <Input
+              type="url"
+              value={linkedin}
+              onChange={(e) => setLinkedin(e.target.value)}
+              placeholder="linkedin.com/in/..."
+              autoComplete="url"
+            />
+          </Field>
+        </div>
+      )
+    }
+
+    if (stepKey === 'where') {
+      return (
+        <div className="space-y-7">
           <CitySearch value={homeCity} onChange={setHomeCity} />
 
           <fieldset className="border-0 p-0">
@@ -154,82 +173,98 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
             </ul>
           </fieldset>
         </div>
+      )
+    }
 
-        {error && (
-          <div className="mt-6">
-            <Notice tone="error">{error}</Notice>
-          </div>
-        )}
+    const tagQuestion = TAG_QUESTIONS.find((q) => q.field === stepKey)
+    if (tagQuestion) {
+      return (
+        <TagPicker
+          label={tagQuestion.prompt}
+          helper={tagQuestion.helper}
+          tags={tags.filter((t) => t.field === tagQuestion.field)}
+          value={answerOf(tagQuestion.field)}
+          max={tagQuestion.max}
+          allowCustom={tagQuestion.allowCustom}
+          onChange={(next) => setAnswers((a) => ({ ...a, [tagQuestion.field]: next }))}
+        />
+      )
+    }
 
-        <div className="mt-8 flex flex-wrap justify-between gap-3">
-          <Button type="button" onClick={() => setStep('who')}>
-            Back
-          </Button>
-          <Button type="submit" variant="primary" loading={busy}>
-            Join the waitlist
-          </Button>
-        </div>
-      </form>
+    const textQuestion = TEXT_QUESTIONS.find((q) => q.field === stepKey)
+    if (!textQuestion) return null
+
+    return (
+      <Field label={textQuestion.prompt} hint={textQuestion.helper}>
+        <Textarea
+          rows={4}
+          maxLength={textQuestion.maxLength}
+          placeholder={textQuestion.placeholder}
+          value={text[textQuestion.field] ?? ''}
+          onChange={(e) => setText((t) => ({ ...t, [textQuestion.field]: e.target.value }))}
+        />
+      </Field>
     )
   }
 
   return (
     <form
-      onSubmit={(e) => {
+      onSubmit={(e: FormEvent) => {
         e.preventDefault()
-        setStep('about')
+        // Native validation has already passed for whatever this page holds.
+        if (page < last) {
+          setPage(page + 1)
+          return
+        }
+        void submit()
       }}
     >
-      <p className="mb-8 text-sm leading-6 text-muted">
-        Tell us a little about yourself. Every application is reviewed personally.
+      <p className="mb-6 text-xs text-dim tabular-nums">
+        Step {page + 1} of {STEPS.length}
       </p>
 
-      <div className="space-y-5">
-        <Field label="Full name">
-          <Input
-            required
-            autoFocus
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Jane Okonkwo"
-            autoComplete="name"
-          />
-        </Field>
+      {page === 0 && (
+        <p className="mb-8 text-sm leading-6 text-muted">
+          Tell us a little about yourself. Every application is reviewed personally.
+        </p>
+      )}
 
-        <Field label="Email address">
-          <Input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="jane@company.com"
-            autoComplete="email"
-          />
-        </Field>
+      {page === 1 && (
+        <>
+          <p className="mb-2 text-sm leading-6 text-muted">
+            A little more, so we can find you the right room. Everything from here is
+            optional.
+          </p>
+          <p className="mb-8 text-xs leading-relaxed text-dim">{DISCLOSURE}</p>
+        </>
+      )}
 
-        <Field label="LinkedIn" hint="Optional">
-          <Input
-            type="url"
-            value={linkedin}
-            onChange={(e) => setLinkedin(e.target.value)}
-            placeholder="linkedin.com/in/..."
-            autoComplete="url"
-          />
-        </Field>
-      </div>
+      {renderStep()}
 
       {error && (
-        <div className="mt-5">
+        <div className="mt-6">
           <Notice tone="error">{error}</Notice>
         </div>
       )}
 
-      <Button type="submit" variant="primary" className="mt-7 w-full">
-        Continue
-      </Button>
-      <p className="mt-4 text-center text-xs text-dim">
-        Your information is only used to review your application.
-      </p>
+      <div className="mt-8 flex items-center justify-between gap-3">
+        {page > 0 ? (
+          <Button type="button" onClick={() => setPage(page - 1)}>
+            Back
+          </Button>
+        ) : (
+          <span />
+        )}
+        <Button type="submit" variant="primary" loading={busy}>
+          {page === last ? 'Join the waitlist' : 'Next'}
+        </Button>
+      </div>
+
+      {page === 0 && (
+        <p className="mt-4 text-center text-xs text-dim">
+          Your information is only used to review your application.
+        </p>
+      )}
     </form>
   )
 }
