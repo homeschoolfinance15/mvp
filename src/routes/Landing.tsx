@@ -35,6 +35,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [linkedin, setLinkedin] = useState('')
+  const [phone, setPhone] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
@@ -69,6 +70,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
       full_name: fullName.trim(),
       email: email.trim().toLowerCase(),
       linkedin_url: linkedin.trim() || null,
+      phone: phone.trim(),
       home_city: homeCity.trim() || null,
       travel_preference: travel || null,
     }
@@ -143,6 +145,19 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="jane@company.com"
               autoComplete="email"
+            />
+          </Field>
+
+          {/* Required, unlike LinkedIn. A place opens at short notice and a
+              connector needs a way to reach somebody that is not an inbox. */}
+          <Field label="Phone number">
+            <Input
+              required
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+44 7700 900000"
+              autoComplete="tel"
             />
           </Field>
 

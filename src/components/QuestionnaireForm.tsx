@@ -161,6 +161,7 @@ export function QuestionnaireForm({
 
       const project = (draft.current_project ?? '').trim()
       if (!project) return "Tell us what you're working on."
+      if (!draft.phone?.trim()) return 'What is your phone number?'
       if (!draft.home_city?.trim()) return 'Where are you based?'
       if (!draft.travel_preference) return 'How far are you willing to travel?'
     }
@@ -300,6 +301,22 @@ export function QuestionnaireForm({
               onChange={(next) => set('home_city', next)}
             />
 
+            {/* Required, unlike LinkedIn: a gathering is arranged in person and
+                at short notice, and an email nobody reads is no way to tell
+                somebody the room moved. */}
+            <Field
+              label="Phone number"
+              hint="Only ever used to reach you about a gathering."
+            >
+              <Input
+                required
+                type="tel"
+                autoComplete="tel"
+                value={draft.phone ?? ''}
+                onChange={(e) => set('phone', e.target.value)}
+              />
+            </Field>
+
             <fieldset className="border-0 p-0">
               <legend className="eyebrow mb-3">How far are you willing to travel?</legend>
               <ul className="flex flex-wrap gap-2">
@@ -398,14 +415,6 @@ export function QuestionnaireForm({
                   </option>
                 ))}
               </select>
-            </Field>
-
-            <Field label="Phone number" hint="Optional. Only ever used to reach you about a gathering.">
-              <Input
-                type="tel"
-                value={draft.phone ?? ''}
-                onChange={(e) => set('phone', e.target.value)}
-              />
             </Field>
 
             <fieldset className="border-0 p-0">

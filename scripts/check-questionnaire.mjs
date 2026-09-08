@@ -333,6 +333,54 @@ check(
   [...new Set((anonCatalog ?? []).map((t) => t.field))].join(', '),
 )
 
+// --- A phone number is required at the door ------------------------------
+//
+// The task asked for it to be required while LinkedIn stays optional. The
+// forms enforce it; this asserts the database does too, because a required
+// attribute in a browser is a hint to a form, not a rule about data.
+
+const noPhone = await fetch(`${URL_}/rest/v1/waitlist_entries`, {
+  method: 'POST',
+  headers: { ...anon, Prefer: 'return=minimal' },
+  body: JSON.stringify({
+    full_name: 'Phone Check',
+    email: `phone-check-${Date.now()}@example.invalid`,
+  }),
+})
+
+check(
+  'an application with no phone number is refused',
+  noPhone.status === 400 || noPhone.status === 409,
+  `HTTP ${noPhone.status}`,
+)
+
+const withPhone = await fetch(`${URL_}/rest/v1/waitlist_entries`, {
+  method: 'POST',
+  headers: { ...anon, Prefer: 'return=representation' },
+  body: JSON.stringify({
+    full_name: 'Phone Check',
+    email: `phone-check-${Date.now()}@example.invalid`,
+    phone: '+44 7700 900000',
+    linkedin_url: null,
+  }),
+})
+const phoneRow = withPhone.ok ? (await withPhone.json())[0] : null
+
+check(
+  'an application with a phone number and no LinkedIn is accepted',
+  Boolean(phoneRow),
+  phoneRow ? 'stored' : `HTTP ${withPhone.status}`,
+)
+
+// Leave nothing behind: the suite runs against a live project.
+if (phoneRow) {
+  await fetch(`${URL_}/rest/v1/rpc/delete_waitlist_entry`, {
+    method: 'POST',
+    headers: auth(admin.token),
+    body: JSON.stringify({ p_entry_id: phoneRow.id }),
+  })
+}
+
 /* -------------------------------------------------------------------------- */
 
 const failed = results.filter((r) => !r.pass)
