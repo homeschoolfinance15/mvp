@@ -215,6 +215,8 @@ export default function AdminDashboard() {
                 connectors={connectors}
                 pendingInvitations={pendingInvitations}
                 invitedCount={invitedCount}
+                links={links}
+                profilesById={profilesById}
                 onChanged={load}
               />
             )}
@@ -262,11 +264,15 @@ function ConnectorsTab({
   connectors,
   pendingInvitations,
   invitedCount,
+  links,
+  profilesById,
   onChanged,
 }: {
   connectors: ConnectorRow[]
   pendingInvitations: ConnectorInvitation[]
   invitedCount: Record<string, number>
+  links: LinkRow[]
+  profilesById: Record<string, Profile>
   onChanged: () => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
@@ -382,18 +388,18 @@ function ConnectorsTab({
       )}
 
       <CreateConnectorModal open={open} onClose={() => setOpen(false)} onCreated={onChanged} />
-      <DeleteProfileModal
-        open={Boolean(connectorToDelete?.profiles)}
-        profileId={connectorToDelete?.profile_id ?? null}
-        name={connectorToDelete?.profiles?.full_name ?? 'connector'}
-        impact={`This permanently removes the connector account, its invitation codes, and ${
-          invitedCount[connectorToDelete?.id ?? ''] ?? 0
-        } member profile${
-          (invitedCount[connectorToDelete?.id ?? ''] ?? 0) === 1 ? '' : 's'
-        } beneath it.`}
-        onClose={() => setConnectorToDelete(null)}
-        onDeleted={onChanged}
-      />
+      {connectorToDelete && (
+        <RemoveConnectorModal
+          connector={connectorToDelete}
+          connectors={connectors}
+          members={links
+            .filter((l) => l.connector_id === connectorToDelete.id)
+            .map((l) => profilesById[l.user_profile_id])
+            .filter(Boolean)}
+          onClose={() => setConnectorToDelete(null)}
+          onChanged={onChanged}
+        />
+      )}
     </>
   )
 }
@@ -847,6 +853,195 @@ function WaitlistTab({
         />
       )}
     </>
+  )
+}
+
+/**
+ * Removing a connector, without removing the people they brought in.
+ *
+ * Deleting a connector used to delete every member beneath them. Members
+ * belong to the network rather than to whoever happened to invite them, so
+ * they are moved somewhere first and the connector is only deletable once
+ * nobody is left under them. The database refuses the old behaviour outright;
+ * this screen is how an admin satisfies it.
+ */
+function RemoveConnectorModal({
+  connector,
+  connectors,
+  members,
+  onClose,
+  onChanged,
+}: {
+  connector: ConnectorRow
+  connectors: ConnectorRow[]
+  members: Profile[]
+  onClose: () => void
+  onChanged: () => Promise<void>
+}) {
+  const destinations = connectors.filter(
+    (c) => c.id !== connector.id && c.invite_status === 'active' && c.profiles,
+  )
+
+  const [selected, setSelected] = useState<string[]>(() => members.map((m) => m.id))
+  const [destination, setDestination] = useState(destinations[0]?.id ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const name = connector.profiles?.full_name ?? 'this connector'
+  const allSelected = selected.length === members.length && members.length > 0
+
+  function toggle(id: string) {
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+  }
+
+  async function move() {
+    setError('')
+    if (!destination) return setError('Choose a connector to move them to.')
+    if (selected.length === 0) return setError('Choose at least one member to move.')
+
+    setBusy(true)
+    const { error: rpcError } = await supabase.rpc('reassign_connector_members', {
+      p_from_connector: connector.id,
+      p_to_connector: destination,
+      p_profile_ids: selected,
+    })
+    setBusy(false)
+    if (rpcError) return setError(errorMessage(rpcError))
+
+    setSelected([])
+    await onChanged()
+  }
+
+  async function remove() {
+    setError('')
+    setBusy(true)
+    const { error: rpcError } = await supabase.rpc('delete_managed_profile', {
+      p_profile_id: connector.profile_id,
+    })
+    setBusy(false)
+    if (rpcError) return setError(errorMessage(rpcError))
+
+    await onChanged()
+    onClose()
+  }
+
+  return (
+    <Modal open title={`Remove ${name}?`} onClose={busy ? () => {} : onClose}>
+      {members.length > 0 ? (
+        <>
+          <p className="text-sm leading-relaxed text-muted">
+            {members.length} member{members.length === 1 ? '' : 's'} joined on{' '}
+            {name}&apos;s invitations. Move them to another connector before removing
+            the account — their profiles, posts and circle stay with them.
+          </p>
+
+          {destinations.length === 0 ? (
+            <div className="mt-5">
+              <Notice tone="error">
+                There is no other active connector to move them to. Create one, or set an
+                existing connector back to active, first.
+              </Notice>
+            </div>
+          ) : (
+            <>
+              <div className="mt-6 flex items-center justify-between">
+                <p className="eyebrow">Who moves</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelected(allSelected ? [] : members.map((m) => m.id))
+                  }
+                  className="text-xs text-gold underline-offset-4 hover:underline"
+                >
+                  {allSelected ? 'Clear all' : 'Select all'}
+                </button>
+              </div>
+
+              <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto">
+                {members.map((member) => (
+                  <li key={member.id}>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-sm px-1 py-1.5 text-sm hover:bg-gold-wash">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(member.id)}
+                        onChange={() => toggle(member.id)}
+                        className="size-4 accent-gold"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-fg">
+                        {member.full_name}
+                      </span>
+                      <span className="truncate text-xs text-dim">{member.email}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-6">
+                <Field label="Move them to">
+                  <Select
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
+                  >
+                    {destinations.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.profiles?.full_name ?? 'Unknown'}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <p className="mt-2 text-xs text-dim">
+                  Members count against that connector&apos;s capacity, so the move is
+                  refused if there is not room for all of them.
+                </p>
+              </div>
+            </>
+          )}
+
+          {error && (
+            <div className="mt-5">
+              <Notice tone="error">{error}</Notice>
+            </div>
+          )}
+
+          <div className="mt-8 flex flex-wrap justify-between gap-3">
+            <Button type="button" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={busy}
+              disabled={destinations.length === 0}
+              onClick={() => void move()}
+            >
+              Move {selected.length || ''} {selected.length === 1 ? 'member' : 'members'}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm leading-relaxed text-muted">
+            Nobody is under {name} any more. Removing them deletes the connector account
+            and its invitation codes. No member profile is touched.
+          </p>
+          <p className="mt-3 text-sm font-medium text-negative">This cannot be undone.</p>
+
+          {error && (
+            <div className="mt-5">
+              <Notice tone="error">{error}</Notice>
+            </div>
+          )}
+
+          <div className="mt-8 flex flex-wrap justify-between gap-3">
+            <Button type="button" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={busy} onClick={() => void remove()}>
+              Delete connector
+            </Button>
+          </div>
+        </>
+      )}
+    </Modal>
   )
 }
 
