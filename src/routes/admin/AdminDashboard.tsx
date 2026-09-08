@@ -32,8 +32,16 @@ import {
   type CircleMessage,
   type Profile,
   type ProfileStatus,
+  type ProfileTag,
+  type TagAnswer,
   type WaitlistEntry,
 } from '../../lib/types'
+import {
+  INITIAL_ORDER,
+  TAG_QUESTIONS,
+  TEXT_QUESTIONS,
+  TRAVEL_OPTIONS,
+} from '../../lib/questionnaire'
 
 interface ConnectorRow extends Connector {
   profiles: Profile | null
@@ -62,6 +70,9 @@ export default function AdminDashboard() {
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
   const [circleMessages, setCircleMessages] = useState<CircleMessage[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
+  // Labels for the chips a waitlist applicant picked, so the detail view can
+  // show "Starting a business" rather than current_focus.starting_a_business.
+  const [profileTags, setProfileTags] = useState<ProfileTag[]>([])
 
   const load = useCallback(async () => {
     setError('')
@@ -75,6 +86,7 @@ export default function AdminDashboard() {
       notesRes,
       activityRes,
       circlesRes,
+      tagsRes,
     ] = await Promise.all([
       supabase.from('connectors').select('*, profiles(*)').order('created_at', { ascending: false }),
       supabase.from('connector_invitations').select('*').order('created_at', { ascending: false }),
@@ -97,6 +109,7 @@ export default function AdminDashboard() {
         .select('*')
         .order('created_at', { ascending: true })
         .limit(500),
+      supabase.from('profile_tags').select('*').order('field').order('position'),
     ])
 
     const firstError = [
@@ -109,6 +122,7 @@ export default function AdminDashboard() {
       notesRes.error,
       activityRes.error,
       circlesRes.error,
+      tagsRes.error,
     ].find(Boolean)
     if (firstError) setError(errorMessage(firstError))
 
@@ -124,6 +138,7 @@ export default function AdminDashboard() {
     setNotes((notesRes.data as ConnectorNote[]) ?? [])
     setActivity((activityRes.data as ActivityLogEntry[]) ?? [])
     setCircleMessages((circlesRes.data as CircleMessage[]) ?? [])
+    setProfileTags((tagsRes.data as ProfileTag[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -154,12 +169,14 @@ export default function AdminDashboard() {
 
   const pendingInvitations = invitations.filter((i) => !i.claimed_at)
   const activeCodes = codes.filter((c) => c.status === 'active').length
+  // Somebody already turned down is not still waiting at the door.
+  const waitingCount = waitlist.filter((w) => !w.declined_at).length
 
   const tabs: Tab[] = [
     { id: 'connectors', label: 'Connectors', count: connectors.length },
     { id: 'members', label: 'Members', count: members.length },
     { id: 'notes', label: 'Notes', count: notes.length },
-    { id: 'waitlist', label: 'Waitlist', count: waitlist.length },
+    { id: 'waitlist', label: 'Waitlist', count: waitingCount },
     { id: 'circles', label: 'Circles', count: connectors.length },
     { id: 'flags', label: 'Raised' },
     { id: 'log', label: 'Log' },
@@ -189,7 +206,7 @@ export default function AdminDashboard() {
             <StatTile label="Connectors" value={connectors.length} />
             <StatTile label="Members" value={members.length} />
             <StatTile label="Live codes" value={activeCodes} />
-            <StatTile label="Waitlist" value={waitlist.length} />
+            <StatTile label="Waitlist" value={waitingCount} />
           </div>
 
           <div className="mt-12">
@@ -226,6 +243,7 @@ export default function AdminDashboard() {
                 entries={waitlist}
                 connectors={connectors}
                 codesById={codesById}
+                tags={profileTags}
                 onChanged={load}
               />
             )}
@@ -654,14 +672,37 @@ function WaitlistTab({
   entries,
   connectors,
   codesById,
+  tags,
   onChanged,
 }: {
   entries: WaitlistEntry[]
   connectors: ConnectorRow[]
   codesById: Record<string, InviteCode>
+  tags: ProfileTag[]
   onChanged: () => Promise<void>
 }) {
   const [assigning, setAssigning] = useState<WaitlistEntry | null>(null)
+  const [viewing, setViewing] = useState<WaitlistEntry | null>(null)
+  const [decliningId, setDecliningId] = useState<string | null>(null)
+  const [declineError, setDeclineError] = useState('')
+
+  const waiting = entries.filter((e) => !e.declined_at)
+  const declined = entries.filter((e) => e.declined_at)
+
+  async function setDeclined(entry: WaitlistEntry, declined_: boolean) {
+    setDeclineError('')
+    setDecliningId(entry.id)
+    const { error: rpcError } = await supabase.rpc('set_waitlist_declined', {
+      p_entry_id: entry.id,
+      p_declined: declined_,
+    })
+    setDecliningId(null)
+    if (rpcError) {
+      setDeclineError(errorMessage(rpcError))
+      return
+    }
+    await onChanged()
+  }
 
   const connectorNameById = useMemo(
     () =>
@@ -678,11 +719,17 @@ function WaitlistTab({
         caption="People who asked to be let in from the public page. Vet them, then hand them to a connector."
       />
 
-      {entries.length === 0 ? (
+      {declineError && (
+        <div className="mb-6">
+          <Notice tone="error">{declineError}</Notice>
+        </div>
+      )}
+
+      {waiting.length === 0 ? (
         <EmptyState>Nobody on the waitlist yet.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
-          {entries.map((entry) => {
+          {waiting.map((entry) => {
             const code = entry.assigned_code_id ? codesById[entry.assigned_code_id] : undefined
             return (
               <div
@@ -690,7 +737,13 @@ function WaitlistTab({
                 className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-fg">{entry.full_name}</div>
+                  <button
+                    type="button"
+                    onClick={() => setViewing(entry)}
+                    className="block max-w-full truncate text-left text-sm font-medium text-fg underline-offset-4 hover:underline"
+                  >
+                    {entry.full_name}
+                  </button>
                   <div className="truncate text-xs text-dim">
                     {entry.email}
                     {entry.assigned_connector_id
@@ -717,15 +770,71 @@ function WaitlistTab({
                       <span className="text-dim">code withdrawn</span>
                     )
                   ) : (
-                    <Button variant="primary" size="sm" onClick={() => setAssigning(entry)}>
-                      Assign
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        loading={decliningId === entry.id}
+                        onClick={() => void setDeclined(entry, true)}
+                      >
+                        Decline
+                      </Button>
+                      <Button variant="primary" size="sm" onClick={() => setAssigning(entry)}>
+                        Assign
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
             )
           })}
         </Panel>
+      )}
+
+      {declined.length > 0 && (
+        <div className="mt-12">
+          <SectionHeader
+            title="Declined"
+            caption="Turned down, and kept so the decision is not made twice. Their answers are still here."
+          />
+          <Panel className="divide-y divide-line">
+            {declined.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+              >
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(entry)}
+                    className="block max-w-full truncate text-left text-sm text-muted underline-offset-4 hover:underline"
+                  >
+                    {entry.full_name}
+                  </button>
+                  <div className="truncate text-xs text-dim">{entry.email}</div>
+                </div>
+                <div className="flex items-center gap-5 text-xs">
+                  <span className="text-dim">declined {formatDate(entry.declined_at ?? '')}</span>
+                  <Button
+                    size="sm"
+                    loading={decliningId === entry.id}
+                    onClick={() => void setDeclined(entry, false)}
+                  >
+                    Undo
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </Panel>
+        </div>
+      )}
+
+      {viewing && (
+        <WaitlistEntryModal
+          key={viewing.id}
+          entry={viewing}
+          tags={tags}
+          onClose={() => setViewing(null)}
+        />
       )}
 
       {assigning && (
@@ -738,6 +847,119 @@ function WaitlistTab({
         />
       )}
     </>
+  )
+}
+
+/**
+ * Everything one applicant wrote on the way in.
+ *
+ * The row already held all of it. The list showed a name and an email, so the
+ * decision to let somebody in was made without reading what they said.
+ */
+function WaitlistEntryModal({
+  entry,
+  tags,
+  onClose,
+}: {
+  entry: WaitlistEntry
+  tags: ProfileTag[]
+  onClose: () => void
+}) {
+  const labelById = useMemo(
+    () => Object.fromEntries(tags.map((t) => [t.id, t.label])) as Record<string, string>,
+    [tags],
+  )
+
+  // A custom tag is stored as its label, so it needs no lookup. An id with no
+  // label is shown as itself rather than dropped: better an ugly row than a
+  // silently missing answer.
+  const chipsOf = (answer: TagAnswer | null) => [
+    ...(answer?.selected_tag_ids ?? []).map((id) => labelById[id] ?? id),
+    ...(answer?.custom_tags ?? []),
+  ]
+
+  const answers = INITIAL_ORDER.map((field) => {
+    const tagQuestion = TAG_QUESTIONS.find((q) => q.field === field)
+    if (tagQuestion) {
+      return {
+        field,
+        prompt: tagQuestion.prompt,
+        chips: chipsOf(entry[tagQuestion.field]),
+        text: tagQuestion.detailsField ? entry[tagQuestion.detailsField] : null,
+      }
+    }
+    const textQuestion = TEXT_QUESTIONS.find((q) => q.field === field)
+    return {
+      field,
+      prompt: textQuestion?.prompt ?? field,
+      chips: [] as string[],
+      text: textQuestion ? entry[textQuestion.field] : null,
+    }
+  }).filter((row) => row.chips.length > 0 || row.text)
+
+  const travel = TRAVEL_OPTIONS.find((o) => o.id === entry.travel_preference)?.label
+
+  return (
+    <Modal open title={entry.full_name} onClose={onClose}>
+      <div className="space-y-6">
+        <div className="space-y-1 text-sm">
+          <div className="text-muted">{entry.email}</div>
+          {entry.linkedin_url && (
+            <a
+              href={entry.linkedin_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-block text-xs text-gold underline-offset-4 hover:underline"
+            >
+              {entry.linkedin_url}
+            </a>
+          )}
+          <div className="text-xs text-dim">Applied {formatDate(entry.created_at)}</div>
+        </div>
+
+        {(entry.home_city || travel) && (
+          <div className="space-y-1">
+            <p className="eyebrow">Where they are</p>
+            <p className="text-sm text-fg">{entry.home_city ?? 'Not given'}</p>
+            {travel && <p className="text-xs text-dim">Will travel: {travel}</p>}
+          </div>
+        )}
+
+        {answers.length === 0 ? (
+          <p className="text-sm leading-relaxed text-dim">
+            They answered nothing past their name and email. Everything after that is
+            optional, so this is a complete application.
+          </p>
+        ) : (
+          answers.map((row) => (
+            <div key={row.field} className="space-y-2">
+              <p className="eyebrow">{row.prompt}</p>
+              {row.chips.length > 0 && (
+                <ul className="flex flex-wrap gap-2">
+                  {row.chips.map((label) => (
+                    <li
+                      key={label}
+                      className="rounded-sm border border-line px-2.5 py-1 text-xs text-fg"
+                    >
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {row.text && (
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">
+                  {row.text}
+                </p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <Button variant="primary" className="mt-8 w-full" onClick={onClose}>
+        Close
+      </Button>
+    </Modal>
   )
 }
 

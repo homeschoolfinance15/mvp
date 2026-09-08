@@ -320,6 +320,26 @@ export interface WaitlistEntry {
   assigned_at: string | null
   assigned_connector_id: string | null
   assigned_code_id: string | null
+  /** Set when an admin decided against them. Reversible; the answers stay. */
+  declined_at: string | null
+  declined_by: string | null
+
+  // What they answered on the way in. Every one of these is optional: the form
+  // asks for nothing past a name and an email.
+  home_city: string | null
+  travel_preference: string | null
+  current_focus: TagAnswer
+  desired_outcomes: TagAnswer
+  conversation_topics: TagAnswer
+  outside_work_interests: TagAnswer
+  strongest_skills: TagAnswer
+  current_focus_details: string | null
+  desired_outcomes_details: string | null
+  current_project: string | null
+  background: string | null
+  room_contribution: string | null
+  current_conversation_need: string | null
+  curation_notes: string | null
 }
 
 /** Shape returned by the `lookup_code` RPC on the /join screen. */
