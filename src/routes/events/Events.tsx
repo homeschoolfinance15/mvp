@@ -220,6 +220,7 @@ export default function Events() {
 
           {creating && (
             <CreateEventModal
+              directory={directory}
               onClose={() => setCreating(false)}
               onCreated={async () => {
                 setCreating(false)
@@ -449,14 +450,26 @@ function EventDetail({
 /* -------------------------------------------------------------------------- */
 
 function CreateEventModal({
+  directory,
   onClose,
   onCreated,
 }: {
+  directory: Record<string, DirectoryEntry>
   onClose: () => void
   onCreated: () => Promise<void>
 }) {
   const { profile } = useAuth()
 
+  // Everybody the host could ask, connectors included. Anyone may RSVP to any
+  // event anyway; an invitation is the nudge that puts it in front of them.
+  const invitable = Object.values(directory)
+    .filter((d) => d.id !== profile?.id)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+  const connectorIds = invitable
+    .filter((d) => d.role === 'connector')
+    .map((d) => d.id)
+
+  const [invitees, setInvitees] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
@@ -484,21 +497,46 @@ function CreateEventModal({
       }
     }
 
-    const { error: insertError } = await supabase.from('events').insert({
-      host_id: profile.id,
-      title: title.trim(),
-      description: description.trim() || null,
-      location: location.trim() || null,
-      starts_at: new Date(startsAt).toISOString(),
-      ends_at: endsAt ? new Date(endsAt).toISOString() : null,
-      cover_path: coverPath,
-    })
+    const { data: created, error: insertError } = await supabase
+      .from('events')
+      .insert({
+        host_id: profile.id,
+        title: title.trim(),
+        description: description.trim() || null,
+        location: location.trim() || null,
+        starts_at: new Date(startsAt).toISOString(),
+        ends_at: endsAt ? new Date(endsAt).toISOString() : null,
+        cover_path: coverPath,
+      })
+      .select('id')
+      .single()
 
-    setBusy(false)
     if (insertError) {
+      setBusy(false)
       setError(errorMessage(insertError))
       return
     }
+
+    // The event exists either way. A failed invitation is worth saying out
+    // loud, but it is not a reason to throw the event away — the host can
+    // invite the rest from the event itself.
+    if (invitees.length > 0 && created) {
+      const { error: inviteError } = await supabase.from('event_invitations').insert(
+        invitees.map((id) => ({
+          event_id: (created as { id: string }).id,
+          profile_id: id,
+          status: 'invited',
+        })),
+      )
+      if (inviteError) {
+        setBusy(false)
+        setError(`The event was created, but the invitations failed: ${errorMessage(inviteError)}`)
+        await onCreated()
+        return
+      }
+    }
+
+    setBusy(false)
     await onCreated()
   }
 
@@ -553,6 +591,76 @@ function CreateEventModal({
             className="block w-full text-xs text-dim file:mr-3 file:rounded-sm file:border file:border-line file:bg-transparent file:px-3 file:py-1.5 file:text-xs file:text-muted"
           />
         </Field>
+
+        {invitable.length > 0 && (
+          <fieldset className="border-0 p-0">
+            <div className="flex items-center justify-between">
+              <legend className="eyebrow">Invite</legend>
+              <div className="flex gap-4 text-xs">
+                {connectorIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setInvitees((s) =>
+                        connectorIds.every((id) => s.includes(id))
+                          ? s.filter((id) => !connectorIds.includes(id))
+                          : [...new Set([...s, ...connectorIds])],
+                      )
+                    }
+                    className="text-gold underline-offset-4 hover:underline"
+                  >
+                    All connectors
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setInvitees((s) =>
+                      s.length === invitable.length ? [] : invitable.map((d) => d.id),
+                    )
+                  }
+                  className="text-gold underline-offset-4 hover:underline"
+                >
+                  {invitees.length === invitable.length ? 'Clear all' : 'Everyone'}
+                </button>
+              </div>
+            </div>
+
+            <p className="mt-1 text-xs text-dim">
+              Optional. Anyone in the network can see this event and RSVP; inviting
+              someone puts it in front of them and tells them it was meant for them.
+            </p>
+
+            <ul className="mt-3 max-h-44 space-y-1 overflow-y-auto">
+              {invitable.map((person) => (
+                <li key={person.id}>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-sm px-1 py-1.5 text-sm hover:bg-gold-wash">
+                    <input
+                      type="checkbox"
+                      checked={invitees.includes(person.id)}
+                      onChange={() =>
+                        setInvitees((s) =>
+                          s.includes(person.id)
+                            ? s.filter((x) => x !== person.id)
+                            : [...s, person.id],
+                        )
+                      }
+                      className="size-4 accent-gold"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-fg">{person.full_name}</span>
+                    <span className="shrink-0 text-xs text-dim">
+                      {person.role === 'connector'
+                        ? 'Connector'
+                        : person.role === 'admin'
+                          ? 'Administrator'
+                          : 'Member'}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        )}
 
         {error && <Notice tone="error">{error}</Notice>}
 

@@ -339,20 +339,26 @@ export function Modal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
       <div
         className="fixed inset-0 bg-fg/45 backdrop-blur-[1px]"
         onClick={onClose}
         aria-hidden
       />
+      {/*
+        The panel is capped to the viewport and scrolls its own body. Letting
+        it grow instead scrolled the whole overlay, which pushed the title and
+        the close button off the top of a long form — the two things you need
+        when a form is long.
+      */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 my-auto w-full max-w-lg rounded-[6px] border border-line bg-white"
+        className="relative z-10 flex max-h-full w-full max-w-lg flex-col rounded-[6px] border border-line bg-white"
       >
-        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
           <h2 className="text-sm font-medium tracking-tight text-fg">{title}</h2>
           <button
             type="button"
@@ -363,7 +369,7 @@ export function Modal({
             &#10005;
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="overflow-y-auto overscroll-contain px-6 py-5">{children}</div>
       </div>
     </div>
   )
