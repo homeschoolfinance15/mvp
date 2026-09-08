@@ -1,7 +1,11 @@
 /** Asserts the row level security rules actually hold against the live project. */
 const URL = process.env.SUPABASE_URL
 const PUB = process.env.PUB
-const PASSWORD = 'AmazingDemo2026!'
+const PASSWORD = process.env.DEMO_PASSWORD
+if (!PASSWORD) {
+  console.error('Set DEMO_PASSWORD to the password seed-demo.mjs used.')
+  process.exit(1)
+}
 
 async function signIn(email) {
   const r = await fetch(`${URL}/auth/v1/token?grant_type=password`, {

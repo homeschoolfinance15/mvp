@@ -8,14 +8,14 @@
  * No service-role key is involved, so a successful run also proves the whole
  * invite chain works for an ordinary visitor with nothing privileged.
  *
- *   SUPABASE_URL=<url> PUB=<publishable-key> node scripts/seed-demo.mjs
+ *   SUPABASE_URL=<url> PUB=<publishable-key> DEMO_PASSWORD=<pw> node scripts/seed-demo.mjs
  */
 const BASE = process.env.SUPABASE_URL
 const PUB = process.env.PUB
-const PASSWORD = process.env.DEMO_PASSWORD || 'AmazingDemo2026!'
+const PASSWORD = process.env.DEMO_PASSWORD
 
-if (!BASE || !PUB) {
-  console.error('Set SUPABASE_URL and PUB before running this.')
+if (!BASE || !PUB || !PASSWORD) {
+  console.error('Set SUPABASE_URL, PUB and DEMO_PASSWORD before running this.')
   process.exit(1)
 }
 

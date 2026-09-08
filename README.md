@@ -206,8 +206,8 @@ Deleting is confirmed everywhere it destroys something other people can see,
 and every hover-only control stays visible on a touch device.
 
 ```bash
-PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs
-PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-questionnaire.mjs
+DEMO_PASSWORD=<pw> PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-rls.mjs
+DEMO_PASSWORD=<pw> PUB=<publishable-key> SUPABASE_URL=<url> node scripts/check-questionnaire.mjs
 ```
 
 ## The recommender
@@ -319,5 +319,5 @@ to pre-confirm the seeded emails so the script can run regardless of the email
 confirmation setting.
 
 ```bash
-SR=<service-role-key> PUB=<publishable-key> SUPABASE_URL=<url> node scripts/seed-demo.mjs
+SR=<service-role-key> PUB=<publishable-key> SUPABASE_URL=<url> DEMO_PASSWORD=<pw> node scripts/seed-demo.mjs
 ```

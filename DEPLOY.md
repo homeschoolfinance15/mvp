@@ -40,9 +40,10 @@ While you are there:
   their code. The CLI cannot change this setting.
 - **Rotate or delete the demo accounts.** `moshe@valued.ventures`,
   `zalmytouger@gmail.com`, `mn26ventures@gmail.com` and
-  `priya.raghavan@ramedia.dev` all use the password hardcoded in
-  `scripts/seed-demo.mjs`, which is in a public repository. Anyone who reads
-  it can sign in to production as a connector.
+  `priya.raghavan@ramedia.dev` all share whatever `DEMO_PASSWORD` was set to
+  when `scripts/seed-demo.mjs` last ran. That password is no longer in the
+  repository, but anything seeded before this change still carries the old
+  one, and it stays readable in the git history.
 
 ### 2. Set the repository secrets
 
@@ -93,7 +94,8 @@ If `20260907000001` fails on the storage policies, see Troubleshooting.
 
 ### 4. Check the database took
 
-    PUB=<publishable-key> SUPABASE_URL=https://ppbpukefjvpwrwztsgyj.supabase.co \
+    DEMO_PASSWORD=<pw> PUB=<publishable-key> \
+      SUPABASE_URL=https://ppbpukefjvpwrwztsgyj.supabase.co \
       node scripts/check-rls.mjs
 
 Twenty-one checks. They assert against whatever project you point them at, and

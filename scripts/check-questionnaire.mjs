@@ -18,7 +18,11 @@
  */
 const URL_ = process.env.SUPABASE_URL
 const PUB = process.env.PUB
-const PASSWORD = 'AmazingDemo2026!'
+const PASSWORD = process.env.DEMO_PASSWORD
+if (!PASSWORD) {
+  console.error('Set DEMO_PASSWORD to the password seed-demo.mjs used.')
+  process.exit(1)
+}
 
 if (!URL_ || !PUB) {
   console.error('Set SUPABASE_URL and PUB before running this.')
