@@ -251,6 +251,57 @@ check(
   columns.join(', '),
 )
 
+// --- Order, which the handoff is explicit about --------------------------
+// "After the existing account and location fields, show the five initial
+// questions below in order." Q1 is second and Q10 is last; rendering all the
+// tag questions and then all the text ones puts Q1 fifth and Q10 first.
+
+const { INITIAL_ORDER, LATER_ORDER } = await import('../src/lib/questionnaire.ts')
+  .catch(() => ({ INITIAL_ORDER: null, LATER_ORDER: null }))
+
+if (INITIAL_ORDER) {
+  check(
+    'initial questions are ordered Q0, Q1, Q3, Q5, Q7',
+    JSON.stringify([...INITIAL_ORDER]) ===
+      JSON.stringify([
+        'current_focus',
+        'current_project',
+        'desired_outcomes',
+        'conversation_topics',
+        'outside_work_interests',
+      ]),
+    [...INITIAL_ORDER].join(', '),
+  )
+  check(
+    'later questions are ordered Q2, Q4, Q6, Q9, Q10',
+    JSON.stringify([...LATER_ORDER]) ===
+      JSON.stringify([
+        'background',
+        'room_contribution',
+        'current_conversation_need',
+        'curation_notes',
+        'strongest_skills',
+      ]),
+    [...LATER_ORDER].join(', '),
+  )
+}
+
+// --- LinkedIn, listed as a signup field in the raw notes -------------------
+
+const linkedinOnProfile = await get(james.token, 'profiles?select=linkedin_url&limit=1')
+check(
+  'a member profile carries a LinkedIn field',
+  linkedinOnProfile.ok,
+  linkedinOnProfile.ok ? 'present' : JSON.stringify(linkedinOnProfile.body).slice(0, 70),
+)
+
+const dirColumns = Object.keys((await get(priya.token, 'member_directory?select=*&limit=1')).body?.[0] ?? {})
+check(
+  'LinkedIn is not exposed to other members',
+  !dirColumns.includes('linkedin_url'),
+  dirColumns.join(', '),
+)
+
 /* -------------------------------------------------------------------------- */
 
 const failed = results.filter((r) => !r.pass)

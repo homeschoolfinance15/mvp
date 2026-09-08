@@ -23,6 +23,8 @@ export interface Profile {
   interests: string[]
   /** Object path in the media bucket. Null means fall back to initials. */
   avatar_path: string | null
+  /** Optional. Not exposed through member_directory. */
+  linkedin_url: string | null
   created_at: string
 }
 

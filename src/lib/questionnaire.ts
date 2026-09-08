@@ -25,6 +25,33 @@ export const DISCLOSURE =
 export const PREFERENCE_CAVEAT =
   'These answers describe preferences; they do not guarantee introductions, funding, clients, or invitations.'
 
+/**
+ * The order the handoff specifies, and it is explicit about it: "After the
+ * existing account and location fields, show the five initial questions below
+ * in order."
+ *
+ *   Initial   location and practical fields, then Q0, Q1, Q3, Q5, Q7
+ *   Later     Q2, Q4, Q6, Q9, Q10
+ *
+ * Rendering all the tag questions and then all the text ones is easier and
+ * wrong: it puts Q1 fifth and Q10 first.
+ */
+export const INITIAL_ORDER = [
+  'current_focus',           // Q0
+  'current_project',         // Q1
+  'desired_outcomes',        // Q3
+  'conversation_topics',     // Q5
+  'outside_work_interests',  // Q7
+] as const
+
+export const LATER_ORDER = [
+  'background',                // Q2
+  'room_contribution',         // Q4
+  'current_conversation_need', // Q6
+  'curation_notes',            // Q9
+  'strongest_skills',          // Q10
+] as const
+
 export interface TagQuestion {
   field: TagField
   /** Q0, Q3, Q5, Q7, Q10 — for our reference only, never rendered. */

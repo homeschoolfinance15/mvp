@@ -35,6 +35,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
   const [profession, setProfession] = useState(profile?.current_profession ?? '')
   const [summary, setSummary] = useState(profile?.semantic_summary ?? '')
   const [interests, setInterests] = useState(formatInterests(profile?.interests))
+  const [linkedin, setLinkedin] = useState(profile?.linkedin_url ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -93,7 +94,8 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
     fullName !== (profile?.full_name ?? '') ||
     profession !== (profile?.current_profession ?? '') ||
     summary !== (profile?.semantic_summary ?? '') ||
-    interests !== formatInterests(profile?.interests)
+    interests !== formatInterests(profile?.interests) ||
+    linkedin !== (profile?.linkedin_url ?? '')
 
   function edit<T>(set: (v: T) => void) {
     return (v: T) => {
@@ -116,6 +118,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
         current_profession: profession.trim(),
         semantic_summary: summary.trim() || null,
         interests: parseInterests(interests),
+        linkedin_url: linkedin.trim() || null,
       })
       .eq('id', profile.id)
 
@@ -175,6 +178,15 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
               required
               value={profession}
               onChange={(e) => edit(setProfession)(e.target.value)}
+            />
+          </Field>
+
+          <Field label="LinkedIn" hint="Optional. Seen by your connector and administrators, not by other members.">
+            <Input
+              type="url"
+              value={linkedin}
+              onChange={(e) => edit(setLinkedin)(e.target.value)}
+              placeholder="https://linkedin.com/in/you"
             />
           </Field>
 

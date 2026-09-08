@@ -4,6 +4,8 @@ import {
   DISCLOSURE,
   EMPTY_TAG_ANSWER,
   GATHERING_OPTIONS,
+  INITIAL_ORDER,
+  LATER_ORDER,
   PREFERENCE_CAVEAT,
   TAG_QUESTIONS,
   TEXT_QUESTIONS,
@@ -48,6 +50,21 @@ function answerOf(draft: Draft, field: TagField): TagAnswer {
   return (draft[field] as TagAnswer | undefined) ?? EMPTY_TAG_ANSWER
 }
 
+/** Count what a person perceives, so an emoji is one character. */
+const perceived = (value: string) => [...value].length
+
+/**
+ * Trim to a character count rather than a UTF-16 length.
+ *
+ * maxLength on a textarea counts code units, so an emoji costs two and
+ * somebody using them hits the ceiling early. The handoff asks for
+ * user-perceived characters, counted the same way in the UI and the API.
+ */
+function clampPerceived(value: string, max: number): string {
+  const chars = [...value]
+  return chars.length <= max ? value : chars.slice(0, max).join('')
+}
+
 export function QuestionnaireForm({
   profileId,
   mode,
@@ -65,6 +82,7 @@ export function QuestionnaireForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
 
   const load = useCallback(async () => {
     const [tagsRes, answersRes] = await Promise.all([
@@ -167,9 +185,11 @@ export function QuestionnaireForm({
     setBusy(false)
     if (saveError) {
       setError(`We could not save that. ${errorMessage(saveError)}`)
+      setSaveFailed(true)
       return
     }
 
+    setSaveFailed(false)
     setSaved(true)
     if (advance) {
       setStage('more')
@@ -196,6 +216,72 @@ export function QuestionnaireForm({
 
   const tagsFor = (field: TagField) => tags.filter((t) => t.field === field)
 
+  /** One question, tag or text, chosen by field key so order is data. */
+  function renderQuestion(field: string) {
+    const tagQuestion = TAG_QUESTIONS.find((q) => q.field === field)
+    if (tagQuestion) {
+      const answer = answerOf(draft, tagQuestion.field)
+      const somethingElse = answer.selected_tag_ids.some((id) =>
+        id.endsWith('.something_else'),
+      )
+      return (
+        <Panel key={field} className="px-5 py-5 sm:px-6">
+          <TagPicker
+            label={tagQuestion.prompt}
+            helper={tagQuestion.helper}
+            tags={tagsFor(tagQuestion.field)}
+            value={answer}
+            max={tagQuestion.max}
+            allowCustom={tagQuestion.allowCustom}
+            onChange={(next) => set(tagQuestion.field, next)}
+          />
+
+          {tagQuestion.detailsField && (
+            <>
+              <div className="mt-5">
+                <Field
+                  label={tagQuestion.detailsPrompt ?? 'Tell us a little more.'}
+                  hint={somethingElse ? 'Required, since you chose Something else.' : 'Optional.'}
+                >
+                  <Textarea
+                    rows={2}
+                    value={(draft[tagQuestion.detailsField] ?? '') as string}
+                    placeholder={tagQuestion.detailsPlaceholder}
+                    onChange={(e) =>
+                      set(tagQuestion.detailsField!, clampPerceived(e.target.value, 300))
+                    }
+                  />
+                </Field>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-dim">{PREFERENCE_CAVEAT}</p>
+            </>
+          )}
+        </Panel>
+      )
+    }
+
+    const textQuestion = TEXT_QUESTIONS.find((q) => q.field === field)
+    if (!textQuestion) return null
+    const value = (draft[textQuestion.field] ?? '') as string
+    return (
+      <Panel key={field} className="px-5 py-5 sm:px-6">
+        <Field label={textQuestion.prompt} hint={textQuestion.helper}>
+          <Textarea
+            rows={3}
+            value={value}
+            placeholder={textQuestion.placeholder}
+            onChange={(e) =>
+              set(textQuestion.field, clampPerceived(e.target.value, textQuestion.maxLength))
+            }
+          />
+        </Field>
+        <p className="mt-2 text-right text-xs text-dim tabular-nums">
+          {textQuestion.maxLength - perceived(value)} left
+        </p>
+      </Panel>
+    )
+  }
+
   return (
     <div className="space-y-8">
       {mode === 'signup' && stage === 'initial' && (
@@ -204,64 +290,9 @@ export function QuestionnaireForm({
 
       {showInitial && (
         <>
-          {TAG_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => {
-            const answer = answerOf(draft, q.field)
-            const somethingElse = answer.selected_tag_ids.some((id) =>
-              id.endsWith('.something_else'),
-            )
-            return (
-              <Panel key={q.field} className="px-5 py-5 sm:px-6">
-                <TagPicker
-                  label={q.prompt}
-                  helper={q.helper}
-                  tags={tagsFor(q.field)}
-                  value={answer}
-                  max={q.max}
-                  allowCustom={q.allowCustom}
-                  onChange={(next) => set(q.field, next)}
-                />
-
-                {q.detailsField && (
-                  <div className="mt-5">
-                    <Field
-                      label={q.detailsPrompt ?? 'Tell us a little more.'}
-                      hint={somethingElse ? undefined : 'Optional.'}
-                    >
-                      <Textarea
-                        rows={2}
-                        maxLength={300}
-                        value={(draft[q.detailsField] ?? '') as string}
-                        placeholder={q.detailsPlaceholder}
-                        onChange={(e) => set(q.detailsField!, e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                )}
-
-                {q.detailsField && (
-                  <p className="mt-3 text-xs leading-relaxed text-dim">
-                    {PREFERENCE_CAVEAT}
-                  </p>
-                )}
-              </Panel>
-            )
-          })}
-
-          {TEXT_QUESTIONS.filter((q) => q.stage === 'initial').map((q) => (
-            <Panel key={q.field} className="px-5 py-5 sm:px-6">
-              <Field label={q.prompt} hint={q.helper}>
-                <Textarea
-                  rows={3}
-                  maxLength={q.maxLength}
-                  value={(draft[q.field] ?? '') as string}
-                  placeholder={q.placeholder}
-                  onChange={(e) => set(q.field, e.target.value)}
-                />
-              </Field>
-              <Counter value={(draft[q.field] ?? '') as string} max={q.maxLength} />
-            </Panel>
-          ))}
-
+          {/* "After the existing account and location fields, show the five
+              initial questions below in order." So the practical fields come
+              first, then Q0, Q1, Q3, Q5, Q7. */}
           <Panel className="space-y-5 px-5 py-5 sm:px-6">
             <Field label="Where are you based?" hint="City, region and country. No street address.">
               <Input
@@ -296,6 +327,8 @@ export function QuestionnaireForm({
               <p className="mt-3 text-xs text-dim">{TRAVEL_CAVEAT}</p>
             </fieldset>
           </Panel>
+
+          {INITIAL_ORDER.map((field) => renderQuestion(field))}
         </>
       )}
 
@@ -310,34 +343,8 @@ export function QuestionnaireForm({
             </div>
           )}
 
-          {TAG_QUESTIONS.filter((q) => q.stage === 'more').map((q) => (
-            <Panel key={q.field} className="px-5 py-5 sm:px-6">
-              <TagPicker
-                label={q.prompt}
-                helper={q.helper}
-                tags={tagsFor(q.field)}
-                value={answerOf(draft, q.field)}
-                max={q.max}
-                allowCustom={q.allowCustom}
-                onChange={(next) => set(q.field, next)}
-              />
-            </Panel>
-          ))}
-
-          {TEXT_QUESTIONS.filter((q) => q.stage === 'more').map((q) => (
-            <Panel key={q.field} className="px-5 py-5 sm:px-6">
-              <Field label={q.prompt} hint={q.helper}>
-                <Textarea
-                  rows={3}
-                  maxLength={q.maxLength}
-                  value={(draft[q.field] ?? '') as string}
-                  placeholder={q.placeholder}
-                  onChange={(e) => set(q.field, e.target.value)}
-                />
-              </Field>
-              <Counter value={(draft[q.field] ?? '') as string} max={q.maxLength} />
-            </Panel>
-          ))}
+          {/* Q2, Q4, Q6, Q9, then Q10 last, as listed. */}
+          {LATER_ORDER.map((field) => renderQuestion(field))}
 
           <Panel className="space-y-6 px-5 py-5 sm:px-6">
             <fieldset className="border-0 p-0">
@@ -444,8 +451,16 @@ export function QuestionnaireForm({
         </>
       )}
 
-      {error && <Notice tone="error">{error}</Notice>}
-      {saved && !error && <Notice tone="success">Saved.</Notice>}
+      <div aria-live="polite">
+        {error && <Notice tone="error">{error}</Notice>}
+        {saved && !error && <Notice tone="success">Saved.</Notice>}
+      </div>
+
+      {saveFailed && (
+        <Button type="button" onClick={() => save(stage === 'initial' && mode === 'signup')}>
+          Try saving again
+        </Button>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         {mode === 'signup' && stage === 'more' ? (
@@ -472,16 +487,5 @@ export function QuestionnaireForm({
         </div>
       </div>
     </div>
-  )
-}
-
-/** "show the remaining count. Never silently truncate." */
-function Counter({ value, max }: { value: string; max: number }) {
-  // Count what a person perceives, so an emoji is one character.
-  const used = [...value].length
-  return (
-    <p className="mt-2 text-right text-xs text-dim tabular-nums">
-      {max - used} left
-    </p>
   )
 }
