@@ -247,6 +247,11 @@ export interface Notification {
   circle_message_id: string | null
   report_id: string | null
   waitlist_entry_id: string | null
+  /**
+   * Embedded by the bell's query. An applicant has no profile to look up in
+   * the directory, so their name is read off the waitlist row itself.
+   */
+  waitlist_entries?: { full_name: string } | null
   read_at: string | null
   created_at: string
 }

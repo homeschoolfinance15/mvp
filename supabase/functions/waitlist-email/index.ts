@@ -24,7 +24,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
-const FROM = 'Amaizing <noreply@goamazing.ai>'
+const FROM = 'Amazing AI <noreply@goamazing.ai>'
 const SUBJECT = 'We have your application'
 
 /** Rows older than this are not "just submitted" and are left alone. */
@@ -99,8 +99,8 @@ Deno.serve(async (request: Request) => {
 
 const TEXT = (name: string) => `Hello ${name},
 
-We have your application to AMAZING. Somebody reads every one of them, so this
-is not an automated queue — it is a person deciding which room you would
+We have your application to Amazing AI. Somebody reads every one of them, so
+this is not an automated queue — it is a person deciding which room you would
 actually belong in.
 
 That takes a little time. When a place opens, your community connector will be
@@ -108,7 +108,7 @@ in touch directly.
 
 Nothing is needed from you in the meantime.
 
-— AMAZING
+— Amazing AI
 https://goamazing.ai
 `
 
@@ -122,8 +122,8 @@ const HTML = (name: string) => `<!doctype html>
       <tr><td style="font-size:15px;line-height:1.65;">
         <p style="margin:0 0 18px;">Hello ${name},</p>
         <p style="margin:0 0 18px;">
-          We have your application to AMAZING. Somebody reads every one of them, so this is
-          not an automated queue &mdash; it is a person deciding which room you would
+          We have your application to Amazing AI. Somebody reads every one of them, so this
+          is not an automated queue &mdash; it is a person deciding which room you would
           actually belong in.
         </p>
         <p style="margin:0 0 18px;">
@@ -132,7 +132,7 @@ const HTML = (name: string) => `<!doctype html>
         </p>
         <p style="margin:0 0 28px;">Nothing is needed from you in the meantime.</p>
         <p style="margin:0;color:#6f6f68;font-size:13px;">
-          &mdash; AMAZING<br />
+          &mdash; Amazing AI<br />
           <a href="https://goamazing.ai" style="color:#b08d3f;">goamazing.ai</a>
         </p>
       </td></tr>

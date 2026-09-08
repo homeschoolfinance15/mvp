@@ -43,8 +43,7 @@ function sentence(kind: NotificationKind, who: string): string {
     case 'recommendations':
       return 'New suggestions are waiting for you'
     case 'waitlist_joined':
-      // The applicant has no account yet, so there is no name to use here.
-      return 'Somebody new applied to the waitlist'
+      return `${who} applied to the waitlist`
     default:
       return 'Something happened'
   }
@@ -87,8 +86,11 @@ export function NotificationBell() {
   const load = useCallback(async () => {
     const [notificationsRes, dirRes] = await Promise.all([
       supabase
+        // The applicant has no profile to look up in the directory, so their
+        // name comes off the waitlist row the notification points at. RLS
+        // still applies to the embed: a non-admin gets null, not a name.
         .from('notifications')
-        .select('*')
+        .select('*, waitlist_entries(full_name)')
         .order('created_at', { ascending: false })
         .limit(PAGE),
       supabase.from('member_directory').select('*'),
@@ -133,6 +135,13 @@ export function NotificationBell() {
         },
         (payload) => {
           const incoming = payload.new as Notification
+          // A pushed row carries only the columns of the table, so a waitlist
+          // notice would arrive without the applicant's name. Cheaper to ask
+          // for the page again than to fetch the one name separately.
+          if (incoming.kind === 'waitlist_joined') {
+            void load()
+            return
+          }
           setItems((current) =>
             current.some((n) => n.id === incoming.id)
               ? current
@@ -145,7 +154,8 @@ export function NotificationBell() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [profile])
+    // load is stable, but the waitlist branch calls it, so it belongs here.
+  }, [profile, load])
 
   useEffect(() => {
     if (!open) return
@@ -260,7 +270,10 @@ export function NotificationBell() {
                 const actor = notification.actor_id
                   ? directory[notification.actor_id]
                   : undefined
-                const name = actor?.full_name ?? 'Someone'
+                const name =
+                  actor?.full_name ??
+                  notification.waitlist_entries?.full_name ??
+                  'Someone'
                 return (
                   <li key={notification.id}>
                     <button
