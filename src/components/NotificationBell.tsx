@@ -42,6 +42,9 @@ function sentence(kind: NotificationKind, who: string): string {
       return 'What you raised has been dealt with'
     case 'recommendations':
       return 'New suggestions are waiting for you'
+    case 'waitlist_joined':
+      // The applicant has no account yet, so there is no name to use here.
+      return 'Somebody new applied to the waitlist'
     default:
       return 'Something happened'
   }
@@ -60,6 +63,9 @@ function destination(notification: Notification): string {
       return '/events'
     case 'circle_message':
       return '/circle'
+    case 'waitlist_joined':
+      // Vetting happens on the admin screen, where Assign lives.
+      return '/admin'
     default:
       // Reports and new members are dealt with on your own dashboard.
       return ''

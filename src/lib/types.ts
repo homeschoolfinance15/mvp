@@ -227,6 +227,7 @@ export type NotificationKind =
   | 'report_raised'
   | 'report_resolved'
   | 'recommendations'
+  | 'waitlist_joined'
 
 /**
  * Something worth telling somebody, inside the platform.
@@ -245,6 +246,7 @@ export interface Notification {
   event_id: string | null
   circle_message_id: string | null
   report_id: string | null
+  waitlist_entry_id: string | null
   read_at: string | null
   created_at: string
 }
