@@ -310,6 +310,29 @@ check(
   dirColumns.join(', '),
 )
 
+// --- The catalogs render for somebody with no account ----------------------
+//
+// The waitlist form on the landing page asks the first five questions, and
+// whoever fills it in is anonymous. Every other check here signs in first, so
+// this one shipped broken: the pickers drew their selection count with no
+// chips under it, because the catalog policy only covered `authenticated`.
+
+const anonCatalog = await fetch(`${URL_}/rest/v1/profile_tags?select=id,field&limit=200`, {
+  headers: anon,
+}).then((r) => r.json())
+
+check(
+  'a signed-out visitor can read the tag catalogs',
+  Array.isArray(anonCatalog) && anonCatalog.length > 0,
+  Array.isArray(anonCatalog) ? `${anonCatalog.length} tags` : JSON.stringify(anonCatalog).slice(0, 70),
+)
+
+check(
+  'a signed-out visitor sees every field the waitlist form asks',
+  new Set((anonCatalog ?? []).map((t) => t.field)).size === 5,
+  [...new Set((anonCatalog ?? []).map((t) => t.field))].join(', '),
+)
+
 /* -------------------------------------------------------------------------- */
 
 const failed = results.filter((r) => !r.pass)
