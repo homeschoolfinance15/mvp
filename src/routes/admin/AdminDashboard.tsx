@@ -4,6 +4,7 @@ import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import { FlagsPanel } from '../../components/FlagsPanel'
 import {
   Button,
+  ConfirmModal,
   CopyCode,
   EmptyState,
   Field,
@@ -42,6 +43,39 @@ import {
   TEXT_QUESTIONS,
   TRAVEL_OPTIONS,
 } from '../../lib/questionnaire'
+
+/**
+ * What each status actually does, rather than what it is called.
+ *
+ * Worth knowing before writing these: every gate in the schema asks
+ * `invite_status <> 'active'`, so limited, paused and removed are the same
+ * behaviour under three names. The copy says so instead of implying a
+ * gradient the database does not have.
+ */
+const CONNECTOR_STATUS_EFFECT: Record<ConnectorStatus, string> = {
+  active:
+    'They can mint invitation codes again, and can be handed people from the waitlist.',
+  limited:
+    'They stop being able to bring anyone new in. Their existing members, and any code already handed out, keep working. Identical to paused and removed in what it permits.',
+  paused:
+    'They stop being able to bring anyone new in. Their existing members, and any code already handed out, keep working. Identical to limited and removed in what it permits.',
+  removed:
+    'They stop being able to bring anyone new in. Nothing is deleted: their account, their members and any code already handed out are untouched. Identical to limited and paused in what it permits.',
+}
+
+/** The read gate is is_member(); the write gate is can_post(). */
+const PROFILE_STATUS_EFFECT: Record<ProfileStatus, string> = {
+  pending: 'They can read the network but cannot post, comment, or send messages.',
+  active: 'Full access: they can read and write everywhere their membership reaches.',
+  under_review:
+    'They can still read everything, but cannot post, comment, or send messages.',
+  restricted:
+    'They can still read everything, but cannot post, comment, or send messages.',
+  suspended:
+    'They lose both reading and writing, and disappear from the member directory. Their account and everything they wrote stays.',
+  removed:
+    'They lose both reading and writing, and disappear from the member directory. This does not delete the account — use Delete for that.',
+}
 
 interface ConnectorRow extends Connector {
   profiles: Profile | null
@@ -278,17 +312,28 @@ function ConnectorsTab({
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const [connectorToDelete, setConnectorToDelete] = useState<ConnectorRow | null>(null)
+  // Nothing is written until this is confirmed, so the select keeps showing
+  // what is actually stored.
+  const [pending, setPending] = useState<{
+    connector: ConnectorRow
+    status: ConnectorStatus
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  async function setStatus(id: string, status: ConnectorStatus) {
+  async function applyStatus() {
+    if (!pending) return
     setError('')
+    setBusy(true)
     const { error: updateError } = await supabase
       .from('connectors')
-      .update({ invite_status: status })
-      .eq('id', id)
+      .update({ invite_status: pending.status })
+      .eq('id', pending.connector.id)
+    setBusy(false)
     if (updateError) {
       setError(errorMessage(updateError))
       return
     }
+    setPending(null)
     await onChanged()
   }
 
@@ -337,7 +382,12 @@ function ConnectorsTab({
               <div className="w-32 shrink-0">
                 <Select
                   value={connector.invite_status}
-                  onChange={(e) => setStatus(connector.id, e.target.value as ConnectorStatus)}
+                  onChange={(e) =>
+                    setPending({
+                      connector,
+                      status: e.target.value as ConnectorStatus,
+                    })
+                  }
                 >
                   {CONNECTOR_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -386,6 +436,21 @@ function ConnectorsTab({
           </Panel>
         </div>
       )}
+
+      <ConfirmModal
+        open={Boolean(pending)}
+        title={
+          pending
+            ? `Set ${pending.connector.profiles?.full_name ?? 'this connector'} to ${pending.status}?`
+            : ''
+        }
+        body={pending ? CONNECTOR_STATUS_EFFECT[pending.status] : ''}
+        confirmLabel={pending ? `Set to ${pending.status}` : 'Confirm'}
+        tone={pending?.status === 'active' ? 'primary' : 'danger'}
+        busy={busy}
+        onConfirm={() => void applyStatus()}
+        onClose={() => setPending(null)}
+      />
 
       <CreateConnectorModal open={open} onClose={() => setOpen(false)} onCreated={onChanged} />
       {connectorToDelete && (
@@ -522,6 +587,13 @@ function MembersTab({
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [memberToDelete, setMemberToDelete] = useState<Profile | null>(null)
+  // Same rule as the connector list: the select shows what is stored, and the
+  // write happens only once the dialog is confirmed.
+  const [pending, setPending] = useState<{
+    member: Profile
+    status: ProfileStatus
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const filtered = members.filter((m) => {
     if (!query.trim()) return true
@@ -533,16 +605,20 @@ function MembersTab({
     )
   })
 
-  async function setStatus(id: string, status: ProfileStatus) {
+  async function applyStatus() {
+    if (!pending) return
     setError('')
+    setBusy(true)
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ profile_status: status })
-      .eq('id', id)
+      .update({ profile_status: pending.status })
+      .eq('id', pending.member.id)
+    setBusy(false)
     if (updateError) {
       setError(errorMessage(updateError))
       return
     }
+    setPending(null)
     await onChanged()
   }
 
@@ -590,7 +666,9 @@ function MembersTab({
               <div className="w-36 shrink-0">
                 <Select
                   value={member.profile_status}
-                  onChange={(e) => setStatus(member.id, e.target.value as ProfileStatus)}
+                  onChange={(e) =>
+                    setPending({ member, status: e.target.value as ProfileStatus })
+                  }
                 >
                   {PROFILE_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -606,6 +684,17 @@ function MembersTab({
           ))}
         </Panel>
       )}
+
+      <ConfirmModal
+        open={Boolean(pending)}
+        title={pending ? `Set ${pending.member.full_name} to ${pending.status}?` : ''}
+        body={pending ? PROFILE_STATUS_EFFECT[pending.status] : ''}
+        confirmLabel={pending ? `Set to ${pending.status}` : 'Confirm'}
+        tone={pending?.status === 'active' ? 'primary' : 'danger'}
+        busy={busy}
+        onConfirm={() => void applyStatus()}
+        onClose={() => setPending(null)}
+      />
 
       <DeleteProfileModal
         open={Boolean(memberToDelete)}

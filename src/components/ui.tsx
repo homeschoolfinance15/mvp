@@ -485,7 +485,11 @@ export function ConfirmModal({
   title,
   body,
   confirmLabel = 'Delete',
+  // Danger by default, because deleting is what this started as. A change
+  // that only restores access reads wrong in red.
+  tone = 'danger',
   busy = false,
+  error,
   onConfirm,
   onClose,
 }: {
@@ -493,18 +497,27 @@ export function ConfirmModal({
   title: string
   body: ReactNode
   confirmLabel?: string
+  tone?: 'primary' | 'danger'
   busy?: boolean
+  error?: string
   onConfirm: () => void
   onClose: () => void
 }) {
   return (
-    <Modal open={open} title={title} onClose={onClose}>
+    <Modal open={open} title={title} onClose={busy ? () => {} : onClose}>
       <div className="text-sm leading-relaxed text-muted">{body}</div>
+
+      {error && (
+        <div className="mt-5">
+          <Notice tone="error">{error}</Notice>
+        </div>
+      )}
+
       <div className="mt-7 flex gap-3">
-        <Button className="flex-1" onClick={onClose}>
+        <Button className="flex-1" onClick={onClose} disabled={busy}>
           Cancel
         </Button>
-        <Button variant="danger" className="flex-1" loading={busy} onClick={onConfirm}>
+        <Button variant={tone} className="flex-1" loading={busy} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>
