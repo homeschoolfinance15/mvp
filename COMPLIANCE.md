@@ -117,7 +117,7 @@ Ordered by how much they matter.
 | 2 | **Retention not scheduled** | code | `purge_activity_log()` exists and nothing calls it. A weekly workflow, like the recommender's, would close it. |
 | 3 | **No read logging** | code | The log records changes, not access. An admin reading every circle conversation leaves no trace. For a platform whose substance is what people say about each other, that is the most defensible thing left to add. |
 | 4 | **No privacy policy or terms** | organisational | Members are not told what is collected, who can see it, or how long it is kept. The trust layer in particular — that another member can file a report they will never see — is not disclosed anywhere. |
-| 5 | **No signed vendor agreements** | organisational | Personal data reaches Supabase (hosting, auth, storage), Anthropic (recommendations), Hostinger (static files) and Google Workspace (mail). Each needs a DPA and a subprocessor entry. Supabase and Anthropic both publish SOC 2 reports; collect them. |
+| 5 | **No signed vendor agreements** | organisational | Personal data reaches Supabase (hosting, auth, storage), Anthropic (recommendations), Hostinger (static files), Photon/komoot (city lookup) and Google Workspace (mail). Each needs a DPA and a subprocessor entry. Supabase and Anthropic both publish SOC 2 reports; collect them. |
 | 6 | **No incident response plan** | organisational | Who is called, how members are notified, within what window. |
 | 7 | **No access review** | organisational | Nobody periodically re-checks who is an admin. `admin_allowlist` is a table nobody audits. |
 | 8 | **No backup restore test** | organisational | Supabase backs up; nobody has proven a restore works. |
@@ -151,6 +151,14 @@ Worth stating plainly, because you cannot write a privacy policy without it.
 
 Profile and post text is sent to Anthropic when recommendations run. That is a
 subprocessor disclosure, and it belongs in the privacy policy.
+
+What somebody types into the city field reaches Photon, an open geocoder run
+by komoot, one debounced request at a time while they type. It is a city
+lookup and nothing more: only city-level layers are requested, so a street
+address cannot come back even if one is typed, and no account or profile
+identifier is sent with the query. It is still a subprocessor and belongs in
+the same disclosure. Self-hosting Photon removes it entirely, and the only
+change would be a URL in `src/lib/cities.ts`.
 
 ---
 

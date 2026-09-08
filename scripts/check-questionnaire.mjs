@@ -62,6 +62,10 @@ const james = await signIn('mn26ventures@gmail.com')
 const priya = await signIn('priya.raghavan@ramedia.dev')
 const elena = await signIn('zalmytouger@gmail.com')
 const daniel = await signIn('daniel.abiodun@ramedia.dev')
+// Nothing in this suite writes to Tomas, which is what makes him a fair
+// subject for "starts with no answers". Using somebody the suite also writes
+// to makes that check depend on the order it runs in.
+const tomas = await signIn('tomas.lindqvist@ramedia.dev')
 const admin = await signIn('moshe@valued.ventures')
 
 // --- Catalogs complete -----------------------------------------------------
@@ -105,7 +109,7 @@ check(
 
 // --- No preselected values -------------------------------------------------
 
-const fresh = await get(priya.token, `profile_answers?profile_id=eq.${priya.id}`)
+const fresh = await get(tomas.token, `profile_answers?profile_id=eq.${tomas.id}`)
 check(
   'a member starts with no answers',
   Array.isArray(fresh.body) && fresh.body.length === 0,

@@ -21,6 +21,7 @@ import type {
   TagAnswer,
   TagField,
 } from '../lib/types'
+import { CitySearch } from './CitySearch'
 import { TagPicker } from './TagPicker'
 import { Button, Field, Input, Notice, Panel, Spinner, Textarea } from './ui'
 
@@ -294,13 +295,10 @@ export function QuestionnaireForm({
               initial questions below in order." So the practical fields come
               first, then Q0, Q1, Q3, Q5, Q7. */}
           <Panel className="space-y-5 px-5 py-5 sm:px-6">
-            <Field label="Where are you based?" hint="City, region and country. No street address.">
-              <Input
-                value={draft.home_city ?? ''}
-                placeholder="Manchester, England"
-                onChange={(e) => set('home_city', e.target.value)}
-              />
-            </Field>
+            <CitySearch
+              value={draft.home_city ?? ''}
+              onChange={(next) => set('home_city', next)}
+            />
 
             <fieldset className="border-0 p-0">
               <legend className="eyebrow mb-3">How far are you willing to travel?</legend>

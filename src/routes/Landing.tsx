@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, errorMessage } from '../lib/supabase'
 import { Button, Field, Input, Modal, Notice, Textarea, Wordmark } from '../components/ui'
+import { CitySearch } from '../components/CitySearch'
 import { TagPicker } from '../components/TagPicker'
 import {
   DISCLOSURE,
@@ -127,13 +128,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
             </Field>
           ))}
 
-          <Field label="Where are you based?" hint="City, region and country.">
-            <Input
-              value={homeCity}
-              placeholder="Manchester, England"
-              onChange={(e) => setHomeCity(e.target.value)}
-            />
-          </Field>
+          <CitySearch value={homeCity} onChange={setHomeCity} />
 
           <fieldset className="border-0 p-0">
             <legend className="eyebrow mb-3">How far are you willing to travel?</legend>
