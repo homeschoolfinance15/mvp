@@ -146,9 +146,15 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: {
       'content-type': 'application/json',
-      // The public page calls this straight after the insert.
+      // The public page calls this straight after the insert, cross-origin.
+      //
+      // x-client-info is the one that matters: supabase-js sends it on every
+      // request, and a preflight that does not allow it fails in the browser
+      // while every curl test passes, because curl sends no preflight at all.
       'access-control-allow-origin': '*',
-      'access-control-allow-headers': 'authorization, content-type, apikey',
+      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-headers':
+        'authorization, x-client-info, apikey, content-type',
     },
   })
 }

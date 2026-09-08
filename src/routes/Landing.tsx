@@ -92,9 +92,15 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
     // they are on the list either way, and a mail provider having a bad
     // minute is not a reason to show somebody an error about an application
     // that succeeded. The function refuses to send twice.
-    void supabase.functions.invoke('waitlist-email', {
-      body: { email: body.email },
-    })
+    void supabase.functions
+      .invoke('waitlist-email', { body: { email: body.email } })
+      .then(({ error: mailError }) => {
+        // Never shown to the applicant, who is on the list either way. It is
+        // here because the first version of this failed silently on a CORS
+        // preflight for a day: a swallowed error is a feature that looks like
+        // it works.
+        if (mailError) console.error('[amazing] waitlist acknowledgement:', mailError)
+      })
 
     setDone(true)
   }
