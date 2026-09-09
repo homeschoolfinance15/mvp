@@ -9,8 +9,6 @@ import {
   PREFERENCE_CAVEAT,
   TAG_QUESTIONS,
   TEXT_QUESTIONS,
-  TRAVEL_CAVEAT,
-  TRAVEL_OPTIONS,
   tagCount,
 } from '../lib/questionnaire'
 import { errorMessage, supabase } from '../lib/supabase'
@@ -23,6 +21,7 @@ import type {
 } from '../lib/types'
 import { CitySearch } from './CitySearch'
 import { TagPicker } from './TagPicker'
+import { TravelSlider } from './TravelSlider'
 import { Button, Field, Input, Notice, Panel, Spinner, Textarea } from './ui'
 
 /**
@@ -317,30 +316,10 @@ export function QuestionnaireForm({
               />
             </Field>
 
-            <fieldset className="border-0 p-0">
-              <legend className="eyebrow mb-3">How far are you willing to travel?</legend>
-              <ul className="flex flex-wrap gap-2">
-                {TRAVEL_OPTIONS.map((option) => (
-                  <li key={option.id}>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={draft.travel_preference === option.id}
-                      onClick={() => set('travel_preference', option.id)}
-                      className={`rounded-sm border px-3 py-1.5 text-xs transition-colors ${
-                        draft.travel_preference === option.id
-                          ? 'border-gold bg-gold-wash text-fg'
-                          : 'border-line text-muted hover:text-fg'
-                      }`}
-                    >
-                      {draft.travel_preference === option.id && <span aria-hidden>&#10003; </span>}
-                      {option.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-xs text-dim">{TRAVEL_CAVEAT}</p>
-            </fieldset>
+            <TravelSlider
+              value={draft.travel_preference ?? null}
+              onChange={(id) => set('travel_preference', id)}
+            />
           </Panel>
 
           {INITIAL_ORDER.map((field) => renderQuestion(field))}

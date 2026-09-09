@@ -1,6 +1,19 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { AuthProvider, homePathFor, needsOnboarding, useAuth } from './context/AuthProvider'
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
+import {
+  AuthProvider,
+  homePathFor,
+  needsOnboarding,
+  needsQuestionnaire,
+  useAuth,
+} from './context/AuthProvider'
 import { Button, PageLoader, Panel, Wordmark } from './components/ui'
 import type { AppRole } from './lib/types'
 
@@ -65,11 +78,19 @@ function NotProvisioned() {
 
 function RequireRole({ role, children }: { role?: AppRole; children: ReactNode }) {
   const { session, profile, loading } = useAuth()
+  const { pathname } = useLocation()
 
   if (loading) return <PageLoader />
   if (!session) return <Navigate to="/signin" replace />
   if (!profile) return <NotProvisioned />
   if (needsOnboarding(profile)) return <Navigate to="/onboarding" replace />
+  // An invited member reaches the dashboard without ever having answered
+  // anything; a waitlist applicant arrives with their answers already copied
+  // across. Same questions for both, and nothing else opens until they are
+  // answered. "Tell us more" stays optional, as it is for the waitlist.
+  if (needsQuestionnaire(profile) && pathname !== '/questions') {
+    return <Navigate to="/questions" replace />
+  }
   if (role && profile.role !== role) return <Navigate to={homePathFor(profile)} replace />
 
   return <>{children}</>

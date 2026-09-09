@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { questionnaireDone } from '../lib/questionnaire'
 import { supabase } from '../lib/supabase'
 import type { Profile, RedeemResult } from '../lib/types'
 
@@ -112,7 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (id: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      // The questionnaire stamp rides along: RequireRole needs it on every
+      // page load to know whether this member still owes their answers.
+      .select('*, profile_answers(completed_at)')
       .eq('id', id)
       .maybeSingle()
 
@@ -232,6 +235,22 @@ export function needsOnboarding(profile: Profile | null): boolean {
   if (!profile) return false
   if (profile.role === 'admin') return false
   return !profile.current_profession
+}
+
+/**
+ * True while a member has not finished the questionnaire's first stage.
+ *
+ * Waitlist applicants answer at the door and their answers are copied across
+ * on redemption, so this is really about invited members: without a gate they
+ * land on the dashboard from /onboarding and are never asked, which leaves
+ * them unmatchable. Only members: admins and connectors run the network
+ * rather than being curated into it.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function needsQuestionnaire(profile: Profile | null): boolean {
+  if (!profile || profile.role !== 'user') return false
+  if (needsOnboarding(profile)) return false
+  return !questionnaireDone(profile.profile_answers)
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

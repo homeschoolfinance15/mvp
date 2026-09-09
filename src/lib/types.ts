@@ -26,6 +26,16 @@ export interface Profile {
   /** Optional. Not exposed through member_directory. */
   linkedin_url: string | null
   created_at: string
+  /**
+   * Embedded by the profile fetch so the router knows whether the
+   * questionnaire is still owed. PostgREST returns an object for this
+   * one-to-one, but older versions return a one-element array; read it
+   * through `needsQuestionnaire`, which accepts both.
+   */
+  profile_answers?:
+    | { completed_at: string | null }
+    | { completed_at: string | null }[]
+    | null
 }
 
 /**

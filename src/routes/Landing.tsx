@@ -4,13 +4,13 @@ import { supabase, errorMessage } from '../lib/supabase'
 import { Button, Field, Input, Modal, Notice, Textarea, Wordmark } from '../components/ui'
 import { CitySearch } from '../components/CitySearch'
 import { TagPicker } from '../components/TagPicker'
+import { TravelSlider } from '../components/TravelSlider'
 import {
   DISCLOSURE,
   EMPTY_TAG_ANSWER,
   INITIAL_ORDER,
   TAG_QUESTIONS,
   TEXT_QUESTIONS,
-  TRAVEL_OPTIONS,
 } from '../lib/questionnaire'
 import type { CodeLookup, ProfileTag, TagAnswer, TagField } from '../lib/types'
 
@@ -179,29 +179,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
         <div className="space-y-7">
           <CitySearch value={homeCity} onChange={setHomeCity} />
 
-          <fieldset className="border-0 p-0">
-            <legend className="eyebrow mb-3">How far are you willing to travel?</legend>
-            <ul className="flex flex-wrap gap-2">
-              {TRAVEL_OPTIONS.map((option) => (
-                <li key={option.id}>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={travel === option.id}
-                    onClick={() => setTravel(option.id)}
-                    className={`rounded-sm border px-3 py-1.5 text-xs transition-colors ${
-                      travel === option.id
-                        ? 'border-gold bg-gold-wash text-fg'
-                        : 'border-line text-muted hover:text-fg'
-                    }`}
-                  >
-                    {travel === option.id && <span aria-hidden>&#10003; </span>}
-                    {option.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          <TravelSlider value={travel} onChange={setTravel} />
         </div>
       )
     }

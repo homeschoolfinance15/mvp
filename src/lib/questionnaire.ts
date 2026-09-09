@@ -211,6 +211,28 @@ export const TRAVEL_OPTIONS = [
   { id: 'open_to_longer_trips', label: 'Open to longer trips' },
 ]
 
+/** Where the travel slider sits before anyone has answered. */
+export const TRAVEL_DEFAULT_INDEX = 1
+
+/**
+ * Has this member finished the questionnaire's first stage?
+ *
+ * Reads the `profile_answers(completed_at)` embed that rides along with the
+ * profile fetch. PostgREST returns an object for a one-to-one embed and older
+ * versions return a one-element array; a gate that guesses wrong locks every
+ * member out of the app, so accept both.
+ */
+export function questionnaireDone(
+  embedded:
+    | { completed_at: string | null }
+    | { completed_at: string | null }[]
+    | null
+    | undefined,
+): boolean {
+  const one = Array.isArray(embedded) ? embedded[0] : embedded
+  return Boolean(one?.completed_at)
+}
+
 export const TRAVEL_CAVEAT =
   'This indicates willingness to travel, not a routing guarantee.'
 

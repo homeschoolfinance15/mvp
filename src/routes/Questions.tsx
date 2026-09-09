@@ -12,7 +12,7 @@ import { INTRO } from '../lib/questionnaire'
  * long enough to deserve its own page rather than being bolted onto that one.
  */
 export default function Questions() {
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const navigate = useNavigate()
 
   if (!profile) return null
@@ -23,7 +23,12 @@ export default function Questions() {
         <QuestionnaireForm
           profileId={profile.id}
           mode="signup"
-          onComplete={() => navigate(homePathFor(profile), { replace: true })}
+          onComplete={async () => {
+            // Reload first: the router will not let a member off this page
+            // until the stored answers say they are done.
+            await refreshProfile()
+            navigate(homePathFor(profile), { replace: true })
+          }}
         />
       </div>
     </DashboardShell>

@@ -23,6 +23,9 @@ export default function Onboarding() {
   const [profession, setProfession] = useState(profile?.current_profession ?? '')
   const [summary, setSummary] = useState(profile?.semantic_summary ?? '')
   const [interests, setInterests] = useState('')
+  // Asked at the waitlist door, so ask it here too: an invited member should
+  // not be the only one the network holds less on.
+  const [linkedin, setLinkedin] = useState(profile?.linkedin_url ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -44,6 +47,7 @@ export default function Onboarding() {
         current_profession: profession.trim(),
         semantic_summary: summary.trim() || null,
         interests: parseInterests(interests),
+        linkedin_url: linkedin.trim() || null,
       })
       .eq('id', profile.id)
 
@@ -100,6 +104,16 @@ export default function Onboarding() {
             value={interests}
             onChange={(e) => setInterests(e.target.value)}
             placeholder={INTERESTS_PLACEHOLDER}
+          />
+        </Field>
+
+        <Field label="LinkedIn" hint="Optional.">
+          <Input
+            type="url"
+            value={linkedin}
+            onChange={(e) => setLinkedin(e.target.value)}
+            placeholder="linkedin.com/in/..."
+            autoComplete="url"
           />
         </Field>
 
