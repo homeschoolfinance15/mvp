@@ -100,6 +100,7 @@ export type RsvpStatus = 'invited' | 'going' | 'declined'
 
 export interface Event {
   id: string
+  /** The person who created it. Co-hosts are rows in event_hosts. */
   host_id: string
   title: string
   description: string | null
@@ -115,6 +116,12 @@ export interface EventInvitation {
   profile_id: string
   status: RsvpStatus
   responded_at: string | null
+  created_at: string
+}
+
+export interface EventHost {
+  event_id: string
+  profile_id: string
   created_at: string
 }
 

@@ -42,6 +42,10 @@ const priya = await signIn('priya.raghavan@ramedia.dev')
 // who can prove that one circle cannot reach another. Priya and James share
 // Elena's circle, which is why using Priya for that check passed vacuously.
 const sofia = await signIn('sofia.mensah@ramedia.dev')
+// Daniel is the second connector. He matters for the co-host checks: an
+// admin would pass every one of them through is_admin() without ever
+// exercising hosts_event(), which is the thing under test.
+const daniel = await signIn('daniel.abiodun@ramedia.dev')
 
 // 1. A member sees only themselves and their connector — not other members.
 const jamesProfiles = await get(james.token, 'profiles?select=id,full_name,role')
@@ -288,6 +292,96 @@ check(
   'admin can read the activity log',
   adminLog.ok && Array.isArray(adminLog.body),
   adminLog.ok ? 'readable' : `${adminLog.status}`,
+)
+
+// ---------------------------------------------------------------------------
+// Co-hosts. An event is run by events.host_id plus whoever is in event_hosts,
+// and hosts_event() is the only thing that knows that. These check the two
+// halves that could go wrong: a co-host who cannot do host things, and a
+// non-host who can.
+// ---------------------------------------------------------------------------
+
+async function write(token, method, path, body) {
+  const r = await fetch(`${URL}/rest/v1/${path}`, {
+    method,
+    headers: { ...headers(token), Prefer: 'return=representation' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  return { ok: r.ok, status: r.status, body: await r.json().catch(() => null) }
+}
+
+const hosted = await get(connector.token, `events?select=id,title&host_id=eq.${connector.id}&limit=1`)
+const eventId = hosted.body?.[0]?.id
+
+// 20. A member cannot make themselves a host of somebody else's event.
+const selfHost = await write(james.token, 'POST', 'event_hosts', {
+  event_id: eventId,
+  profile_id: james.id,
+})
+check('member cannot make themselves a co-host', !selfHost.ok, `${selfHost.status}`)
+
+// 21. Neither can another connector who does not host it.
+const outsiderHost = await write(daniel.token, 'POST', 'event_hosts', {
+  event_id: eventId,
+  profile_id: daniel.id,
+})
+check('non-host connector cannot add themselves', !outsiderHost.ok, `${outsiderHost.status}`)
+
+// 22. A host cannot hand hosting to a plain member — may_host_events refuses,
+//     which is what stops co-hosting being a way around can_host_events().
+const memberAsHost = await write(connector.token, 'POST', 'event_hosts', {
+  event_id: eventId,
+  profile_id: james.id,
+})
+check('host cannot make a member a co-host', !memberAsHost.ok, `${memberAsHost.status}`)
+
+// 23. A host can add another connector.
+const addDaniel = await write(connector.token, 'POST', 'event_hosts', {
+  event_id: eventId,
+  profile_id: daniel.id,
+})
+check('host can add a connector as co-host', addDaniel.ok, `${addDaniel.status}`)
+
+// 24. And that co-host can now edit the event, which is the whole point.
+const coHostEdit = await write(daniel.token, 'PATCH', `events?id=eq.${eventId}`, {
+  location: 'The Hoxton, Shoreditch',
+})
+check(
+  'co-host can edit the event',
+  coHostEdit.ok && Array.isArray(coHostEdit.body) && coHostEdit.body.length === 1,
+  `${coHostEdit.status}`,
+)
+
+// 25. A member still cannot, co-hosts or no co-hosts.
+const memberEdit = await write(james.token, 'PATCH', `events?id=eq.${eventId}`, {
+  location: 'Somewhere else entirely',
+})
+check(
+  'member cannot edit an event they do not host',
+  Array.isArray(memberEdit.body) ? memberEdit.body.length === 0 : !memberEdit.ok,
+  Array.isArray(memberEdit.body) ? `changed ${memberEdit.body.length}` : `${memberEdit.status}`,
+)
+
+// 26. A co-host can put somebody on the guest list.
+const coHostInvite = await write(daniel.token, 'POST', 'event_invitations', {
+  event_id: eventId,
+  profile_id: sofia.id,
+  status: 'invited',
+})
+check('co-host can invite', coHostInvite.ok, `${coHostInvite.status}`)
+
+// Put the seed back as it was.
+await write(daniel.token, 'DELETE', `event_invitations?event_id=eq.${eventId}&profile_id=eq.${sofia.id}`)
+await write(connector.token, 'DELETE', `event_hosts?event_id=eq.${eventId}&profile_id=eq.${daniel.id}`)
+
+// 27. Once removed, the former co-host is a member like any other.
+const afterRemoval = await write(daniel.token, 'PATCH', `events?id=eq.${eventId}`, {
+  location: 'Nowhere',
+})
+check(
+  'a removed co-host loses the event',
+  Array.isArray(afterRemoval.body) ? afterRemoval.body.length === 0 : !afterRemoval.ok,
+  Array.isArray(afterRemoval.body) ? `changed ${afterRemoval.body.length}` : `${afterRemoval.status}`,
 )
 
 const failed = results.filter((r) => !r.pass)

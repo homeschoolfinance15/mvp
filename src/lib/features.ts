@@ -15,6 +15,13 @@
 export const FEATURES = {
   feed: false,
   events: false,
+  /**
+   * The post thread on an event page. Off on its own so events can be
+   * switched on without the feed coming with them. Existing threads are
+   * hidden, not deleted — and note they are ordinary feed posts, so they
+   * reappear in the network feed when `feed` is switched on.
+   */
+  eventPosts: false,
 } as const
 
 export type FeatureName = keyof typeof FEATURES

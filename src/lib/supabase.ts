@@ -50,6 +50,24 @@ export function errorMessage(error: unknown): string {
 }
 
 /**
+ * An edge function's refusal arrives as "Edge Function returned a non-2xx
+ * status code", which tells the sender nothing. The reason we wrote is in the
+ * response body hanging off the error.
+ */
+export async function functionError(error: unknown): Promise<string> {
+  const context = (error as { context?: Response }).context
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = await context.json()
+      if (body?.error) return String(body.error)
+    } catch {
+      // Not JSON. Fall through to whatever the client said.
+    }
+  }
+  return errorMessage(error)
+}
+
+/**
  * For a page that failed to load.
  *
  * `errorMessage` is right for an action somebody just took — the RPCs raise

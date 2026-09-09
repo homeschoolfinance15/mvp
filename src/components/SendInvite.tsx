@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { errorMessage, supabase } from '../lib/supabase'
+import { functionError, supabase } from '../lib/supabase'
 import { Button, Input, Notice } from './ui'
 
 /**
@@ -40,7 +40,7 @@ export function SendInvite({
 
     setBusy(false)
     if (sendError) {
-      setError(await reason(sendError))
+      setError(await functionError(sendError))
       return
     }
     setSentTo(to)
@@ -85,22 +85,4 @@ export function SendInvite({
       </div>
     </form>
   )
-}
-
-/**
- * An edge function's refusal arrives as "Edge Function returned a non-2xx
- * status code", which tells the sender nothing. The reason we wrote is in the
- * response body hanging off the error.
- */
-async function reason(error: unknown): Promise<string> {
-  const context = (error as { context?: Response }).context
-  if (context && typeof context.json === 'function') {
-    try {
-      const body = await context.json()
-      if (body?.error) return String(body.error)
-    } catch {
-      // Not JSON. Fall through to whatever the client said.
-    }
-  }
-  return errorMessage(error)
 }
