@@ -294,6 +294,9 @@ export interface InviteCode {
   max_uses: number
   use_count: number
   created_at: string
+  /** Set by the invite-email function. Null if the code was only copied out. */
+  sent_to: string | null
+  sent_at: string | null
 }
 
 export interface ConnectorUserLink {

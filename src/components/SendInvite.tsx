@@ -14,10 +14,13 @@ import { Button, Input, Notice } from './ui'
 export function SendInvite({
   code,
   defaultEmail = '',
+  onSent,
 }: {
   code: string
   /** Prefilled where we already know it, as with a connector's claim code. */
   defaultEmail?: string
+  /** Reload the list: the send is recorded against the code. */
+  onSent?: () => void | Promise<void>
 }) {
   const [email, setEmail] = useState(defaultEmail)
   const [busy, setBusy] = useState(false)
@@ -42,6 +45,7 @@ export function SendInvite({
     }
     setSentTo(to)
     setEmail('')
+    await onSent?.()
   }
 
   return (

@@ -126,6 +126,18 @@ Deno.serve(async (request: Request) => {
     return json({ error: `Resend refused it: ${await response.text()}` }, 502)
   }
 
+  // Recorded only now, after the provider accepted it, so the dashboard shows
+  // what was sent rather than what somebody typed. A failure here costs the
+  // connector a line of history, not the invitation, so it is logged and
+  // swallowed: the mail has already gone.
+  if (invite) {
+    const { error: markError } = await db
+      .from('invite_codes')
+      .update({ sent_to: email, sent_at: new Date().toISOString() })
+      .eq('code', code)
+    if (markError) console.error('[amazing] invite send not recorded:', markError)
+  }
+
   return json({ sent: true }, 200)
 })
 

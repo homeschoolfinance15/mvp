@@ -576,9 +576,15 @@ function InviteCodes({
                     {' · created '}
                     {formatDate(code.created_at)}
                   </div>
+                  {code.sent_to && (
+                    <div className="text-xs text-dim">
+                      Emailed to <span className="text-fg">{code.sent_to}</span>
+                      {code.sent_at && ` · ${formatDate(code.sent_at)}`}
+                    </div>
+                  )}
                   {code.status === 'active' && remaining > 0 && (
                     <div className="mt-1 max-w-sm">
-                      <SendInvite code={code.code} />
+                      <SendInvite code={code.code} onSent={onChanged} />
                     </div>
                   )}
                 </div>
@@ -613,7 +619,7 @@ function InviteCodes({
             </p>
 
             <div className="mt-6 text-left">
-              <SendInvite code={minted} />
+              <SendInvite code={minted} onSent={onChanged} />
             </div>
             <Button variant="primary" className="mt-7 w-full" onClick={close}>
               Done
