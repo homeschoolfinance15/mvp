@@ -20,6 +20,7 @@ import {
   Textarea,
 } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
+import { SendInvite } from '../../components/SendInvite'
 import { useAuth } from '../../context/AuthProvider'
 import type { Connector, ConnectorNote, InviteCode, Profile } from '../../lib/types'
 
@@ -567,7 +568,7 @@ function InviteCodes({
                 key={code.id}
                 className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
               >
-                <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
                   <CopyCode code={code.code} />
                   <div className="text-xs text-dim">
                     {code.use_count} of {code.max_uses} used
@@ -575,6 +576,11 @@ function InviteCodes({
                     {' · created '}
                     {formatDate(code.created_at)}
                   </div>
+                  {code.status === 'active' && remaining > 0 && (
+                    <div className="mt-1 max-w-sm">
+                      <SendInvite code={code.code} />
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   <StatusBadge status={code.status} />
@@ -602,9 +608,13 @@ function InviteCodes({
               <CopyCode code={minted} size="lg" />
             </div>
             <p className="mx-auto mt-5 max-w-sm text-sm leading-relaxed text-muted">
-              Send this to the person you're inviting. They'll enter it at the join page to set
-              up their account.
+              Email it to the person you're inviting and the link will fill the code in for
+              them, or copy it above and send it yourself.
             </p>
+
+            <div className="mt-6 text-left">
+              <SendInvite code={minted} />
+            </div>
             <Button variant="primary" className="mt-7 w-full" onClick={close}>
               Done
             </Button>

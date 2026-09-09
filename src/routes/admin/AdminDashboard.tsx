@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
 import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import { FlagsPanel } from '../../components/FlagsPanel'
+import { SendInvite } from '../../components/SendInvite'
 import {
   Button,
   ConfirmModal,
@@ -430,7 +431,12 @@ function ConnectorsTab({
                     {formatDate(invitation.created_at)}
                   </div>
                 </div>
-                <CopyCode code={invitation.claim_code} size="sm" />
+                <div className="flex flex-col items-end gap-2">
+                  <CopyCode code={invitation.claim_code} size="sm" />
+                  <div className="w-64">
+                    <SendInvite code={invitation.claim_code} defaultEmail={invitation.email} />
+                  </div>
+                </div>
               </div>
             ))}
           </Panel>

@@ -1,5 +1,11 @@
-import { useState, type FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage, supabase } from '../lib/supabase'
@@ -17,7 +23,13 @@ export default function Join() {
 
   const initialState = location.state as { code?: string; lookup?: CodeLookup } | null
 
-  const [code, setCode] = useState(initialState?.code ?? '')
+  // Where an emailed invitation lands: /join?code=AMZ-XXXX-XXXX. The code is
+  // filled in and checked without being asked for, so the person invited
+  // arrives directly at "Jane invited you. Add your details."
+  const [params] = useSearchParams()
+  const emailedCode = (params.get('code') ?? '').trim().toUpperCase()
+
+  const [code, setCode] = useState(initialState?.code ?? emailedCode)
   const [lookup, setLookup] = useState<CodeLookup | null>(
     initialState?.lookup?.valid ? initialState.lookup : null,
   )
@@ -27,19 +39,28 @@ export default function Join() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  // Checked once. A code that comes back invalid must not be retried on every
+  // render, and the visitor is free to edit it by hand afterwards.
+  const checkedEmailed = useRef(false)
+
+  useEffect(() => {
+    if (!emailedCode || checkedEmailed.current || lookup) return
+    checkedEmailed.current = true
+    void check(emailedCode)
+  })
+
   if (!loading && session && profile) {
     return <Navigate to={homePathFor(profile)} replace />
   }
 
   const accepted = lookup?.valid ? lookup : null
 
-  async function checkCode(e: FormEvent) {
-    e.preventDefault()
+  async function check(value: string) {
     setError('')
     setBusy(true)
 
     const { data, error: rpcError } = await supabase.rpc('lookup_code', {
-      p_code: code.trim(),
+      p_code: value.trim(),
     })
     setBusy(false)
 
@@ -59,6 +80,11 @@ export default function Join() {
       setFullName(result.full_name)
       setEmail(result.email)
     }
+  }
+
+  async function checkCode(e: FormEvent) {
+    e.preventDefault()
+    await check(code)
   }
 
   async function createAccount(e: FormEvent) {
