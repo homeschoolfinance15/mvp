@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { navLinks } from '../../components/DashboardShell'
 import { Button, Wordmark } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import {
@@ -24,10 +25,18 @@ import { loadFailed, supabase } from '../../lib/supabase'
  * the one Landing.tsx and the sign-in pages already wear) rather than
  * switching to the member dashboard's chrome halfway through checkout.
  *
- * That choice also sidesteps a real problem: ACC-01 gives us event-only
- * accounts, and the member nav in DashboardShell offers the feed and the
- * circle, which an event-only account is not allowed into. Showing somebody
- * links that will bounce them is worse than not showing them.
+ * What the brand chrome must NOT do is strand a member. Signing in and then
+ * pressing "Events" used to drop the whole app nav, leaving the browser's back
+ * button and the wordmark as the only ways back — which is the bug this
+ * branch fixes. So the frame is public, and the nav inside it is whoever is
+ * reading: anonymous visitors get browse-and-sign-in, a signed-in person gets
+ * the same links they see everywhere else in the app.
+ *
+ * The old objection to that — ACC-01 gives us event-only accounts, and the
+ * member nav offered the feed and the circle, which they are not allowed into
+ * — is answered in navLinks() itself, which no longer offers a door that will
+ * not open. Showing somebody links that bounce them is worse than not showing
+ * them, and it was worth fixing there rather than avoiding here.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -51,6 +60,9 @@ export function EventShell({
 }) {
   const { session, profile, signOut } = useAuth()
   const navigate = useNavigate()
+  // Both, not just the session: an account with no profile row cannot use the
+  // app nav (App.tsx meets it with NotProvisioned), so it reads as anonymous.
+  const signedIn = Boolean(session && profile)
 
   return (
     <div className="brand-experience flex min-h-screen flex-col">
@@ -62,18 +74,27 @@ export function EventShell({
         <Link to="/" aria-label="Amazing home">
           <Wordmark />
         </Link>
-        <nav aria-label="Events" className="flex items-center gap-5 text-[13px]">
-          <Link to="/events" className="hover:text-fg hover:underline hover:underline-offset-4">
-            Browse events
-          </Link>
-          {session && profile ? (
+        <nav
+          aria-label={signedIn ? 'Main' : 'Events'}
+          className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]"
+        >
+          {signedIn ? (
             <>
-              <Link
-                to="/events/mine"
-                className="hover:text-fg hover:underline hover:underline-offset-4"
-              >
-                My events
-              </Link>
+              {/* The same links, in the same order, as the header on every
+                  other signed-in page. Rendered here rather than by wrapping
+                  the page in DashboardShell, because the shell also owns the
+                  dark chrome and the page title, and these five screens are
+                  the public brand experience described above. One nav, two
+                  frames. */}
+              {navLinks(profile).map((link) => (
+                <Link
+                  key={link.label}
+                  to={link.to}
+                  className="hover:text-fg hover:underline hover:underline-offset-4"
+                >
+                  {link.label}
+                </Link>
+              ))}
               <button
                 type="button"
                 onClick={async () => {
@@ -86,9 +107,14 @@ export function EventShell({
               </button>
             </>
           ) : (
-            <Link to="/signin" className="hover:text-fg hover:underline hover:underline-offset-4">
-              Sign in
-            </Link>
+            <>
+              <Link to="/events" className="hover:text-fg hover:underline hover:underline-offset-4">
+                Browse events
+              </Link>
+              <Link to="/signin" className="hover:text-fg hover:underline hover:underline-offset-4">
+                Sign in
+              </Link>
+            </>
           )}
         </nav>
       </header>
@@ -125,7 +151,7 @@ export function EventShell({
  * add a row.
  */
 const STATE_TONE: Record<CapacityState, string> = {
-  open: 'border-[#b9d8c4] bg-[#eff8f2] text-positive',
+  open: 'border-[#b9d8c4] bg-[#dcf0e4] text-positive',
   sold_out: 'border-[#efc98f] bg-[#f6ecd9] text-[#8a4b00]',
   closed: 'border-[#efc98f] bg-[#f6ecd9] text-[#8a4b00]',
   cancelled: 'border-[#e6b5ad] bg-[#fff0ec] text-negative',
@@ -205,7 +231,7 @@ async function attachAvailability(rows: EventRecord[]): Promise<PublicEvent[]> {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
 
-  const [availability, types] = await Promise.all([
+  const [availability, types, perType] = await Promise.all([
     supabase.from('event_availability').select('*').in('event_id', ids),
     supabase
       .from('ticket_types')
@@ -213,9 +239,22 @@ async function attachAvailability(rows: EventRecord[]): Promise<PublicEvent[]> {
       .in('event_id', ids)
       .eq('is_active', true)
       .order('position'),
+    // ORG-04. `ticket_types.quantity` is the cap the organiser set, not what
+    // is left — nothing decrements it and a check constraint keeps it above
+    // zero, so rendering it as "N left" said twenty when one remained. This
+    // view counts what `enforce_event_capacity` counts, so the page and the
+    // trigger agree about which option has gone.
+    supabase.from('ticket_type_availability').select('*').in('event_id', ids),
   ])
   if (availability.error) throw availability.error
   if (types.error) throw types.error
+  if (perType.error) throw perType.error
+
+  const leftOnType = new Map(
+    (((perType.data as { ticket_type_id: string; remaining: number | null }[] | null) ?? []).map(
+      (t) => [t.ticket_type_id, t.remaining],
+    )),
+  )
 
   const byEvent = new Map(
     (
@@ -233,9 +272,11 @@ async function attachAvailability(rows: EventRecord[]): Promise<PublicEvent[]> {
     // we cannot prove exists, which is the direction to fail in.
     capacity_state: byEvent.get(event.id)?.state ?? 'closed',
     remaining: byEvent.get(event.id)?.remaining ?? null,
-    ticket_types: ((types.data as TicketType[] | null) ?? []).filter(
-      (t) => t.event_id === event.id,
-    ),
+    ticket_types: ((types.data as TicketType[] | null) ?? [])
+      .filter((t) => t.event_id === event.id)
+      // `remaining` is what is left; `quantity` stays the cap it always was,
+      // so anything reading it for "how big is this option" is unaffected.
+      .map((t) => ({ ...t, remaining: leftOnType.get(t.id) ?? null })),
   }))
 }
 

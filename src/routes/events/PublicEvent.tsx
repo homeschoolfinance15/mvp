@@ -197,6 +197,16 @@ export default function PublicEvent() {
   const open = canRegister(state)
   const types = event.ticket_types
   const selected = types.find((t) => t.id === chosen) ?? (types.length === 1 ? types[0] : null)
+  // ORG-04. A lone ticket option is auto-selected, and the Register button only
+  // ever tested "more than one option and none chosen" — so an event whose
+  // single option had sold out still offered an enabled "Register — £45" for
+  // the very ticket its own radio was disabling. Pressing it opened a checkout
+  // for something unbuyable, and the refusal arrived from the capacity trigger
+  // at the end instead of from the page at the start.
+  const selectedGone =
+    Boolean(selected) && selected!.remaining !== null && selected!.remaining !== undefined
+      ? selected!.remaining <= 0
+      : false
   const left = remainingWords(event)
 
   /**
@@ -381,7 +391,7 @@ export default function PublicEvent() {
                   <Button
                     variant="primary"
                     onClick={register}
-                    disabled={types.length > 1 && !chosen}
+                    disabled={(types.length > 1 && !chosen) || selectedGone}
                   >
                     {selected && selected.price_cents > 0
                       ? `Register — ${priceLabel(selected)}`
@@ -389,6 +399,13 @@ export default function PublicEvent() {
                   </Button>
                   {types.length > 1 && !chosen && (
                     <span className="text-xs text-dim">Choose a ticket to continue.</span>
+                  )}
+                  {selectedGone && (
+                    <span className="text-xs text-[#8a4b00]">
+                      {types.length > 1
+                        ? 'That ticket has sold out — choose another.'
+                        : 'This ticket has sold out.'}
+                    </span>
                   )}
                   {!session && (
                     <span className="text-xs text-dim">
@@ -448,9 +465,16 @@ function TicketOptions({
       <legend className="sr-only">Choose a ticket</legend>
       <div className="space-y-3">
         {types.map((type) => {
-          // A per-option quantity of zero means this option in particular has
-          // gone, while the event may still have room on another one.
-          const gone = type.quantity !== null && type.quantity <= 0
+          // ORG-04. `remaining`, not `quantity`. `quantity` is the cap the
+          // organiser typed; a check constraint keeps it above zero and
+          // nothing ever decrements it, so this test read `20 <= 0` forever
+          // and the branch below it was unreachable — the option stayed
+          // selectable and advertised "20 left" while the last place went.
+          // `remaining` is counted the way enforce_event_capacity counts, so
+          // the page now refuses the option at the same moment the database
+          // would.
+          const gone = type.remaining !== null && type.remaining !== undefined && type.remaining <= 0
+          const left = type.remaining ?? null
           return (
             <label
               key={type.id}
@@ -476,9 +500,9 @@ function TicketOptions({
                   <span className="mt-1 block text-xs text-[#8a4b00]">
                     This ticket has sold out
                   </span>
-                ) : type.quantity !== null && type.quantity <= 10 ? (
+                ) : left !== null && left <= 10 ? (
                   <span className="mt-1 block text-xs text-muted">
-                    {type.quantity === 1 ? 'One left' : `${type.quantity} left`}
+                    {left === 1 ? 'One left' : `${left} left`}
                   </span>
                 ) : null}
               </span>

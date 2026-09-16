@@ -791,7 +791,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       */}
       {cannotSell && (
         <div className="mb-6">
-          <Panel className="border-[#efc98f] bg-gold-wash px-6 py-5">
+          <Panel className="border-[#efc98f] bg-[#f6ecd9] px-6 py-5">
             <div className="eyebrow text-[#8a4b00]">This event cannot take payments yet</div>
             <p className="mt-2 text-sm leading-relaxed text-fg">
               {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
@@ -1068,7 +1068,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                         onChange={(e) => patchTicket(i, { price: e.target.value })}
                       />
                     </Field>
-                    <Field label="Availability" hint="Empty shares the event limit">
+                    <Field label="Limit" hint="Empty shares the event limit">
                       <Input
                         type="number"
                         min={0}
@@ -1509,7 +1509,7 @@ function PaymentPanel({
           wherever somebody needs it, never reworded per screen.
         */}
         {cannotSell && (
-          <div className="rounded-sm border border-[#efc98f] bg-gold-wash px-5 py-4">
+          <div className="rounded-sm border border-[#efc98f] bg-[#f6ecd9] px-5 py-4">
             <p className="text-sm leading-relaxed text-fg">
               {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
             </p>

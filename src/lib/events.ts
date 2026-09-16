@@ -140,6 +140,15 @@ export interface TicketType {
   currency: string
   /** Null means "no separate cap" — the event capacity is the only limit. */
   quantity: number | null
+  /**
+   * ORG-04. Places left on this option, composed by `attachAvailability` from
+   * `ticket_type_availability`. Null when the option has no cap, and absent on
+   * a ticket type read straight from the table rather than through that
+   * helper — the organiser's editor, for one, which wants the cap and not the
+   * count. Never read `quantity` to mean "left": it is the cap, it is never
+   * decremented, and a check constraint keeps it above zero.
+   */
+  remaining?: number | null
   position: number
   is_active: boolean
   created_at: string
