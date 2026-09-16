@@ -115,6 +115,31 @@ const SESSION_MINUTES = 30
  */
 const FEE_BPS = Number(Deno.env.get('PLATFORM_FEE_BPS') ?? '0')
 
+/**
+ * §7.3, QLT-02, QLT-05. What an attendee is told when an event cannot take
+ * payment, whatever the underlying reason.
+ *
+ * One sentence for every case on purpose. The differences between "not
+ * connected", "restricted by Stripe" and "account could not be resolved" are
+ * real and they matter — to the organiser, who has a different job to do in
+ * each. To the attendee they are the same fact with the same next step, and
+ * spelling them apart would only tell them about somebody else's Stripe
+ * account. It says what happened, that it is not theirs to fix, and that what
+ * they already hold is safe.
+ */
+const ATTENDEE_REFUSAL =
+  'This event cannot take payments at the moment, so tickets are not on sale. ' +
+  'It is nothing you have done — the organiser has been told and needs to sort it out ' +
+  'with their payment provider. Any booking you have already made is unaffected.'
+
+/** §7.3. `event_sale_readiness()` — the one definition of whether paid sales may open. */
+interface SaleReadiness {
+  can_sell_paid: boolean
+  reason: string | null
+  /** The sentence to show the organiser, seeded from this function's own wording. */
+  fix_action: string | null
+}
+
 interface CapacityInfo {
   capacity: number | null
   confirmed: number
@@ -273,53 +298,89 @@ Deno.serve(async (request: Request) => {
 
   const currency = String(ticket.currency ?? event.currency ?? 'gbp').toLowerCase()
 
-  // ---- whose Stripe account (§7.0, §7.3, BUY-13, BUY-14) ------------------
+  // ---- may this event sell, and into whose account (§7.0, §7.3) -----------
   //
-  // The event answers this, not the caller. Null is Amazing's own account.
+  // Two different questions, and only one of them lives here.
+  //
+  //   may it sell?   `event_sale_readiness()` — one continuously-evaluated
+  //                  definition shared with the publish check and the
+  //                  organiser's dashboard banner.
+  //   whose money?   `events.payment_connector_id`, resolved below. The event
+  //                  answers it, never the caller. Null is Amazing's account.
+  //
+  // **Why the gate runs here, at every checkout, and not only at publish.**
+  // There is no such thing as "you were allowed when you published". A
+  // connector can be restricted by Stripe, or disconnect, minutes after an
+  // event goes live; a paid ticket type can be added to an event that was free
+  // when it was published, which no publish-time check ever re-runs. Stripe
+  // itself re-checks `charges_enabled` on every charge for exactly this reason.
+  // So this is not a third layer behind the publish check — **it is the gate**,
+  // and the publish check is a courtesy that fails early and kindly.
+  //
+  // It calls the shared function rather than reading `stripe_charges_enabled`
+  // directly so that there is one definition to change and one to delete.
+  // Deleting it breaks checkout, the banner and publish loudly and together,
+  // instead of silently opening a hole here six months from now.
+  const { data: readinessData, error: readinessError } = await db.rpc('event_sale_readiness', {
+    p_event: event.id,
+  })
+  if (readinessError) return json({ error: 'Could not check whether this event can sell.' }, 503)
+  const readiness = (Array.isArray(readinessData) ? readinessData[0] : readinessData) as
+    | SaleReadiness
+    | undefined
+  if (!readiness) return json({ error: 'Could not check whether this event can sell.' }, 503)
+
+  if (!readiness.can_sell_paid) {
+    // Stops **new** sales only — nothing already sold is read on this path,
+    // which is what keeps BUY-14's "preserve access to existing bookings and
+    // payment support" true.
+    //
+    // `fix_action` is **not** passed on, and neither is the readiness sentence.
+    // Everyone who calls this function is an attendee, and `fix_action` is by
+    // definition the *organiser's* instruction: it names the host's Stripe
+    // account state and points at /connector/payments, a page the reader cannot
+    // open and a fact that is none of their business (QLT-05 — access
+    // restrictions apply everywhere information can appear, and an error body
+    // is somewhere information appears). The organiser gets that sentence on
+    // their own dashboard and at publish, from the same shared function.
+    //
+    // What an attendee needs is narrower and identical in every case: this
+    // event cannot take payment yet, it is not something they did, and their
+    // existing bookings are fine. `reason` still carries the precise tag so the
+    // screen can branch — it is a tag, not a sentence, and nothing renders it.
+    return json(
+      {
+        error: ATTENDEE_REFUSAL,
+        reason: readiness.reason ?? 'not_ready_for_paid_sales',
+      },
+      409,
+    )
+  }
 
   let stripeAccount: string | null = null
   if (event.payment_connector_id) {
     const { data: connector } = await db
       .from('connectors')
-      .select('id, stripe_account_id, stripe_charges_enabled, stripe_account_status')
+      .select('id, stripe_account_id')
       .eq('id', event.payment_connector_id)
       .maybeSingle()
     stripeAccount = (connector?.stripe_account_id as string | null) ?? null
 
-    // §7.3. Two different failures, because they want two different sentences
-    // from the organiser's point of view: one has not started, one has started
-    // and Stripe is still not satisfied. Both stop **new** sales only —
-    // nothing already sold is read on this path, which is what keeps BUY-14's
-    // "preserve access to existing bookings and payment support" true.
+    // Not a second gate — readiness has already said yes. This is the one thing
+    // that must never be inferred: a connector event with no resolved account
+    // would fall through to `stripeAccount = null`, which means *Amazing's*
+    // account, and we would take a connector's revenue into the platform
+    // balance while every screen said otherwise. That is precisely BUY-14's
+    // "do not route revenue to another host's account", so it is refused on the
+    // fact rather than trusted from the gate.
     if (!stripeAccount) {
-      return json(
-        {
-          error:
-            'The organiser has not connected a Stripe account yet, so tickets for this ' +
-            'event cannot be sold. They need to finish Connect Stripe on their connector ' +
-            'page before paid tickets go on sale. Bookings already made are unaffected.',
-          reason: 'connector_stripe_missing',
-        },
-        409,
+      // Logged in full, said in outline — the detail belongs to whoever can act
+      // on it, which is not the person trying to buy a ticket.
+      console.error(
+        `stripe-checkout: event ${event.id} names connector ${event.payment_connector_id} ` +
+          `but no stripe_account_id resolved. Refused rather than charging the platform.`,
       )
-    }
-    if (!connector?.stripe_charges_enabled) {
-      // `charges_enabled` is the gate, never the `stripe_account_status`
-      // summary — the summary is for a screen, this is for money. An account
-      // that Stripe has restricted and one Stripe has not finished verifying
-      // both land here, and neither may take a card.
-      return json(
-        {
-          error:
-            'The organiser\'s Stripe account cannot take payments at the moment, so tickets ' +
-            'for this event cannot be sold. They need to finish what Stripe is asking for ' +
-            'in their Stripe dashboard, then re-check the connection on their connector ' +
-            'page. Bookings already made are unaffected.',
-          reason: 'connector_charges_disabled',
-          connector_stripe_status: connector?.stripe_account_status ?? 'unknown',
-        },
-        409,
-      )
+      return json({ error: ATTENDEE_REFUSAL, reason: 'connector_account_unresolved' }, 409)
     }
   }
 

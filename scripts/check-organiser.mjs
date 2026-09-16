@@ -18,15 +18,16 @@ import {
   AUTOMATIC_MESSAGES,
   MESSAGE_STATUS_TONE,
   MESSAGE_STATUS_WORDS,
+  COHOST_MONEY_NOTE,
   attendanceLabel,
   awaitsRefundDecision,
   changedDetails,
   mayMarkAttended,
   moneyState,
-  paymentBlockers,
   paymentRecipientSentence,
   previewFingerprint,
   receipts,
+  remedyFor,
   reminderLabel,
   reminderWillSkip,
   skippedSentence,
@@ -193,61 +194,61 @@ check('ORG-01A a missing create button always carries its reason', () => {
 })
 
 /* -------------------------------------------------------------------------- */
-/* §7.0 / §7.3 — whose money, and whether it may move                          */
+/* §7.0 — whose money                                                          */
 /* -------------------------------------------------------------------------- */
 
-const amazing = {
-  connectorId: null,
-  name: 'Amazing',
-  stripeAccountId: null,
-  chargesEnabled: true,
-  status: 'ready',
-}
-const ready = {
-  connectorId: 'c1',
-  name: 'Dara',
-  stripeAccountId: 'acct_1',
-  chargesEnabled: true,
-  status: 'ready',
-}
-const paid = [{ is_active: true, price_cents: 5000 }]
-const free = [{ is_active: true, price_cents: 0 }]
-
-check('§7.3 a free event is never blocked by payment setup', () => {
-  const nothing = { ...ready, stripeAccountId: null, chargesEnabled: false, status: 'none' }
-  assert.deepEqual(paymentBlockers(free, nothing), [])
-  assert.deepEqual(paymentBlockers([], nothing), [])
-})
-
-check('§7.3 paid tickets need a connected account that can take charges', () => {
-  assert.deepEqual(paymentBlockers(paid, ready), [])
-  assert.deepEqual(paymentBlockers(paid, amazing), [])
-
-  const none = paymentBlockers(paid, { ...ready, stripeAccountId: null, status: 'none' })
-  assert.equal(none.length, 1)
-  assert.equal(none[0].href, '/connector/payments')
-
-  const pending = paymentBlockers(paid, { ...ready, chargesEnabled: false, status: 'pending' })
-  assert.equal(pending.length, 1)
-  assert.match(pending[0].problem, /not finished checking/)
-
-  const restricted = paymentBlockers(paid, { ...ready, chargesEnabled: false, status: 'restricted' })
-  assert.match(restricted[0].problem, /restricted/)
-
-  const gone = paymentBlockers(paid, { ...ready, status: 'disconnected' })
-  assert.match(gone[0].problem, /no longer connected/)
-})
-
-check('§7.3 an inactive paid option does not block anything', () => {
-  const draftOption = [{ is_active: false, price_cents: 5000 }]
-  const nothing = { ...ready, stripeAccountId: null, chargesEnabled: false, status: 'none' }
-  assert.deepEqual(paymentBlockers(draftOption, nothing), [])
-})
+const amazing = { connectorId: null, name: 'Amazing', ownerId: null }
+const dara = { connectorId: 'c1', name: 'Dara', ownerId: 'p1' }
 
 check('§7.0 the recipient sentence names the account and never implies a split', () => {
   assert.match(paymentRecipientSentence(amazing, false), /Amazing’s own Stripe account/)
-  assert.match(paymentRecipientSentence(ready, false), /Dara’s own Stripe account/)
-  assert.match(paymentRecipientSentence(ready, true), /deliberately/)
+  assert.match(paymentRecipientSentence(dara, false), /Dara’s own Stripe account/)
+  assert.match(paymentRecipientSentence(dara, true), /deliberately/)
+  // ORG-05. The assumption everybody makes, contradicted in so many words.
+  assert.match(COHOST_MONEY_NOTE, /does not split the money/)
+})
+
+/* -------------------------------------------------------------------------- */
+/* §7.3 / BUY-14 — one vocabulary for whether an account can take money        */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * The words and the fix verbs belong to payoutState() in
+ * src/routes/connector/payouts.ts, which the connector's own payment screen
+ * and the administrator's view of it already use — scripts/check-payout-state
+ * asserts them there and they are not re-asserted here. What is this screen's
+ * own is narrower: who a remedy should be offered to. The account holder can
+ * act on it; a cohost reading the same banner on the same event cannot, and
+ * sending them to somebody else's payment setup or to a Stripe dashboard they
+ * have no login for is the wrong button rather than a helpful one.
+ */
+check('BUY-14 a remedy is offered to the account holder and to nobody else', () => {
+  const owner = 'p1'
+
+  assert.deepEqual(remedyFor('connect', dara, owner), {
+    href: '/connector/payments',
+    label: 'Open payment setup',
+  })
+  assert.deepEqual(remedyFor('continue', dara, owner), {
+    href: '/connector/payments',
+    label: 'Open payment setup',
+  })
+  assert.deepEqual(remedyFor('stripe', dara, owner), {
+    href: 'https://dashboard.stripe.com/',
+    label: 'Finish this on Stripe',
+  })
+
+  // A cohost, or an admin looking at somebody else's event, gets told who can
+  // act rather than a link that is not theirs.
+  for (const fix of ['connect', 'continue', 'stripe']) {
+    const other = remedyFor(fix, dara, 'someone-else')
+    assert.equal(other.href, undefined, fix)
+    assert.match(other.label, /Dara/, fix)
+  }
+
+  // Ready, or an Amazing-hosted event: nothing to offer either way.
+  assert.deepEqual(remedyFor(null, dara, owner), { label: '' })
+  assert.deepEqual(remedyFor('connect', amazing, owner), { label: '' })
 })
 
 /* -------------------------------------------------------------------------- */

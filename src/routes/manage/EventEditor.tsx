@@ -40,13 +40,12 @@ import {
   NOTIFIABLE_FIELDS,
   changedDetails,
   lockedSentence,
-  paymentBlockers,
   paymentRecipientSentence,
   previewFingerprint,
+  remedyFor,
   slugify,
   validateEvent,
   whyNoCreate,
-  type Blocker,
   type ChangedDetails,
   type PaymentAccount,
 } from './rules'
@@ -296,6 +295,29 @@ function priceCents(price: string): number {
 }
 
 /**
+ * BUY-14. Whether this event can take money right now.
+ *
+ * `event_sale_readiness()` is continuously evaluated and is the authority on
+ * the answer — checkout asks it and refuses the sale, publish asks it and
+ * fails early, and this screen asks it to decide whether to say anything.
+ * `reason` is prose written for an organiser and is rendered verbatim, so this
+ * banner, the payment section below it and the publish confirmation cannot
+ * describe the same restricted account three different ways.
+ *
+ * The attendee's refusal at checkout is deliberately *not* this sentence. It
+ * is one fixed line that says nothing about why, because telling a stranger
+ * that a host has not finished connecting Stripe is the host's business
+ * leaking to somebody who just wanted a ticket.
+ */
+interface SaleReadiness {
+  canSell: boolean
+  /** Prose, written for an organiser, rendered word for word. */
+  reason: string
+  /** A token naming the remedy. `remedyFor` decides whether to offer it. */
+  fixToken: string
+}
+
+/**
  * §7.2. `payment_locked_at` is set by the first paid order. It is read
  * defensively because it arrives with the orders migration rather than with
  * the events one, and an editor that crashes on a missing column is worse than
@@ -341,6 +363,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   const [rebuilt, setRebuilt] = useState<{ changes: ChangedDetails; fields: string[] } | null>(null)
   const [confirming, setConfirming] = useState<'publish' | 'unpublish' | 'cancel' | null>(null)
   const [account, setAccount] = useState<PaymentAccount | null>(null)
+  const [readiness, setReadiness] = useState<SaleReadiness | null>(null)
   const [hosts, setHosts] = useState<Array<{ id: string; name: string; role: string }>>([])
   const [audience, setAudience] = useState(0)
 
@@ -386,7 +409,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       event.payment_connector_id
         ? supabase
             .from('connectors')
-            .select('id, profile_id, stripe_account_id, stripe_charges_enabled, stripe_account_status')
+            .select('id, profile_id')
             .eq('id', event.payment_connector_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
@@ -399,13 +422,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     ])
 
     if (event.payment_connector_id) {
-      const row = connectorRes.data as {
-        id: string
-        profile_id: string
-        stripe_account_id: string | null
-        stripe_charges_enabled: boolean
-        stripe_account_status: string
-      } | null
+      const row = connectorRes.data as { id: string; profile_id: string } | null
       let ownerName = 'The hosting community'
       if (row) {
         const { data: owner } = await supabase
@@ -416,24 +433,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         ownerName = (owner as { full_name: string } | null)?.full_name ?? ownerName
       }
       setAccount(
-        row
-          ? {
-              connectorId: row.id,
-              name: ownerName,
-              stripeAccountId: row.stripe_account_id,
-              chargesEnabled: row.stripe_charges_enabled,
-              status: row.stripe_account_status,
-            }
-          : null,
+        row ? { connectorId: row.id, name: ownerName, ownerId: row.profile_id } : null,
       )
     } else {
-      setAccount({
-        connectorId: null,
-        name: 'Amazing',
-        stripeAccountId: null,
-        chargesEnabled: true,
-        status: 'ready',
-      })
+      setAccount({ connectorId: null, name: 'Amazing', ownerId: null })
     }
 
     // Names for the hosting team. A host whose profile this account may not
@@ -447,28 +450,50 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     )
 
     setAudience(((regRes.data as unknown[]) ?? []).length)
+
+    /*
+     * BUY-14. Read every time this screen loads, not once at publication.
+     *
+     * The publish-time check was the whole problem: Stripe restricts an
+     * account routinely while it verifies a bank account, and it does that
+     * days after an event goes live. Checkout then refuses every buyer with a
+     * clear message and the organiser hears about it from a confused
+     * attendee. "Prevent new paid sales and show the organizer how to resolve
+     * the problem" is two obligations and we were meeting one.
+     */
+    const { data: readinessData, error: readinessError } = await supabase.rpc(
+      'event_sale_readiness',
+      { p_event: event.id },
+    )
+    const readinessRow = (
+      Array.isArray(readinessData) ? readinessData[0] : readinessData
+    ) as { can_sell_paid?: boolean; reason?: string | null; fix_action?: string | null } | null
+
+    setReadiness(
+      readinessError || !readinessRow
+        ? null
+        : {
+            canSell: readinessRow.can_sell_paid !== false,
+            reason: readinessRow.reason ?? '',
+            fixToken: readinessRow.fix_action ?? '',
+          },
+    )
   }, [event.id, event.payment_connector_id, hostIds])
 
   useEffect(() => {
     void loadSurroundings()
   }, [loadSurroundings])
 
-  const blockers: Blocker[] = useMemo(
-    () =>
-      paymentBlockers(
-        ticketDrafts
-          .filter((t) => t.is_active)
-          .map(
-            (t) =>
-              ({
-                is_active: t.is_active,
-                price_cents: priceCents(t.price),
-              }) as TicketType,
-          ),
-        account,
-      ),
-    [ticketDrafts, account],
-  )
+  /*
+   * Saved options and unsaved ones both count. The readiness definition knows
+   * only what is stored, but an organiser adding their first paid ticket in
+   * this sitting is exactly who most needs to be told that payments are not
+   * connected yet — and being told a moment early costs nothing, because this
+   * is information rather than a gate.
+   */
+  const hasPaidTicket =
+    tickets.some((t) => t.is_active && t.price_cents > 0) ||
+    ticketDrafts.some((t) => t.is_active && priceCents(t.price) > 0)
 
   /* ---------------------------------------------------------------------- */
   /* Saving                                                                  */
@@ -695,7 +720,11 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
   /* ---------------------------------------------------------------------- */
 
-  const canPublish = blockers.length === 0
+  const cannotSell = hasPaidTicket && readiness !== null && !readiness.canSell
+  const canPublish = !cannotSell
+
+  /* The one judgement that is this screen's: whether the reader can act. */
+  const remedy = remedyFor(readiness?.fixToken, account, profile?.id ?? null)
 
   return (
     <ManageShell event={event} current="details">
@@ -737,6 +766,38 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           </div>
         </div>
       </div>
+
+      {/*
+        BUY-14. Persistent and informational, not a modal and not a gate.
+        Nothing has gone wrong — an organiser is allowed to build the event
+        first and connect payments when they are ready to sell, which is how
+        every comparable product works. The sale is stopped at the sale; this
+        is the other half of the requirement, which is telling them.
+      */}
+      {cannotSell && (
+        <div className="mb-6">
+          <Panel className="border-[#efc98f] bg-gold-wash px-6 py-5">
+            <div className="eyebrow text-[#8a4b00]">This event cannot take payments yet</div>
+            <p className="mt-2 text-sm leading-relaxed text-fg">
+              {readiness?.reason || 'Payments are not set up for this event yet.'}
+            </p>
+            {remedy.href ? (
+              <a
+                href={remedy.href}
+                target={remedy.href.startsWith('http') ? '_blank' : undefined}
+                rel={remedy.href.startsWith('http') ? 'noreferrer noopener' : undefined}
+                className="mt-3 inline-block text-xs text-gold underline underline-offset-2"
+              >
+                {remedy.label}
+              </a>
+            ) : (
+              remedy.label && (
+                <p className="mt-2 text-sm leading-relaxed text-muted">{remedy.label}</p>
+              )
+            )}
+          </Panel>
+        </div>
+      )}
 
       {outcome && (
         <div className="mb-6">
@@ -1041,7 +1102,9 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
         <PaymentPanel
           account={account}
-          blockers={blockers}
+          reason={readiness?.reason ?? ''}
+          remedy={remedy}
+          cannotSell={cannotSell}
           locked={locked}
           event={event}
           isAdmin={profile?.role === 'admin'}
@@ -1223,7 +1286,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         body={
           <>
             The event becomes visible in the attendee browse list and its link starts working.
-            {blockers.length > 0 && ' Paid tickets cannot go on sale yet — see the payment section.'}
+            {cannotSell && ` ${readiness?.reason ?? ''}`}
           </>
         }
         onConfirm={() => void setStatus('published')}
@@ -1370,7 +1433,9 @@ function CoverField({
  */
 function PaymentPanel({
   account,
-  blockers,
+  reason,
+  remedy,
+  cannotSell,
   locked,
   event,
   isAdmin,
@@ -1378,7 +1443,9 @@ function PaymentPanel({
   onProblem,
 }: {
   account: PaymentAccount | null
-  blockers: Blocker[]
+  reason: string
+  remedy: { href?: string; label: string }
+  cannotSell: boolean
   locked: string | null
   event: EventRecord
   isAdmin: boolean
@@ -1421,27 +1488,28 @@ function PaymentPanel({
           )
         )}
 
-        {blockers.length > 0 && (
-          <div className="space-y-3">
-            <Notice tone="error">
-              Paid tickets cannot go on sale until this is sorted. Free tickets are unaffected, and
-              anybody who has already bought keeps their booking, their ticket and their right to a
-              refund.
-            </Notice>
-            {blockers.map((b) => (
-              <div key={b.problem} className="rounded-sm border border-line px-5 py-4">
-                <p className="text-sm text-fg">{b.problem}</p>
-                <p className="mt-1.5 text-sm text-muted">{b.fix}</p>
-                {b.href && (
-                  <a
-                    href={b.href}
-                    className="mt-2 inline-block text-xs text-gold underline underline-offset-2"
-                  >
-                    Open payment setup
-                  </a>
-                )}
-              </div>
-            ))}
+        {/*
+          The same sentence as the banner at the top of this screen and as the
+          refusal a buyer would read at checkout — one `reason`, rendered
+          wherever somebody needs it, never reworded per screen.
+        */}
+        {cannotSell && (
+          <div className="rounded-sm border border-[#efc98f] bg-gold-wash px-5 py-4">
+            <p className="text-sm leading-relaxed text-fg">
+              {reason || 'Payments are not set up for this event yet.'}
+            </p>
+            {remedy.href ? (
+              <a
+                href={remedy.href}
+                target={remedy.href.startsWith('http') ? '_blank' : undefined}
+                rel={remedy.href.startsWith('http') ? 'noreferrer noopener' : undefined}
+                className="mt-2 inline-block text-xs text-gold underline underline-offset-2"
+              >
+                {remedy.label}
+              </a>
+            ) : (
+              remedy.label && <p className="mt-1.5 text-sm leading-relaxed text-muted">{remedy.label}</p>
+            )}
           </div>
         )}
       </Panel>

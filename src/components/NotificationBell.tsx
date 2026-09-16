@@ -45,6 +45,16 @@ function sentence(kind: NotificationKind, who: string): string {
       return 'New suggestions are waiting for you'
     case 'waitlist_joined':
       return `${who} applied to the waitlist`
+    case 'event_registered':
+      return `${who} has a place at your event`
+    case 'event_updated':
+      return 'An event you are going to has changed'
+    case 'event_cancelled':
+      return 'An event you were going to has been cancelled'
+    case 'feedback_open':
+      return 'You can now give feedback on an event you attended'
+    case 'event_payments_blocked':
+      return 'An event you host can no longer take payments'
     default:
       return 'Something happened'
   }
@@ -60,9 +70,38 @@ function destination(notification: Notification): string {
     case 'like':
     case 'recommendations':
       return FEATURES.feed ? '/feed' : ''
+    // Every one of these is about a specific event, and the notification row
+    // carries its id — so send them to that event rather than to a list they
+    // then have to search. A notification whose whole value is *which* event
+    // is close to useless if pressing it lands you on all of them.
     case 'event_invited':
+    case 'event_updated':
+    case 'event_cancelled':
+      return FEATURES.events && notification.event_id
+        ? `/events/mine`
+        : FEATURES.events
+          ? '/events'
+          : ''
+    // A host's notice. Theirs to act on, so it opens the event they run.
     case 'event_rsvp':
-      return FEATURES.events ? '/events' : ''
+    case 'event_registered':
+      return FEATURES.events && notification.event_id
+        ? `/manage/events/${notification.event_id}/guests`
+        : FEATURES.events
+          ? '/events'
+          : ''
+    // FDB-03: the destination has to survive the sign-in that may follow it.
+    case 'feedback_open':
+      return FEATURES.events ? '/events/mine' : ''
+    // BUY-14. Stripe tells the account holder they have been restricted; what
+    // it cannot tell them is which of their events just stopped selling. That
+    // is the whole value of this one, so it opens that event rather than a
+    // payment settings page they may not even be able to reach — a cohost
+    // holds no login for the account that broke.
+    case 'event_payments_blocked':
+      return FEATURES.events && notification.event_id
+        ? `/manage/events/${notification.event_id}`
+        : ''
     case 'circle_message':
       return '/circle'
     case 'waitlist_joined':

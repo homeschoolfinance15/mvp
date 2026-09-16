@@ -380,6 +380,137 @@ async function main() {
   )
 
   // ---------------------------------------------------------------------------
+  // 4a. §7.3 — readiness is derived from current state, not from publication
+  //
+  // The gap this closes: a connector restricted by Stripe after publishing used
+  // to produce silence. Readiness is recomputed on every call, so the dashboard
+  // and checkout both see it the moment it changes.
+  // ---------------------------------------------------------------------------
+
+  const notReady = await rpc(host.token, 'event_sale_readiness', { p_event: paid.id })
+  check(
+    'an event with no Stripe reports why it cannot sell, and the fix (§7.3)',
+    notReady.body?.[0]?.can_sell_paid === false &&
+      typeof notReady.body?.[0]?.reason === 'string' &&
+      notReady.body[0].reason.length > 20 &&
+      notReady.body?.[0]?.fix_action === 'connect_stripe',
+    JSON.stringify(notReady.body?.[0]),
+  )
+
+  // Status beats charges_enabled: a restricted account is restricted even while
+  // Stripe still reports charges on, and the organiser needs the real reason.
+  await setConnector({
+    stripe_account_id: 'acct_grid_probe',
+    stripe_charges_enabled: true,
+    stripe_account_status: 'restricted',
+  })
+  const restricted = await rpc(host.token, 'event_sale_readiness', { p_event: paid.id })
+  check(
+    'a restricted account reports restricted, not ready',
+    restricted.body?.[0]?.can_sell_paid === false &&
+      /restricted/i.test(restricted.body?.[0]?.reason ?? '') &&
+      restricted.body?.[0]?.fix_action === 'resolve_stripe_restriction',
+    JSON.stringify(restricted.body?.[0]),
+  )
+
+  // reason is the organiser's sentence, rendered verbatim, so it has to be a
+  // sentence rather than a code — and a different one per state, since one
+  // banner for every cause would tell the organiser nothing to act on.
+  check(
+    'each blocking state gives the organiser its own sentence',
+    notReady.body?.[0]?.reason !== restricted.body?.[0]?.reason &&
+      /\s/.test(notReady.body?.[0]?.reason ?? '') &&
+      /\s/.test(restricted.body?.[0]?.reason ?? ''),
+    `${String(notReady.body?.[0]?.reason).slice(0, 40)} | ${String(restricted.body?.[0]?.reason).slice(0, 40)}`,
+  )
+
+  // fix_action is a token from a closed set, so the UI can pick a destination.
+  check(
+    'fix_action is a token, never a sentence',
+    ['connect_stripe', 'reconnect_stripe', 'resolve_stripe_restriction', 'finish_stripe_onboarding']
+      .includes(restricted.body?.[0]?.fix_action) &&
+      !/\s/.test(restricted.body?.[0]?.fix_action ?? ' '),
+    String(restricted.body?.[0]?.fix_action),
+  )
+
+  await setConnector({ stripe_account_status: 'ready' })
+  const ready = await rpc(host.token, 'event_sale_readiness', { p_event: paid.id })
+  check(
+    'a ready account says so and has nothing else to say',
+    ready.body?.[0]?.can_sell_paid === true &&
+      ready.body?.[0]?.reason === null &&
+      ready.body?.[0]?.fix_action === null,
+    JSON.stringify(ready.body?.[0]),
+  )
+
+  // The single question, asked of a free-only event whose host has no Stripe.
+  // false is the correct answer and every caller ignores it, because none of
+  // them asks unless there is a paid ticket to sell.
+  const freeOnly = await rpc(host.token, 'event_sale_readiness', { p_event: free.id })
+  check(
+    'readiness ignores whether the event has paid tickets at all',
+    typeof freeOnly.body?.[0]?.can_sell_paid === 'boolean',
+    `can_sell_paid ${freeOnly.body?.[0]?.can_sell_paid} for a free-only event`,
+  )
+
+  const paidPublishNow = await write(host.token, 'PATCH', `events?id=eq.${paid.id}`, {
+    status: 'published',
+  })
+  check(
+    'and the paid event that was refused can now be published',
+    paidPublishNow.ok && paidPublishNow.body?.[0]?.status === 'published',
+    paidPublishNow.ok ? 'published' : String(paidPublishNow.body?.message ?? '').slice(0, 60),
+  )
+
+  // Put the account back as it was, so nothing later depends on this. That is
+  // also the true -> false transition BUY-14 cares about, and the paid event
+  // published a moment ago is exactly the "something to break" case.
+  await setConnector({
+    stripe_account_id: null,
+    stripe_charges_enabled: false,
+    stripe_account_status: 'none',
+  })
+
+  const blockedNotice = await get(
+    host.token,
+    `notifications?kind=eq.event_payments_blocked&event_id=eq.${paid.id}&select=id,actor_id`,
+  )
+  check(
+    'losing Stripe tells the host their paid event stopped selling (BUY-14)',
+    blockedNotice.body?.length === 1 && blockedNotice.body[0].actor_id === null,
+    saw(blockedNotice),
+  )
+
+  // A repeated account.updated carrying the same false must not notify again.
+  await setConnector({ stripe_charges_enabled: false })
+  const noRepeat = await get(
+    host.token,
+    `notifications?kind=eq.event_payments_blocked&event_id=eq.${paid.id}&select=id`,
+  )
+  check(
+    'and a repeat of the same false does not tell them twice',
+    noRepeat.body?.length === 1,
+    saw(noRepeat),
+  )
+
+  // A connector with nothing live to break hears nothing at all.
+  await write(admin.token, 'PATCH', `connectors?id=eq.${otherConnectorId}`, {
+    stripe_account_id: 'acct_grid_quiet',
+    stripe_charges_enabled: true,
+    stripe_account_status: 'ready',
+  })
+  await write(admin.token, 'PATCH', `connectors?id=eq.${otherConnectorId}`, {
+    stripe_charges_enabled: false,
+    stripe_account_status: 'restricted',
+  })
+  const quiet = await get(otherHost.token, 'notifications?kind=eq.event_payments_blocked&select=id')
+  check(
+    'a connector with no live paid events is not alarmed',
+    blocked(quiet),
+    saw(quiet),
+  )
+
+  // ---------------------------------------------------------------------------
   // 5. BUY-05 — two people, one place, one winner
   //
   // Two separate HTTP requests fired together, so they land in two different
@@ -741,6 +872,7 @@ async function main() {
   // ---------------------------------------------------------------------------
 
   const probe = await makeAccountOnly('probe', 'Grid Deletion Probe')
+  const probeId = probe.id
   await rpc(probe.token, 'register_free', { p_event: free.id })
   await rpc(host.token, 'mark_attended', {
     p_event: free.id,
@@ -748,17 +880,67 @@ async function main() {
     p_reason: 'On the door',
   })
 
+  // They answer the event-feedback form before leaving. The answer is about the
+  // event, not about them, so it must survive with its author pseudonymised.
+  await insertMinimal(probe.token, 'event_feedback', {
+    event_id: free.id,
+    author_id: probe.id,
+    question_id: q.event1?.id,
+    answer_scale: 7,
+  })
+
   const closedAccount = await rpc(probe.token, 'delete_my_account')
   check('an account with no money in flight can close itself', closedAccount.ok, `${closedAccount.status}`)
 
   const orphanedAttendance = await get(
     host.token,
-    `event_attendance?event_id=eq.${free.id}&profile_id=is.null&select=id,method,recorded_at`,
+    `event_attendance?event_id=eq.${free.id}&profile_id=is.null&select=id,method,recorded_at,erased_subject_id`,
   )
   check(
     'the attendance record survives the person who earned it (§9)',
     Array.isArray(orphanedAttendance.body) && orphanedAttendance.body.length === 1,
     saw(orphanedAttendance),
+  )
+
+  // GDPR Art. 4(5). Nulling alone threw away linkage; the retained uuid is what
+  // lets an administrator ask "were these the same person" about records that
+  // no longer name anybody.
+  check(
+    'and carries the pseudonymised id that links it (Art. 4(5))',
+    orphanedAttendance.body?.[0]?.erased_subject_id === probeId,
+    `erased_subject_id ${orphanedAttendance.body?.[0]?.erased_subject_id}`,
+  )
+
+  const register = await get(
+    admin.token,
+    `data_subject_erasures?subject_id=eq.${probeId}&select=pseudonym,retention_until,lawful_basis`,
+  )
+  check(
+    'the erasure is registered with a pseudonym and an expiry date (Art. 5(1)(e))',
+    register.body?.length === 1 &&
+      /^Former attendee [0-9A-F]{4}$/.test(register.body[0].pseudonym ?? '') &&
+      typeof register.body[0].retention_until === 'string',
+    JSON.stringify(register.body?.[0]),
+  )
+
+  const hostRegisterPeek = await get(host.token, 'data_subject_erasures?select=subject_id')
+  check(
+    'and the register is readable by administrators only',
+    blocked(hostRegisterPeek),
+    saw(hostRegisterPeek),
+  )
+
+  // The feedback split: the answer stays, the author does not.
+  const orphanedFeedback = await get(
+    admin.token,
+    `event_feedback?event_id=eq.${free.id}&author_id=is.null&select=answer_scale,erased_subject_id`,
+  )
+  check(
+    "an erased author's event feedback survives, pseudonymised",
+    orphanedFeedback.body?.length === 1 &&
+      orphanedFeedback.body[0].answer_scale === 7 &&
+      orphanedFeedback.body[0].erased_subject_id === probeId,
+    JSON.stringify(orphanedFeedback.body?.[0]),
   )
 
   const goneRegistration = await get(

@@ -310,9 +310,11 @@ cold.
 → 404 { "error": "That event does not exist." }                        // also a draft
 → 409 { "error": "...", "reason": "sold_out" | "closed" | "cancelled" | "finished" }
 → 409 { "error": "...", "reason": "already_registered" | "already_paid" }
-→ 409 { "error": "...", "reason": "connector_stripe_missing" }         // §7.3
-→ 409 { "error": "...", "reason": "connector_charges_disabled",
-        "connector_stripe_status": "restricted" }                      // §7.3
+→ 409 { "error": "<the one attendee sentence>",                       // §7.3
+        "reason": "connector_stripe_missing"
+                | "connector_charges_disabled"
+                | "not_ready_for_paid_sales"
+                | "connector_account_unresolved" }
 → 400 { "error": "...", "reason": "free_ticket" }                      // use register_free
 → 500 { "error": "...", "reason": "stripe_not_configured" }
 ```
@@ -573,6 +575,67 @@ For an event a super connector created, on their own connected account:
 | **Being the place people complain to** | An attendee bought from Amazing's site. If a connector will not or cannot refund them, they will come to Amazing. Stripe may say the liability is the connector's; the attendee will not care. `event_refunds.status = 'needs_attention'` exists so an admin finds that case rather than discovering it by email. |
 | **Deciding who may sell at all** | `can_create_events` is Amazing's switch. Turning it on for a connector who then mistreats customers is an Amazing decision with Amazing consequences. |
 
+### 7.2a Where the paid-sale gate actually lives
+
+Worth stating because it is the thing most likely to be "tidied" away.
+
+There is no such thing as *you were allowed when you published*. A connector can
+be restricted by Stripe, or disconnect, minutes after an event goes live, and a
+paid ticket type can be added to an event that was free when it was published —
+which no publish-time check ever re-runs. Stripe itself re-checks
+`charges_enabled` on every charge for the same reason; so do Shopify and
+Eventbrite, which block at sale rather than at publish.
+
+So the checkout-time gate is **the** gate. The publish-time check is a courtesy
+that fails early and kindly. All three consumers — checkout, publish and the
+dashboard banner — now call one function, `event_sale_readiness(p_event)`,
+returning `(can_sell_paid, reason, fix_action)`. There is one definition to
+change and one to delete, and deleting it breaks all three loudly and together
+rather than silently opening a hole at checkout months later.
+
+`stripe-checkout` asks that function and does **not** read
+`stripe_charges_enabled` itself. `scripts/check-connect-state.ts` asserts both,
+negatively, so re-inlining the flag fails the check.
+
+One thing it still resolves for itself: **which account takes the money**.
+Readiness answers *may this event sell*; `events.payment_connector_id` answers
+*whose money it is*. A connector event whose account cannot be resolved is
+refused with `connector_account_unresolved` rather than falling through to a
+null `stripeAccount`, which would mean Amazing's own balance — exactly BUY-14's
+"do not route revenue to another host's account".
+
+### 7.2b What the attendee is told, and what they are not
+
+`event_sale_readiness()` returns `fix_action` — the organiser's instruction. It
+names the host's Stripe account state and points at their payment settings.
+`stripe-checkout` **does not pass it on**, and does not pass on the readiness
+sentence either.
+
+Everyone who calls `stripe-checkout` is an attendee. `fix_action` is a page they
+cannot open and a fact about somebody else's Stripe account, and an error body is
+somewhere information appears — QLT-05 applies there as much as to a screen or an
+export. The organiser gets that sentence on their own dashboard and at publish,
+from the same shared function.
+
+So every paid-sale refusal returns **one** sentence, whatever the underlying
+reason:
+
+> This event cannot take payments at the moment, so tickets are not on sale. It
+> is nothing you have done — the organiser has been told and needs to sort it out
+> with their payment provider. Any booking you have already made is unaffected.
+
+The differences between "not connected", "restricted by Stripe" and "account
+could not be resolved" are real and they matter to the organiser, who has a
+different job in each. To the attendee they are one fact with one next step, and
+spelling them apart would only describe a stranger's Stripe account. `reason`
+still carries the precise tag so a screen can branch on it — it is a tag, not a
+sentence, and nothing renders it.
+
+`scripts/check-connect-state.ts` asserts that `readiness.fix_action` is never
+read, that every refusal uses the one sentence, and that the sentence itself
+contains none of `stripe`, `acct_`, `connector`, `charges`, `restricted`,
+`payout` or `dashboard`.
+
 ### 7.3 If a connector's account is disabled mid-sale
 
 The case `CONTRACT.md` §7.3 calls the easy one to get wrong. Stripe can
@@ -635,6 +698,7 @@ The rows in `REQUIREMENTS.md` §11 that land on payments, and where each is met.
 | Buyer refreshes after paying | Purchase remains single, ticket recoverable | The `idempotency_key` is derived from event + person + ticket type + live registration id, is unique in Postgres, and is handed to Stripe, so a second create replays the first session. `event_tickets` is unique on `registration_id`, and the webhook's move to `paid` is conditional on `status = 'pending'`, so a replay issues no second ticket and queues no second email |
 | Payment remains unresolved | A waiting/help state, not a false success | `stripe-checkout` returns `order_status: "pending"` and cannot write anything else — only `stripe-webhook` writes `paid`, and only against a signed Stripe event. Arriving at `success_url` proves a redirect was followed, nothing more |
 | Attendee cancels a paid ticket | Entry and refund states separately understandable | `event-refund` never touches `event_registrations` and returns `registration_unchanged: true`; `cancel_registration` never touches money. "Your attendance is cancelled; your refund is processing" is two independent facts because they are two independent writes |
+| A connector is restricted, or a paid ticket is added to a published free event | New sales stop; nothing already sold changes | The paid-sale gate runs at **every checkout**, not at publish. `event_sale_readiness()` is the one definition, shared with the publish check and the organiser's dashboard banner |
 | Connector-hosted paid sales activated later | Revenue goes to the event's designated host account; fee/refund behaviour matches the event payment setup | The destination is read from `events.payment_connector_id` — the creator's answer — never from the caller. Direct charge on their `acct_…`: funds, Stripe's fees, refunds and disputes all theirs. Refunds route back through `event_orders.stripe_account_id` |
 | QLT-09 operational recovery | Failed confirmations, missing tickets and failed refunds are findable | A paid-but-unconfirmable place writes an `event_refunds` row at `needs_attention`; a Stripe refund failure leaves the row `needs_attention` with Stripe's message on it; a paid session naming one of our orders that is missing raises a 500, so it sits in Stripe's failed-delivery list rather than scrolling past in a log |
 | QLT-10 no false success, no duplicate charge | — | Named mechanism by mechanism in the header comment of `stripe-checkout/index.ts` |

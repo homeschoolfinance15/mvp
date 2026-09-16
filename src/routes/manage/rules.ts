@@ -16,7 +16,6 @@ import type {
   MessageKind,
   MessageStatus,
   RegistrationStatus,
-  TicketType,
 } from '../../lib/events'
 
 /* -------------------------------------------------------------------------- */
@@ -406,10 +405,8 @@ export interface PaymentAccount {
   connectorId: string | null
   /** Whose community it is, for the sentence on screen. */
   name: string
-  stripeAccountId: string | null
-  chargesEnabled: boolean
-  /** none | pending | ready | restricted | disconnected */
-  status: string
+  /** Whose account it is. A cohost reading about it is not the person who can fix it. */
+  ownerId: string | null
 }
 
 /**
@@ -443,75 +440,75 @@ export function lockedSentence(lockedAt: string): string {
   )
 }
 
-export interface Blocker {
-  problem: string
-  /** What to do about it, in the order it should be done. */
-  fix: string
-  /** Where the fixing happens, when it is a screen in this application. */
-  href?: string
+/**
+ * BUY-14. Where a payment problem gets fixed, and by whom.
+ *
+ * `event_sale_readiness()` supplies the fact as prose in `reason`, rendered
+ * word for word wherever it appears, and names the remedy with a token in
+ * `fix_action`. This map turns that token into a destination — and only a
+ * destination.
+ *
+ * Deliberately no sentence of its own. The probed `reason` for every state
+ * already says what to do ("Continue on Stripe and answer what it still asks
+ * for", "Stripe says what it needs ... in the account dashboard"), so a second
+ * paragraph restating it would be words an organiser has just read, on the one
+ * screen where the message is already three sentences long. A link is the part
+ * `reason` cannot carry.
+ *
+ * `reconnect_stripe` and `platform_stripe_unconfigured` are declared by the
+ * migration but unreachable in practice — disconnecting nulls the account id,
+ * which is indistinguishable from never having connected, and an
+ * Amazing-hosted event answers `can_sell_paid: true` because the platform key
+ * is a deployment fact rather than a row. Handled rather than defaulted, since
+ * a declared value arriving one day should not land on the fallback.
+ */
+const FIX_ACTIONS: Record<string, { href?: string; label: string }> = {
+  connect_stripe: { href: '/connector/payments', label: 'Open payment setup' },
+  reconnect_stripe: { href: '/connector/payments', label: 'Reconnect Stripe' },
+  finish_stripe_onboarding: { href: '/connector/payments', label: 'Continue on Stripe' },
+  resolve_stripe_restriction: {
+    href: 'https://dashboard.stripe.com/',
+    label: 'Finish this on Stripe',
+  },
+  // No link: nothing an organiser can reach fixes Amazing's own configuration.
+  platform_stripe_unconfigured: {
+    label: 'An administrator needs to finish Amazing’s own payment setup. Nothing on this event will change it.',
+  },
 }
 
+/** The set the readiness definition may emit. Asserted by scripts/check-organiser. */
+export const FIX_TOKENS = Object.keys(FIX_ACTIONS)
+
 /**
- * §7.3. What stands between this event and taking money, in the order it
- * should be fixed. Empty means paid tickets may go on sale.
+ * The remedy to offer this reader, if any.
  *
- * Free events never consult this — a community with no Stripe at all runs
- * free events perfectly well, and blocking them would be wrong.
+ * The one judgement that belongs to an event screen rather than to the
+ * database: *who is reading*. An event dashboard is opened by cohosts and
+ * administrators as well as by the connector whose Stripe account this is.
+ * Only the account holder can connect, continue or answer Stripe; offering a
+ * cohost a link to somebody else's payment setup, or to a Stripe dashboard
+ * they have no login for, is the wrong button rather than a helpful one. They
+ * are told who can act instead.
  *
- * ORG-01C: this gates the *first* publish of paid tickets. It deliberately
- * knows nothing about registrations, because losing payment capability must
- * never strand somebody who already bought a ticket (§7.3, last row) — their
- * booking, ticket, check-in and refund all keep working.
+ * An unrecognised token is one added after this shipped. It gets no link,
+ * because the wrong link is worse than none.
  */
-export function paymentBlockers(tickets: TicketType[], account: PaymentAccount | null): Blocker[] {
-  if (!tickets.some((t) => t.is_active && t.price_cents > 0)) return []
+export function remedyFor(
+  token: string | null | undefined,
+  account: PaymentAccount | null,
+  readerId: string | null,
+): { href?: string; label: string } {
+  // Null when paid sales are fine. BUY-13: an Amazing-hosted event sells on
+  // the platform key and never reaches here.
+  if (!token || !account?.connectorId) return { label: '' }
 
-  if (!account) {
-    return [
-      {
-        problem: 'No account is set to receive the money for this event.',
-        fix: 'An administrator has to name one before paid tickets can go on sale.',
-      },
-    ]
-  }
+  const known = FIX_ACTIONS[token]
+  if (!known) return { label: '' }
+  if (!known.href) return known
 
-  // BUY-13. Amazing's own account is configured in the deployment, not here.
-  if (account.connectorId === null) return []
-
-  if (!account.stripeAccountId || account.status === 'none') {
-    return [
-      {
-        problem: `${account.name} has not connected a Stripe account yet, so there is nowhere for the money to go.`,
-        fix: 'Connect Stripe, then come back and publish.',
-        href: '/connector/payments',
-      },
-    ]
-  }
-
-  if (account.status === 'disconnected') {
-    return [
-      {
-        problem: `${account.name}’s Stripe account is no longer connected to Amazing.`,
-        fix: 'Reconnect it. Tickets already sold, their entry and their refunds are unaffected.',
-        href: '/connector/payments',
-      },
-    ]
-  }
-
-  if (!account.chargesEnabled) {
-    return [
-      {
-        problem:
-          account.status === 'restricted'
-            ? `Stripe has restricted ${account.name}’s account and is not accepting payments into it.`
-            : `Stripe has not finished checking ${account.name}’s account, so it cannot accept payments yet.`,
-        fix: 'Stripe lists what it still needs on the payment setup page. Free tickets are unaffected.',
-        href: '/connector/payments',
-      },
-    ]
-  }
-
-  return []
+  return readerId === account.ownerId
+    ? known
+    : { label: `Only ${account.name} can sort this out, on their own payment setup.` }
 }
 
 /* -------------------------------------------------------------------------- */

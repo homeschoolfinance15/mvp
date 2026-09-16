@@ -143,6 +143,66 @@ check(
     !/payment_connector_id/.test(sources['event-refund']),
 )
 
+/* -- §7.3: paid-sale readiness has one definition -------------------------- */
+//
+// The gate must ask `event_sale_readiness()`, not read the connector's flags
+// itself. Re-inlining it is the tempting edit — it looks like removing an
+// indirection — and it silently forks the rule away from the publish check and
+// the organiser's dashboard banner, which is how a hole opens six months later
+// with nothing failing loudly in between.
+
+check(
+  'stripe-checkout asks event_sale_readiness() for the paid-sale gate',
+  /rpc\('event_sale_readiness'/.test(checkout),
+)
+// Comments stripped first: this file explains *why* it does not read the flag,
+// and an assertion that cannot tell prose from code would fail on the
+// explanation of its own rule.
+const checkoutCode = checkout
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split(/\r?\n/)
+  .filter((line) => !line.trim().startsWith('//'))
+  .join(' ')
+
+check(
+  'it does not read stripe_charges_enabled directly',
+  !/stripe_charges_enabled/.test(checkoutCode),
+)
+check(
+  'it still resolves the destination account from the event',
+  /payment_connector_id/.test(checkout) && /stripe_account_id/.test(checkout),
+)
+check(
+  'an unresolved connector account is refused, never charged to the platform',
+  /connector_account_unresolved/.test(checkout),
+)
+
+// QLT-05. Everyone who calls stripe-checkout is an attendee. `fix_action` is
+// the organiser's instruction — it names the host's Stripe state and points at
+// a page the reader cannot open — so it must not travel out of this function.
+// An error body is somewhere information appears.
+// The value only escapes if it is read off the readiness row. The interface
+// still declares the field — the function does return it — so testing for the
+// bare word would flag the type declaration and pass for the wrong reason.
+check(
+  'the attendee refusal never reads readiness.fix_action',
+  !/readiness\.fix_action/.test(checkoutCode),
+)
+check(
+  'every paid-sale refusal shows the one attendee sentence',
+  (checkoutCode.match(/error: ATTENDEE_REFUSAL/g) ?? []).length >= 2,
+)
+
+// Assert on the sentence itself, not on its neighbourhood in the file.
+const refusalText =
+  checkout.match(/const ATTENDEE_REFUSAL =([\s\S]*?);?\r?\n\r?\n/)?.[1].toLowerCase() ?? ''
+check(
+  'that sentence names no Stripe account state and no organiser page',
+  refusalText.length > 0 &&
+    !/stripe|acct_|connector|charges|restricted|payout|dashboard|\/connector/.test(refusalText),
+  refusalText.trim().slice(0, 60),
+)
+
 /* -- BUY-04: every order carries an idempotency key ------------------------- */
 //
 // The column is `not null` and uniquely indexed, but a unique index does not

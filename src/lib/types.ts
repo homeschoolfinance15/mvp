@@ -261,6 +261,15 @@ export type NotificationKind =
   | 'event_updated'
   | 'event_cancelled'
   | 'feedback_open'
+  /**
+   * BUY-14. A host's Stripe stopped accepting charges while they had a
+   * published event with paid tickets on sale.
+   *
+   * Stripe tells the account holder they have been restricted. What Stripe
+   * cannot tell them is which of their Amazing events just stopped selling,
+   * which is the only part that needs us — so this carries the event.
+   */
+  | 'event_payments_blocked'
 
 /**
  * Something worth telling somebody, inside the platform.
