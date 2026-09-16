@@ -9,6 +9,7 @@
  * Mirrors docs/event-platform/CONTRACT.md §3 and §6.
  */
 
+import type { PayoutState } from '../connector/payouts'
 import type {
   EventOrder,
   EventRecord,
@@ -443,71 +444,61 @@ export function lockedSentence(lockedAt: string): string {
 /**
  * BUY-14. Where a payment problem gets fixed, and by whom.
  *
- * `event_sale_readiness()` supplies the fact as prose in `reason`, rendered
- * word for word wherever it appears, and names the remedy with a token in
- * `fix_action`. This map turns that token into a destination — and only a
- * destination.
+ * `event_sale_readiness()` answers whether this event can take money, and that
+ * is all this screen takes from it — its `reason` and `fix_action` are state
+ * codes, not sentences. The words belong to `payoutState()` in
+ * src/routes/connector/payouts.ts, which already owns this vocabulary for the
+ * connector's own payment screen and the administrator's view of that
+ * connector. One set of words for the same restricted account, wherever it is
+ * described.
  *
- * Deliberately no sentence of its own. The probed `reason` for every state
- * already says what to do ("Continue on Stripe and answer what it still asks
- * for", "Stripe says what it needs ... in the account dashboard"), so a second
- * paragraph restating it would be words an organiser has just read, on the one
- * screen where the message is already three sentences long. A link is the part
- * `reason` cannot carry.
+ * This map holds destinations and nothing else. No prose of its own: every
+ * `outstanding` sentence already says what to do — "Continue on Stripe and
+ * answer what it still asks for", "Stripe says what it needs ... in the
+ * account dashboard" — so a second paragraph would restate what the organiser
+ * has just read, on the one screen where the message already runs to three
+ * sentences. The link is the part the sentence cannot carry.
  *
- * `reconnect_stripe` and `platform_stripe_unconfigured` are declared by the
- * migration but unreachable in practice — disconnecting nulls the account id,
- * which is indistinguishable from never having connected, and an
- * Amazing-hosted event answers `can_sell_paid: true` because the platform key
- * is a deployment fact rather than a row. Handled rather than defaulted, since
- * a declared value arriving one day should not land on the fallback.
+ * Keyed on the whole of `PayoutState['fix']`, so a fourth repair verb added
+ * there is a missing key here and fails the build. A new verb almost certainly
+ * wants a destination of its own, and a catch-all would quietly send it to the
+ * connector's setup page — the wrong button, drawn confidently.
  */
-const FIX_ACTIONS: Record<string, { href?: string; label: string }> = {
-  connect_stripe: { href: '/connector/payments', label: 'Open payment setup' },
-  reconnect_stripe: { href: '/connector/payments', label: 'Reconnect Stripe' },
-  finish_stripe_onboarding: { href: '/connector/payments', label: 'Continue on Stripe' },
-  resolve_stripe_restriction: {
-    href: 'https://dashboard.stripe.com/',
-    label: 'Finish this on Stripe',
-  },
-  // No link: nothing an organiser can reach fixes Amazing's own configuration.
-  platform_stripe_unconfigured: {
-    label: 'An administrator needs to finish Amazing’s own payment setup. Nothing on this event will change it.',
-  },
+const FIX_ACTIONS: Record<
+  Exclude<PayoutState['fix'], null>,
+  { href: string; label: string }
+> = {
+  connect: { href: '/connector/payments', label: 'Open payment setup' },
+  continue: { href: '/connector/payments', label: 'Continue on Stripe' },
+  stripe: { href: 'https://dashboard.stripe.com/', label: 'Finish this on Stripe' },
 }
 
-/** The set the readiness definition may emit. Asserted by scripts/check-organiser. */
-export const FIX_TOKENS = Object.keys(FIX_ACTIONS)
+/** The repair verbs this screen knows. Asserted by scripts/check-organiser. */
+export const FIX_VERBS = Object.keys(FIX_ACTIONS)
 
 /**
  * The remedy to offer this reader, if any.
  *
- * The one judgement that belongs to an event screen rather than to the
- * database: *who is reading*. An event dashboard is opened by cohosts and
- * administrators as well as by the connector whose Stripe account this is.
- * Only the account holder can connect, continue or answer Stripe; offering a
- * cohost a link to somebody else's payment setup, or to a Stripe dashboard
- * they have no login for, is the wrong button rather than a helpful one. They
- * are told who can act instead.
- *
- * An unrecognised token is one added after this shipped. It gets no link,
- * because the wrong link is worse than none.
+ * The one judgement that belongs to an event screen rather than to
+ * `payouts.ts`: *who is reading*. That module writes for the account holder on
+ * their own payment page. An event dashboard is opened by cohosts and
+ * administrators too, and only the account holder can connect, continue or
+ * answer Stripe. `fix: 'stripe'` points at Stripe's own dashboard, which a
+ * cohost has no login for at all — offering it to them is the wrong button
+ * rather than a helpful one, so they are told who can act instead.
  */
 export function remedyFor(
-  token: string | null | undefined,
+  fix: PayoutState['fix'],
   account: PaymentAccount | null,
   readerId: string | null,
 ): { href?: string; label: string } {
-  // Null when paid sales are fine. BUY-13: an Amazing-hosted event sells on
-  // the platform key and never reaches here.
-  if (!token || !account?.connectorId) return { label: '' }
-
-  const known = FIX_ACTIONS[token]
-  if (!known) return { label: '' }
-  if (!known.href) return known
+  // BUY-13. An Amazing-hosted event sells on the platform key; whether that is
+  // configured is a deployment fact rather than a row, and nothing an
+  // organiser can act on from here.
+  if (!fix || !account?.connectorId) return { label: '' }
 
   return readerId === account.ownerId
-    ? known
+    ? FIX_ACTIONS[fix]
     : { label: `Only ${account.name} can sort this out, on their own payment setup.` }
 }
 

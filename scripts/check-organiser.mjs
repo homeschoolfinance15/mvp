@@ -25,7 +25,7 @@ import {
   mayMarkAttended,
   moneyState,
   paymentRecipientSentence,
-  FIX_TOKENS,
+  FIX_VERBS,
   previewFingerprint,
   receipts,
   remedyFor,
@@ -223,57 +223,40 @@ check('§7.0 the recipient sentence names the account and never implies a split'
  * sending them to somebody else's payment setup or to a Stripe dashboard they
  * have no login for is the wrong button rather than a helpful one.
  */
-check('BUY-14 every fix_action token resolves, and only the account holder is sent anywhere', () => {
-  // Probed off the live function. `reconnect_stripe` and
-  // `platform_stripe_unconfigured` are declared by the migration but are not
-  // reachable today — disconnecting nulls the account id, which reads as never
-  // connected, and an Amazing-hosted event answers can_sell_paid: true. Both
-  // are handled rather than defaulted, so a declared value arriving one day
-  // lands on an answer instead of on the fallback.
-  assert.deepEqual([...FIX_TOKENS].sort(), [
-    'connect_stripe',
-    'finish_stripe_onboarding',
-    'platform_stripe_unconfigured',
-    'reconnect_stripe',
-    'resolve_stripe_restriction',
-  ])
+check('BUY-14 every repair verb resolves, and only the account holder is sent anywhere', () => {
+  // `PayoutState['fix']`, probed off the live function: connect / continue /
+  // stripe / null. A fourth verb is a missing key in FIX_ACTIONS and fails the
+  // build before it reaches here; this pins the set the screen was written
+  // against so the two cannot drift silently.
+  assert.deepEqual([...FIX_VERBS].sort(), ['connect', 'continue', 'stripe'])
 
   const owner = 'p1'
 
-  // The three reachable states send the account holder where the repair is.
-  assert.equal(remedyFor('connect_stripe', dara, owner).href, '/connector/payments')
-  assert.equal(remedyFor('finish_stripe_onboarding', dara, owner).href, '/connector/payments')
-  assert.equal(
-    remedyFor('resolve_stripe_restriction', dara, owner).href,
-    'https://dashboard.stripe.com/',
-  )
+  assert.equal(remedyFor('connect', dara, owner).href, '/connector/payments')
+  assert.equal(remedyFor('continue', dara, owner).href, '/connector/payments')
+  assert.equal(remedyFor('stripe', dara, owner).href, 'https://dashboard.stripe.com/')
 
-  // Never the identifier itself, which is the failure this guards.
-  for (const token of FIX_TOKENS) {
-    assert.doesNotMatch(remedyFor(token, dara, owner).label, /_/, token)
+  // Never the verb itself, and never a bare identifier.
+  for (const fix of FIX_VERBS) {
+    const label = remedyFor(fix, dara, owner).label
+    assert.ok(label.length > 8, fix)
+    assert.doesNotMatch(label, /_/, fix)
   }
 
   // A cohost, or an admin on somebody else's event, is told who can act
-  // rather than handed a link to a page or a Stripe login that is not theirs.
-  for (const token of ['connect_stripe', 'finish_stripe_onboarding', 'resolve_stripe_restriction']) {
-    const other = remedyFor(token, dara, 'someone-else')
-    assert.equal(other.href, undefined, token)
-    assert.match(other.label, /Dara/, token)
+  // rather than handed a page or a Stripe login that is not theirs. This is
+  // sharpest for 'stripe', which leaves Amazing entirely.
+  for (const fix of FIX_VERBS) {
+    const other = remedyFor(fix, dara, 'someone-else')
+    assert.equal(other.href, undefined, fix)
+    assert.match(other.label, /Dara/, fix)
   }
 
-  // Amazing's own configuration is nobody's to repair from an event screen,
-  // so it carries a sentence and no link, whoever is reading.
-  const platform = remedyFor('platform_stripe_unconfigured', dara, owner)
-  assert.equal(platform.href, undefined)
-  assert.match(platform.label, /administrator/)
-
-  // Null when paid sales are fine, and nothing at all for a platform event.
+  // Nothing to offer when sales are fine, or on an Amazing-hosted event where
+  // the platform key is a deployment fact rather than a row.
   assert.deepEqual(remedyFor(null, dara, owner), { label: '' })
-  assert.deepEqual(remedyFor(undefined, dara, owner), { label: '' })
-  assert.deepEqual(remedyFor('connect_stripe', amazing, owner), { label: '' })
-
-  // A token added after this shipped offers no link; a wrong link is worse.
-  assert.deepEqual(remedyFor('some_future_token', dara, owner), { label: '' })
+  assert.deepEqual(remedyFor('connect', amazing, owner), { label: '' })
+  assert.deepEqual(remedyFor(null, amazing, owner), { label: '' })
 })
 
 /* -------------------------------------------------------------------------- */

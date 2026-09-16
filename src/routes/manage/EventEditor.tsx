@@ -35,6 +35,7 @@ import { useAuth } from '../../context/AuthProvider'
 import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
 import { eventLink, eventWhen, type EventRecord, type TicketType } from '../../lib/events'
 import { ACCEPT_ATTR, uploadMedia } from '../../lib/media'
+import { payoutState, type ConnectorPayments, type PayoutState } from '../connector/payouts'
 import {
   COHOST_MONEY_NOTE,
   NOTIFIABLE_FIELDS,
@@ -300,9 +301,10 @@ function priceCents(price: string): number {
  * `event_sale_readiness()` is continuously evaluated and is the authority on
  * the answer — checkout asks it and refuses the sale, publish asks it and
  * fails early, and this screen asks it to decide whether to say anything.
- * `reason` is prose written for an organiser and is rendered verbatim, so this
- * banner, the payment section below it and the publish confirmation cannot
- * describe the same restricted account three different ways.
+ * Its `reason` and `fix_action` are state codes rather than sentences, so the
+ * words are not taken from here: they come from `payoutState()`, which already
+ * owns this vocabulary for the connector's own payment screen and for the
+ * administrator's view of that connector.
  *
  * The attendee's refusal at checkout is deliberately *not* this sentence. It
  * is one fixed line that says nothing about why, because telling a stranger
@@ -311,11 +313,16 @@ function priceCents(price: string): number {
  */
 interface SaleReadiness {
   canSell: boolean
-  /** Prose, written for an organiser, rendered word for word. */
-  reason: string
-  /** A token naming the remedy. `remedyFor` decides whether to offer it. */
-  fixToken: string
 }
+
+/** The Stripe columns `payoutState()` reads, plus who the account belongs to. */
+type ConnectorStripe = Pick<
+  ConnectorPayments,
+  | 'stripe_account_id'
+  | 'stripe_account_status'
+  | 'stripe_charges_enabled'
+  | 'stripe_payouts_enabled'
+> & { id: string; profile_id: string }
 
 /**
  * §7.2. `payment_locked_at` is set by the first paid order. It is read
@@ -364,6 +371,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   const [confirming, setConfirming] = useState<'publish' | 'unpublish' | 'cancel' | null>(null)
   const [account, setAccount] = useState<PaymentAccount | null>(null)
   const [readiness, setReadiness] = useState<SaleReadiness | null>(null)
+  const [stripe, setStripe] = useState<ConnectorStripe | null>(null)
   const [hosts, setHosts] = useState<Array<{ id: string; name: string; role: string }>>([])
   const [audience, setAudience] = useState(0)
 
@@ -409,7 +417,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       event.payment_connector_id
         ? supabase
             .from('connectors')
-            .select('id, profile_id')
+            .select(
+              'id, profile_id, stripe_account_id, stripe_account_status,' +
+                ' stripe_charges_enabled, stripe_payouts_enabled',
+            )
             .eq('id', event.payment_connector_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
@@ -422,7 +433,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     ])
 
     if (event.payment_connector_id) {
-      const row = connectorRes.data as { id: string; profile_id: string } | null
+      const row = connectorRes.data as ConnectorStripe | null
       let ownerName = 'The hosting community'
       if (row) {
         const { data: owner } = await supabase
@@ -435,8 +446,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       setAccount(
         row ? { connectorId: row.id, name: ownerName, ownerId: row.profile_id } : null,
       )
+      setStripe(row)
     } else {
       setAccount({ connectorId: null, name: 'Amazing', ownerId: null })
+      setStripe(null)
     }
 
     // Names for the hosting team. A host whose profile this account may not
@@ -467,16 +480,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     )
     const readinessRow = (
       Array.isArray(readinessData) ? readinessData[0] : readinessData
-    ) as { can_sell_paid?: boolean; reason?: string | null; fix_action?: string | null } | null
+    ) as { can_sell_paid?: boolean } | null
 
     setReadiness(
-      readinessError || !readinessRow
-        ? null
-        : {
-            canSell: readinessRow.can_sell_paid !== false,
-            reason: readinessRow.reason ?? '',
-            fixToken: readinessRow.fix_action ?? '',
-          },
+      readinessError || !readinessRow ? null : { canSell: readinessRow.can_sell_paid !== false },
     )
   }, [event.id, event.payment_connector_id, hostIds])
 
@@ -720,11 +727,19 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
   /* ---------------------------------------------------------------------- */
 
+  /*
+   * The words for a payment problem, from the module that already owns them.
+   * `payoutState()` also names `disconnected` and charges-switched-off, which
+   * the readiness codes do not separately distinguish — one more reason to ask
+   * it rather than to keep a second vocabulary here.
+   */
+  const payout = stripe ? payoutState(stripe) : null
+
   const cannotSell = hasPaidTicket && readiness !== null && !readiness.canSell
   const canPublish = !cannotSell
 
   /* The one judgement that is this screen's: whether the reader can act. */
-  const remedy = remedyFor(readiness?.fixToken, account, profile?.id ?? null)
+  const remedy = remedyFor(payout?.fix ?? null, account, profile?.id ?? null)
 
   return (
     <ManageShell event={event} current="details">
@@ -779,7 +794,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           <Panel className="border-[#efc98f] bg-gold-wash px-6 py-5">
             <div className="eyebrow text-[#8a4b00]">This event cannot take payments yet</div>
             <p className="mt-2 text-sm leading-relaxed text-fg">
-              {readiness?.reason || 'Payments are not set up for this event yet.'}
+              {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
             </p>
             {remedy.href ? (
               <a
@@ -1102,7 +1117,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
         <PaymentPanel
           account={account}
-          reason={readiness?.reason ?? ''}
+          payout={payout}
           remedy={remedy}
           cannotSell={cannotSell}
           locked={locked}
@@ -1286,7 +1301,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         body={
           <>
             The event becomes visible in the attendee browse list and its link starts working.
-            {cannotSell && ` ${readiness?.reason ?? ''}`}
+            {cannotSell && ` ${payout?.outstanding ?? ''}`}
           </>
         }
         onConfirm={() => void setStatus('published')}
@@ -1433,7 +1448,7 @@ function CoverField({
  */
 function PaymentPanel({
   account,
-  reason,
+  payout,
   remedy,
   cannotSell,
   locked,
@@ -1443,7 +1458,7 @@ function PaymentPanel({
   onProblem,
 }: {
   account: PaymentAccount | null
-  reason: string
+  payout: PayoutState | null
   remedy: { href?: string; label: string }
   cannotSell: boolean
   locked: string | null
@@ -1496,7 +1511,7 @@ function PaymentPanel({
         {cannotSell && (
           <div className="rounded-sm border border-[#efc98f] bg-gold-wash px-5 py-4">
             <p className="text-sm leading-relaxed text-fg">
-              {reason || 'Payments are not set up for this event yet.'}
+              {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
             </p>
             {remedy.href ? (
               <a
