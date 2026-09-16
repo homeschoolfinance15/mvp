@@ -204,7 +204,7 @@ export function statusSentence(event: EventRecord): string {
 
 const STATUS_TONE: Record<EventStatus, string> = {
   draft: 'text-dim border-line bg-raised',
-  published: 'text-positive border-[#b9d8c4] bg-[#eff8f2]',
+  published: 'text-positive border-[#b9d8c4] bg-[#dcf0e4]',
   cancelled: 'text-negative border-[#e6b5ad] bg-[#fff0ec]',
 }
 

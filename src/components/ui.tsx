@@ -45,7 +45,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-fg text-white hover:bg-[#353532] active:bg-black border border-fg font-medium',
+    'bg-fg text-white hover:bg-[#2c514b] active:bg-[#16302c] border border-fg font-medium',
   secondary:
     'bg-white text-fg border border-line-strong hover:border-fg',
   ghost: 'bg-transparent text-muted border border-transparent hover:text-fg hover:bg-raised',
@@ -206,10 +206,10 @@ type AnyStatus = ProfileStatus | ConnectorStatus | InviteCodeStatus
 // grey "inert". Kept in one map so the three status enums stay visually
 // consistent wherever they appear.
 const STATUS_TONE: Record<AnyStatus, string> = {
-  active: 'text-positive border-[#b9d8c4] bg-[#eff8f2]',
-  pending: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
-  under_review: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
-  limited: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
+  active: 'text-positive border-[#b9d8c4] bg-[#dcf0e4]',
+  pending: 'text-[#8a4b00] border-[#efc98f] bg-[#f6ecd9]',
+  under_review: 'text-[#8a4b00] border-[#efc98f] bg-[#f6ecd9]',
+  limited: 'text-[#8a4b00] border-[#efc98f] bg-[#f6ecd9]',
   restricted: 'text-negative border-[#e6b5ad] bg-[#fff0ec]',
   suspended: 'text-negative border-[#e6b5ad] bg-[#fff0ec]',
   removed: 'text-dim border-line bg-raised',
@@ -297,7 +297,7 @@ export function Notice({ tone, children }: { tone: 'error' | 'success'; children
   const styles =
     tone === 'error'
       ? 'border-[#e6b5ad] bg-[#fff0ec] text-negative'
-      : 'border-[#b9d8c4] bg-[#eff8f2] text-positive'
+      : 'border-[#b9d8c4] bg-[#dcf0e4] text-positive'
   return (
     <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-sm border px-3.5 py-2.5 text-sm ${styles}`}>
       {children}

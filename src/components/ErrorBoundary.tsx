@@ -39,9 +39,9 @@ export class ErrorBoundary extends Component<Props, State> {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '1.5rem',
-          background: '#fafaf8',
-          color: '#1a1a18',
-          fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+          background: '#edf3ee',
+          color: '#1f3a36',
+          fontFamily: 'Nunito, Arial, system-ui, sans-serif',
         }}
       >
         <div style={{ maxWidth: '32rem' }}>
@@ -50,15 +50,15 @@ export class ErrorBoundary extends Component<Props, State> {
               fontSize: '0.6875rem',
               letterSpacing: '0.16em',
               textTransform: 'uppercase',
-              color: '#777770',
+              color: '#58706a',
             }}
           >
             Amazing
           </div>
-          <h1 style={{ marginTop: '1.25rem', fontSize: '1.5rem', fontWeight: 500 }}>
+          <h1 style={{ marginTop: '1.25rem', fontSize: '1.5rem', fontWeight: 600 }}>
             Something went wrong on this page
           </h1>
-          <p style={{ marginTop: '0.875rem', lineHeight: 1.65, color: '#51514c' }}>
+          <p style={{ marginTop: '0.875rem', lineHeight: 1.65, color: '#49635c' }}>
             The page failed to load rather than loading empty. Reloading often clears it. If it
             keeps happening, the message below is the useful part to pass on.
           </p>
@@ -84,12 +84,12 @@ export class ErrorBoundary extends Component<Props, State> {
               marginTop: '1.5rem',
               height: '2.5rem',
               padding: '0 1rem',
-              background: '#1a1a18',
-              color: '#ffffff',
-              border: '1px solid #1a1a18',
+              background: '#1f3a36',
+              color: '#edf3ee',
+              border: '1px solid #1f3a36',
               borderRadius: '0.25rem',
               fontSize: '0.875rem',
-              fontWeight: 500,
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >

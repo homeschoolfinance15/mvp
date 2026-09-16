@@ -35,8 +35,8 @@ import { payoutState, type ConnectorPayments, type PayoutState } from './payouts
  */
 
 const TONE: Record<string, string> = {
-  ready: 'text-positive border-[#b9d8c4] bg-[#eff8f2]',
-  waiting: 'text-[#8a4b00] border-[#efc98f] bg-gold-wash',
+  ready: 'text-positive border-[#b9d8c4] bg-[#dcf0e4]',
+  waiting: 'text-[#8a4b00] border-[#efc98f] bg-[#f6ecd9]',
   none: 'text-dim border-line bg-raised',
 }
 

@@ -1,4 +1,4 @@
-/* Public landing and signup theme. Dashboard tokens remain in index.css. */
+/* Public landing and signup theme. All colour tokens live in index.css. */
 @font-face {
   font-family: 'Nunito';
   font-style: normal;
@@ -19,7 +19,7 @@
   align-items: center;
   gap: 10px;
   color: #1f3a36;
-  font-family: 'Nunito', Arial, sans-serif;
+  font-family: 'Nunito', Arial, system-ui, sans-serif;
   font-weight: 400;
   font-size: 31px;
   letter-spacing: -1.3px;
@@ -32,36 +32,16 @@
 .brand-wordmark--lg { font-size: 54px; gap: 15px; letter-spacing: -2px; }
 .brand-wordmark--lg svg { width: 47px; height: 47px; }
 
+/* Palette and type are now the site-wide defaults; this scope is layout only. */
 .brand-experience {
-  --color-ink: #edf3ee;
-  --color-surface: #fafcf9;
-  --color-raised: #e2ebe4;
-  --color-line: #d0ddd5;
-  --color-line-strong: #afc5b9;
-  --color-fg: #1f3a36;
-  --color-muted: #49635c;
-  --color-dim: #58706a;
-  /* Gold is reserved for the logo; existing accent utilities become teal. */
-  --color-gold: #1f5c56;
-  --color-gold-dim: #1f5c56;
-  --color-gold-wash: #e2ebe4;
-  --font-sans: 'Nunito', Arial, sans-serif;
-  --font-serif: 'Nunito', Arial, sans-serif;
-  color: var(--color-fg);
-  background: var(--color-ink);
-  font-family: var(--font-sans);
   min-height: 100svh;
-  -webkit-font-smoothing: antialiased;
 }
 body:has(.brand-experience) { min-width: 0; }
 .brand-experience *, .brand-experience *::before, .brand-experience *::after { box-sizing: border-box; }
-.brand-experience button, .brand-experience input, .brand-experience select, .brand-experience textarea { font-family: inherit; }
 .brand-experience button:not(:disabled), .brand-experience a { -webkit-tap-highlight-color: transparent; }
 .brand-experience button:not(:disabled) { cursor: pointer; }
-.brand-experience ::selection { background: #c4d9cb; color: #1f3a36; }
 .brand-experience :focus-visible { outline: 2px solid #1f5c56; outline-offset: 4px; }
-.brand-experience .display { font-family: inherit; font-weight: 400; line-height: 1.12; letter-spacing: -.035em; }
-.brand-experience .eyebrow { color: #49635c; letter-spacing: .07em; font-weight: 600; }
+.brand-experience .eyebrow { letter-spacing: .07em; }
 .brand-container { width: min(100% - 80px, 1160px); margin-inline: auto; }
 .brand-kicker { font-size: 11px; line-height: 1.5; font-weight: 600; text-transform: uppercase; letter-spacing: .15em; }
 .brand-text-link { display: inline-flex; align-items: center; gap: 10px; font-size: 13px; color: #49635c; }
@@ -201,7 +181,7 @@ body:has(.brand-experience) { min-width: 0; }
 .auth-card h1 { font-size: clamp(31px, 3vw, 41px); }
 .auth-card .ui-button[data-variant='primary'] { min-height: 50px; }
 .auth-footer { border-top: 1px solid #d0ddd5; padding-block: 22px; color: #58706a; font-size: 12px; }
-.signup-questionnaire .panel { background: #fafcf9; border-radius: 20px; }
+.signup-questionnaire .panel { border-radius: 20px; }
 
 @media (max-width: 1050px) {
   .brand-container { width: calc(100% - 48px); }

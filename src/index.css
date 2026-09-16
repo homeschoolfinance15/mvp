@@ -5,22 +5,27 @@
    AMAZING — quiet luxury: high contrast, precise lines, intentional space.
 --------------------------------------------------------------------------- */
 @theme {
-  --color-ink: #fafaf8;
-  --color-surface: #ffffff;
-  --color-raised: #f5f5f2;
-  --color-line: #e5e5e1;
-  --color-line-strong: #c9c9c3;
-  --color-fg: #1a1a18;
-  --color-muted: #51514c;
-  --color-dim: #777770;
-  --color-gold: #a88e5c;
-  --color-gold-dim: #806b43;
-  --color-gold-wash: #f5f0e7;
+  --color-ink: #edf3ee;
+  --color-surface: #fafcf9;
+  --color-raised: #e2ebe4;
+  --color-line: #d0ddd5;
+  --color-line-strong: #afc5b9;
+  --color-fg: #1f3a36;
+  --color-muted: #49635c;
+  --color-dim: #58706a;
+  /* Gold is reserved for the logo; the accent utilities are teal. */
+  --color-gold: #1f5c56;
+  --color-gold-dim: #1f5c56;
+  --color-gold-wash: #e2ebe4;
   --color-positive: #356749;
   --color-negative: #9d3f32;
 
-  --font-sans: 'Helvetica Neue', Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
-  --font-serif: 'Times New Roman', Times, ui-serif, Georgia, serif;
+  --font-sans: 'Nunito', Arial, system-ui, sans-serif;
+  --font-serif: 'Nunito', Arial, system-ui, sans-serif;
+
+  /* Only 400 and 600 are self-hosted, so 500 would silently render as 400 and
+     drop the emphasis from every font-medium. Point it at the face we have. */
+  --font-weight-medium: 600;
 }
 
 @layer base {
@@ -39,7 +44,7 @@
   }
 
   ::selection {
-    background: #d8d0c1;
+    background: #c4d9cb;
     color: var(--color-fg);
   }
 
@@ -48,12 +53,12 @@
     outline-offset: 2px;
   }
 
-  /* Keep browser autofill inside the warm form palette. */
+  /* Keep browser autofill inside the form palette. */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
     -webkit-text-fill-color: var(--color-fg);
-    -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+    -webkit-box-shadow: 0 0 0 1000px var(--color-surface) inset;
     caret-color: var(--color-fg);
   }
 }
@@ -66,15 +71,17 @@
     font-weight: 600;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: var(--color-dim);
+    /* Muted, not dim: dim on a raised green panel is only 4.4:1. */
+    color: var(--color-muted);
   }
 
-  /* Display type follows the brand board exactly. */
+  /* Display type follows the brand board exactly: Nunito sets headings in 400,
+     tracked tighter than the Times it replaced. */
   .display {
     font-family: var(--font-serif);
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1;
+    font-weight: 400;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
   }
 
   .hairline {
@@ -82,7 +89,7 @@
   }
 
   .panel {
-    background-color: #ffffff;
+    background-color: var(--color-surface);
     border: 1px solid var(--color-line);
     border-radius: 0.375rem;
   }
