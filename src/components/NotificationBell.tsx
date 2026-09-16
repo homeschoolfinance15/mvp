@@ -55,9 +55,18 @@ function sentence(kind: NotificationKind, who: string): string {
       return 'You can now give feedback on an event you attended'
     case 'event_payments_blocked':
       return 'An event you host can no longer take payments'
-    default:
-      return 'Something happened'
   }
+
+  // Exhaustive. A seventeenth kind fails the build here rather than arriving
+  // in somebody's bell as "Something happened".
+  //
+  // That sentence used to be the default, and it was not hypothetical: four
+  // kinds this platform writes today sat behind it, including the notice
+  // telling an attendee their event had been cancelled. The writer was wired,
+  // the reader was not, and nothing failed — a `default` returning plausible
+  // prose is the construct that turns a missing case into a quiet lie.
+  const unhandled: never = kind
+  throw new Error(`Unhandled notification kind: ${String(unhandled)}`)
 }
 
 /** Where pressing it should take you. */
@@ -107,10 +116,17 @@ function destination(notification: Notification): string {
     case 'waitlist_joined':
       // Vetting happens on the admin screen, where Assign lives.
       return '/admin'
-    default:
-      // Reports and new members are dealt with on your own dashboard.
+    // Dealt with on your own dashboard, so pressing the row just marks it
+    // read. Listed rather than defaulted, so that adding a kind is a compile
+    // error and not a silent nowhere.
+    case 'member_joined':
+    case 'report_raised':
+    case 'report_resolved':
       return ''
   }
+
+  const unhandled: never = notification.kind
+  throw new Error(`Unhandled notification kind: ${String(unhandled)}`)
 }
 
 export function NotificationBell() {

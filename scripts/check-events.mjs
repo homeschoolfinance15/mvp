@@ -391,9 +391,8 @@ async function main() {
   check(
     'an event with no Stripe reports why it cannot sell, and the fix (§7.3)',
     notReady.body?.[0]?.can_sell_paid === false &&
-      typeof notReady.body?.[0]?.reason === 'string' &&
-      notReady.body[0].reason.length > 20 &&
-      notReady.body?.[0]?.fix_action === 'connect_stripe',
+      notReady.body?.[0]?.reason === 'no_account' &&
+      notReady.body?.[0]?.fix_action === 'connect',
     JSON.stringify(notReady.body?.[0]),
   )
 
@@ -408,39 +407,56 @@ async function main() {
   check(
     'a restricted account reports restricted, not ready',
     restricted.body?.[0]?.can_sell_paid === false &&
-      /restricted/i.test(restricted.body?.[0]?.reason ?? '') &&
-      restricted.body?.[0]?.fix_action === 'resolve_stripe_restriction',
+      restricted.body?.[0]?.reason === 'restricted' &&
+      restricted.body?.[0]?.fix_action === 'stripe',
     JSON.stringify(restricted.body?.[0]),
   )
 
-  // reason is the organiser's sentence, rendered verbatim, so it has to be a
-  // sentence rather than a code — and a different one per state, since one
-  // banner for every cause would tell the organiser nothing to act on.
+  // One vocabulary. fix_action must be a PayoutState.fix value, because the
+  // client already maps those and a parallel set in the database is two places
+  // to change with one of them forgotten.
   check(
-    'each blocking state gives the organiser its own sentence',
-    notReady.body?.[0]?.reason !== restricted.body?.[0]?.reason &&
-      /\s/.test(notReady.body?.[0]?.reason ?? '') &&
-      /\s/.test(restricted.body?.[0]?.reason ?? ''),
-    `${String(notReady.body?.[0]?.reason).slice(0, 40)} | ${String(restricted.body?.[0]?.reason).slice(0, 40)}`,
+    'fix_action uses payoutState()’s verbs and no others',
+    ['connect', 'continue', 'stripe'].includes(notReady.body?.[0]?.fix_action) &&
+      ['connect', 'continue', 'stripe'].includes(restricted.body?.[0]?.fix_action),
+    `${notReady.body?.[0]?.fix_action} | ${restricted.body?.[0]?.fix_action}`,
   )
 
-  // fix_action is a token from a closed set, so the UI can pick a destination.
+  // reason is a code, not prose. The words live in payouts.ts.
   check(
-    'fix_action is a token, never a sentence',
-    ['connect_stripe', 'reconnect_stripe', 'resolve_stripe_restriction', 'finish_stripe_onboarding']
-      .includes(restricted.body?.[0]?.fix_action) &&
-      !/\s/.test(restricted.body?.[0]?.fix_action ?? ' '),
-    String(restricted.body?.[0]?.fix_action),
+    'reason is a stable code, not a sentence',
+    !/\s/.test(notReady.body?.[0]?.reason ?? ' ') &&
+      !/\s/.test(restricted.body?.[0]?.reason ?? ' '),
+    `${notReady.body?.[0]?.reason} | ${restricted.body?.[0]?.reason}`,
   )
 
   await setConnector({ stripe_account_status: 'ready' })
   const ready = await rpc(host.token, 'event_sale_readiness', { p_event: paid.id })
   check(
-    'a ready account says so and has nothing else to say',
+    'a ready account says so',
     ready.body?.[0]?.can_sell_paid === true &&
-      ready.body?.[0]?.reason === null &&
+      ready.body?.[0]?.reason === 'ready' &&
       ready.body?.[0]?.fix_action === null,
     JSON.stringify(ready.body?.[0]),
+  )
+
+  // An Amazing-hosted event has no connector, and that is not a failure state.
+  const platformEvent = await write(admin.token, 'POST', 'events', {
+    host_id: admin.id,
+    title: `${TAG} platform event`,
+    starts_at: soon(9),
+    ends_at: soon(9, 2),
+  })
+  if (platformEvent.body?.[0]?.id) made.events.push(platformEvent.body[0].id)
+  const platformReady = await rpc(admin.token, 'event_sale_readiness', {
+    p_event: platformEvent.body?.[0]?.id,
+  })
+  check(
+    'an admin-hosted event routes to the platform account and can sell (BUY-13)',
+    platformReady.body?.[0]?.can_sell_paid === true &&
+      platformReady.body?.[0]?.reason === 'platform_account' &&
+      platformReady.body?.[0]?.fix_action === null,
+    JSON.stringify(platformReady.body?.[0]),
   )
 
   // The single question, asked of a free-only event whose host has no Stripe.
