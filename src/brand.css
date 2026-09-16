@@ -53,6 +53,7 @@
   min-height: 100svh;
   -webkit-font-smoothing: antialiased;
 }
+body:has(.brand-experience) { min-width: 0; }
 .brand-experience *, .brand-experience *::before, .brand-experience *::after { box-sizing: border-box; }
 .brand-experience button, .brand-experience input, .brand-experience select, .brand-experience textarea { font-family: inherit; }
 .brand-experience button:not(:disabled), .brand-experience a { -webkit-tap-highlight-color: transparent; }
@@ -75,29 +76,24 @@
 .brand-experience .brand-cta--light:focus-visible { outline-color: #edf3ee; }
 
 /* Landing */
-.landing-header { position: relative; min-height: 158px; display: flex; justify-content: center; align-items: center; padding-block: 29px; }
+.landing-header { background: linear-gradient(115deg, #102d28, #1f3a36 55%, #163e36); color: #edf3ee; }
+.landing-header-inner { position: relative; min-height: 144px; display: flex; justify-content: center; align-items: center; padding-block: 26px; }
+.landing-header .brand-wordmark { color: #edf3ee; }
+.landing-header :focus-visible { outline-color: #edf3ee; }
 .landing-brand { display: flex; flex-direction: column; align-items: center; gap: 13px; text-decoration: none; }
-.landing-brand > span:last-child { font-size: 13px; color: #1f5c56; letter-spacing: .025em; }
-.landing-nav { position: absolute; right: 0; top: 47px; display: flex; align-items: center; gap: 22px; font-size: 13px; }
-.landing-nav a { padding: 10px 0; }
-.landing-nav button { display: flex; gap: 12px; align-items: center; font-weight: 600; padding: 10px 0; }
+.landing-brand > span:last-child { font-size: 13px; color: #c4d9cb; letter-spacing: .025em; }
+.landing-nav { position: absolute; right: 0; top: 45px; display: flex; align-items: center; gap: 22px; font-size: 14px; }
+.landing-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 8px; }
+.landing-nav button { display: flex; gap: 12px; align-items: center; min-height: 44px; font-weight: 600; padding: 10px 0; }
 .landing-nav button span { font-size: 20px; }
-.landing-nav a:hover, .landing-nav button:hover { color: #1f5c56; text-decoration: underline; text-underline-offset: 5px; }
-.landing-hero { position: relative; isolation: isolate; overflow: hidden; border-radius: 28px; min-height: 546px; display: flex; align-items: center; background: #163e36; color: #edf3ee; }
-.landing-hero-photo { position: absolute; z-index: -3; inset: 0 0 0 auto; width: 72%; height: 100%; object-fit: cover; object-position: 54% center; }
-.landing-hero::before { content: ''; position: absolute; z-index: -2; inset: 0; background: linear-gradient(90deg, #163e36 0%, #163e36f5 27%, #163e36d4 42%, #163e363b 69%, #163e3612 100%); }
-.landing-hero::after { content: ''; position: absolute; z-index: -1; inset: 0; background: linear-gradient(0deg, #14392e6b, transparent 35%); }
-.landing-hero-copy { padding: 55px 52px; width: 61%; position: relative; }
-.landing-hero .brand-kicker { color: #c4d9cb; margin-bottom: 23px; }
+.landing-nav a:hover, .landing-nav button:hover { color: #fff; text-decoration: underline; text-underline-offset: 5px; }
+.landing-hero { display: grid; grid-template-columns: 1.02fr 1fr; gap: 44px; align-items: center; padding: 44px 0 16px; }
+.landing-hero-photo { display: block; width: 100%; height: 454px; object-fit: cover; object-position: 50% 45%; border-radius: 150px 150px 24px 24px; }
+.landing-hero-copy { min-width: 0; }
 .landing-hero h1 { font-size: clamp(42px, 4.45vw, 62px); line-height: 1.08; letter-spacing: -.045em; font-weight: 400; margin: 0 0 24px; }
-.landing-intro { max-width: 400px; font-size: 16px; line-height: 1.7; color: #d6e5dc; margin: 0 0 30px; }
-.landing-invite { font-size: 12px; color: #c7dcd0; margin-top: 16px; }
-.landing-invite button { color: #edf3ee; text-decoration: underline; text-underline-offset: 4px; margin-left: 3px; padding-block: 5px; }
-.landing-invite button:focus-visible { outline-color: #edf3ee; }
-.landing-photo-caption { position: absolute; right: 28px; bottom: 25px; display: flex; gap: 12px; align-items: center; padding: 15px 18px; border: 1px solid #edf3ee2b; border-radius: 15px; background: #153c34b8; backdrop-filter: blur(12px); }
-.landing-photo-caption strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 3px; }
-.landing-photo-caption div > span { font-size: 11px; color: #d6e5dc; }
-.caption-dot { width: 7px; height: 7px; border-radius: 50%; background: #a6c8b4; flex: none; }
+.landing-intro { max-width: 455px; font-size: 17px; line-height: 1.65; color: #49635c; margin: 0 0 26px; }
+.landing-invite { font-size: 13px; color: #49635c; margin-top: 10px; }
+.landing-invite button { color: #1f5c56; text-decoration: underline; text-underline-offset: 4px; margin-left: 3px; padding-block: 12px; min-height: 44px; }
 .landing-explain { display: grid; grid-template-columns: .95fr 1.05fr; gap: 85px; padding: 74px 8px 65px; border-bottom: 1px solid #d0ddd5; }
 .landing-explain .brand-kicker { color: #1f5c56; margin-bottom: 19px; }
 .landing-explain h2 { font-size: clamp(34px, 3.6vw, 47px); line-height: 1.12; letter-spacing: -.045em; font-weight: 400; margin: 0; }
@@ -207,19 +203,15 @@
 .auth-footer { border-top: 1px solid #d0ddd5; padding-block: 22px; color: #58706a; font-size: 12px; }
 .signup-questionnaire .panel { background: #fafcf9; border-radius: 20px; }
 
-@media (min-width: 1450px) { .landing-hero { min-height: 580px; } }
 @media (max-width: 1050px) {
   .brand-container { width: calc(100% - 48px); }
-  .landing-header { min-height: 145px; }
+  .landing-header-inner { min-height: 136px; }
   .landing-nav { gap: 16px; top: 43px; }
   .landing-nav button { display: none; }
-  .landing-hero { min-height: 520px; }
-  .landing-hero-copy { padding: 42px 34px; width: 66%; }
-  .landing-hero h1 { font-size: 48px; }
-  .landing-intro { font-size: 15px; max-width: 335px; }
-  .landing-photo-caption { right: 19px; bottom: 19px; padding: 12px; }
-  .landing-photo-caption div > span { display: none; }
-  .landing-photo-caption strong { margin: 0; font-size: 12px; }
+  .landing-hero { gap: 28px; padding-top: 36px; }
+  .landing-hero-photo { height: 420px; border-radius: 120px 120px 22px 22px; }
+  .landing-hero h1 { font-size: clamp(40px, 4.65vw, 48px); }
+  .landing-intro { font-size: 16px; }
   .landing-explain { gap: 45px; padding-block: 58px; }
   .landing-explain h2 { font-size: 38px; }
   .landing-explain-copy { font-size: 15px; }
@@ -242,33 +234,31 @@
 }
 @media (max-width: 760px) {
   .brand-container { width: calc(100% - 36px); }
-  .landing-header { min-height: 137px; padding: 24px 0; }
-  .brand-wordmark--lg { font-size: 44px; gap: 12px; }
-  .brand-wordmark--lg svg { width: 38px; height: 38px; }
+  .landing-header-inner { min-height: 104px; padding-block: 20px; justify-content: space-between; gap: 16px; }
+  .landing-brand { align-items: flex-start; gap: 9px; }
+  .landing-header .brand-wordmark--lg { font-size: 36px; gap: 10px; letter-spacing: -1.5px; }
+  .landing-header .brand-wordmark--lg svg { width: 34px; height: 34px; }
   .landing-brand > span:last-child { font-size: 11px; }
-  .landing-nav { top: 19px; right: 0; font-size: 11px; }
-  .landing-hero { align-items: start; min-height: 675px; border-radius: 22px; }
-  .landing-hero-photo { width: 100%; height: 60%; inset: auto 0 0; object-position: center 44%; }
-  .landing-hero::before { background: linear-gradient(180deg, #163e36 0%, #163e36 33%, #163e36cf 49%, #163e361c 78%, #163e3659 100%); }
-  .landing-hero-copy { width: 100%; padding: 34px 26px; text-align: center; }
-  .landing-hero .brand-kicker { font-size: 9px; letter-spacing: .15em; margin-bottom: 18px; }
-  .landing-hero h1 { font-size: clamp(36px, 7.5vw, 53px); line-height: 1.1; margin-bottom: 18px; }
-  .landing-intro { max-width: 420px; margin: 0 auto 23px; font-size: 14px; line-height: 1.65; }
-  .landing-hero .brand-cta { min-height: 49px; font-size: 14px; gap: 35px; }
-  .landing-invite { font-size: 11px; margin-top: 11px; }
-  .landing-photo-caption { left: 18px; right: auto; bottom: 18px; padding: 12px 15px; }
-  .landing-photo-caption div > span { display: block; font-size: 10px; margin-top: 3px; }
+  .landing-nav { position: static; font-size: 13px; flex: none; }
+  .landing-nav a { border: 1px solid #edf3ee55; border-radius: 30px; padding-inline: 16px; }
+  .landing-hero { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 32px 0 0; }
+  .landing-hero-copy { text-align: center; width: 100%; max-width: 500px; margin-inline: auto; }
+  .landing-hero-photo { height: auto; aspect-ratio: 1.2; max-height: 450px; border-radius: 24px; object-position: center 44%; }
+  .landing-hero h1 { font-size: clamp(36px, 10.2vw, 53px); line-height: 1.1; margin-bottom: 18px; }
+  .landing-intro { max-width: 440px; margin: 0 auto 23px; font-size: 16px; line-height: 1.65; }
+  .landing-hero .brand-cta { width: 100%; min-height: 54px; font-size: 16px; padding-inline: 22px; }
+  .landing-invite { font-size: 13px; margin-top: 7px; }
   .landing-explain { grid-template-columns: 1fr; gap: 25px; padding: 42px 4px 36px; }
-  .landing-explain h2 { font-size: 37px; line-height: 1.13; }
+  .landing-explain h2 { font-size: clamp(32px, 8.7vw, 37px); line-height: 1.13; }
   .landing-explain .brand-kicker { font-size: 10px; margin-bottom: 16px; }
-  .landing-explain-copy { padding: 0; font-size: 14px; line-height: 1.8; }
+  .landing-explain-copy { padding: 0; font-size: 16px; line-height: 1.7; }
   .landing-explain-copy p + p { margin-top: 17px; }
   .landing-explain-copy .landing-manifesto { font-size: 16px; }
   .landing-how { padding-top: 28px; }
-  .landing-journey { justify-content: flex-start; flex-wrap: wrap; gap: 10px 12px; margin-bottom: 25px; }
-  .landing-journey li { font-size: 12px; gap: 6px; }
-  .journey-number { width: 21px; height: 21px; font-size: 9px; }
-  .journey-arrow { padding-left: 4px; font-size: 16px; }
+  .landing-journey { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 25px; }
+  .landing-journey li { flex-direction: column; text-align: center; font-size: 12px; line-height: 1.4; gap: 8px; }
+  .journey-number { width: 25px; height: 25px; font-size: 10px; }
+  .journey-arrow { display: none; }
   .landing-steps { grid-template-columns: 1fr; gap: 16px; }
   .landing-step { padding: 24px; }
   .step-top { margin-bottom: 18px; }
@@ -295,8 +285,9 @@
   .landing-closing { margin-top: 28px; border-radius: 20px; padding: 35px 20px; }
   .landing-closing h2 { font-size: 35px; }
   .mobile-break { display: block; }
-  .landing-footer { font-size: 11px; padding-block: 23px; margin-top: 22px; }
+  .landing-footer { flex-wrap: wrap; font-size: 12px; padding-block: 23px; margin-top: 22px; }
   .landing-footer > div { gap: 15px; }
+  .landing-footer a { display: inline-flex; align-items: center; min-height: 44px; }
   .auth-header { min-height: 88px; }
   .auth-header .brand-wordmark { font-size: 28px; gap: 7px; }
   .auth-header .brand-wordmark svg { width: 30px; height: 30px; }
@@ -313,19 +304,20 @@
   .auth-card { width: 100%; padding: 29px 24px 32px; border-radius: 0 0 20px 20px; }
   .auth-card h1 { font-size: 32px; }
   .auth-footer { padding-block: 20px; font-size: 11px; }
+  .brand-experience button[role='checkbox'] { min-height: 44px; font-size: 13px; }
+  .brand-experience [role='dialog'] { max-height: calc(100dvh - 32px); }
   .brand-experience [role='dialog'] > div:first-child { padding: 19px 22px; }
   .brand-experience [role='dialog'] > div:first-child h2 { font-size: 21px; }
-  .brand-experience [role='dialog'] > div:last-child { padding: 22px; }
+  .brand-experience [role='dialog'] > div:first-child button { width: 44px; height: 44px; }
+  .brand-experience [role='dialog'] > div:last-child { min-height: 0; padding: 22px 22px max(22px, env(safe-area-inset-bottom)); }
 }
 @media (max-width: 380px) {
-  .landing-hero-copy { padding-inline: 21px; }
-  .landing-hero { min-height: 690px; }
-  .landing-hero h1 { font-size: 34px; }
-  .landing-nav { top: 7px; }
+  .landing-header .brand-wordmark--lg { font-size: 32px; gap: 8px; }
+  .landing-header .brand-wordmark--lg svg { width: 30px; height: 30px; }
   .landing-step { padding: 20px; }
   .sample-card { padding: 15px; }
   .sample-place { padding: 0; }
-  .sample-members { gap: 14px; }
+  .sample-members { gap: clamp(6px, 2.6vw, 14px); }
   .sample-members .sample-portrait { width: 41px; height: 41px; }
   .auth-card { padding-inline: 21px; }
   .auth-header .brand-text-link { font-size: 10px; }

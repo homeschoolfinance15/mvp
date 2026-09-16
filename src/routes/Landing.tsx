@@ -318,28 +318,28 @@ export default function Landing() {
   return (
     <div className="brand-experience landing-page">
       <a className="brand-skip-link" href="#main-content">Skip to content</a>
-      <header className="landing-header brand-container">
-        <a className="landing-brand" href="/" aria-label="Amazing home">
-          <Wordmark size="lg" />
-          <span>One click. Meet your people.</span>
-        </a>
-        <nav className="landing-nav" aria-label="Primary navigation">
-          <Link to="/signin">Sign in</Link>
-          <button type="button" onClick={() => setWaitlistOpen(true)}>Join waitlist <span aria-hidden="true">↗</span></button>
-        </nav>
+      <header className="landing-header">
+        <div className="landing-header-inner brand-container">
+          <a className="landing-brand" href="/" aria-label="Amazing home">
+            <Wordmark size="lg" />
+            <span>One click. Meet your people.</span>
+          </a>
+          <nav className="landing-nav" aria-label="Primary navigation">
+            <Link to="/signin">Sign in</Link>
+            <button type="button" onClick={() => setWaitlistOpen(true)}>Join waitlist <span aria-hidden="true">↗</span></button>
+          </nav>
+        </div>
       </header>
 
       <main id="main-content" className="brand-container">
         <section className="landing-hero" aria-labelledby="hero-title">
-          <img className="landing-hero-photo" src="/brand/gathering.jpg" alt="A small group sharing a lively conversation around a restaurant table" fetchPriority="high" width="1448" height="1086" />
           <div className="landing-hero-copy">
-            <p className="brand-kicker">Good people. Real connections.</p>
             <h1 id="hero-title">The right people.<br />The right place.</h1>
             <p className="landing-intro">Amazing connects you with people through small dinners and gatherings curated around your interests, who you’d like to meet, and places you’ll enjoy.</p>
-            <button className="brand-cta brand-cta--light" type="button" onClick={() => setWaitlistOpen(true)}>Join the waitlist <span aria-hidden="true">→</span></button>
+            <button className="brand-cta" type="button" onClick={() => setWaitlistOpen(true)}>Join the waitlist <span aria-hidden="true">→</span></button>
             <p className="landing-invite">Already invited? <button type="button" onClick={() => setInviteOpen(true)}>Enter your code</button></p>
           </div>
-          <div className="landing-photo-caption"><span className="caption-dot" aria-hidden="true" /><div><strong>Your people. In real life.</strong><span>A good conversation is just the beginning.</span></div></div>
+          <img className="landing-hero-photo" src="/brand/gathering.jpg" alt="A small group sharing a lively conversation around a restaurant table" fetchPriority="high" width="1448" height="1086" />
         </section>
 
         <section className="landing-explain" aria-labelledby="explain-title">
