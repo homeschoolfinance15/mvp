@@ -47,9 +47,17 @@ jobs:
         with:
           deno-version: v2.x
 
+      # 24, and the version is load-bearing rather than incidental:
+      # check-payout-state.mjs imports `src/routes/connector/payouts.ts`
+      # directly, so the runtime has to be able to load a TypeScript file.
+      # Node strips types natively from 22.18 on; on 20 the import dies with
+      # ERR_UNKNOWN_FILE_EXTENSION and takes the whole gate with it. Pinning
+      # 20 here passed locally on 24 and failed on the first push, which is
+      # exactly the class of thing this job exists to catch — so do not lower
+      # it without either rewriting that import or running the script on Deno.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       # Every function, found rather than listed — a named list is the thing
       # that goes stale, which is the same reason the deploy step below stopped
