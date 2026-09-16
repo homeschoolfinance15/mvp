@@ -14,15 +14,38 @@ Hostinger Deployments watches `main`, clones the repo onto the server, runs
 and no GitHub Actions involved.
 
 Migrations are applied by `.github/workflows/deploy-database.yml`, which
-**skips silently** unless `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_REF`
-are set as repository secrets. They are not set today.
+**skips silently** unless both `SUPABASE_ACCESS_TOKEN` and
+`SUPABASE_PROJECT_REF` are set as repository secrets.
 
-So a push to `main` right now would ship a frontend that expects `posts`,
-`events`, `notifications` and nine other tables, against a production database
-that has none of them. Every new page would show "We couldn't load the feed
-just now."
+**The database goes first. Always.** A frontend deployed against a database
+that does not yet have its tables shows "We couldn't load…" on every new page.
 
-**The database goes first. Always.**
+### What is actually set, as of 16 September 2026
+
+Run `gh secret list` rather than trusting this list — it went stale once
+already, and was quoted back as current state an hour after it stopped being
+true.
+
+| Secret | Set? | What it gates |
+| --- | --- | --- |
+| `SUPABASE_PROJECT_REF` | yes | the database workflow |
+| `SUPABASE_DB_PASSWORD` | yes | the database workflow |
+| `VITE_SUPABASE_URL` | yes | the frontend build |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | yes | the frontend build |
+| `MAILER_SECRET` | yes | the five-minute email sweep |
+| `SUPABASE_ACCESS_TOKEN` | **no** | the database workflow |
+
+So `deploy-database.yml` **still skips**, because it needs both and the access
+token is missing. That is survivable but it is not automatic: the event
+platform's 27 migrations and 6 edge functions were applied by hand with the
+CLI, and anything added later has to be too, until that token is set.
+
+`MAILER_SECRET` is the one people conflate with `RESEND_API_KEY`. They are
+different jobs: Resend's key lets the function *send* mail and lives in
+Supabase; `MAILER_SECRET` is how the scheduled job *wakes the function up* and
+has to be in **both** places. Missing from GitHub, the workflow sends an empty
+header, the function returns 401, and mail queues correctly and is never
+picked up — a failure whose only symptom is a red cron job nobody reads.
 
 ## Deploy order
 
@@ -189,6 +212,30 @@ re-run.
 **The site shows "We couldn't load the feed just now."** The frontend is ahead
 of the database. Step 3 did not run or did not finish. This is the trap at the
 top of this document.
+
+**No automatic emails are going out.** Confirmations, reminders, cancellations,
+refund updates and feedback requests all queue into `event_messages` and are
+sent by one sweep — `.github/workflows/event-mailer.yml`, every five minutes.
+Check in this order:
+
+1. `MAILER_SECRET` set in **both** GitHub secrets and Supabase, and identical.
+2. The workflow's last run. A 401 means the secret differs or is missing; the
+   mail is queued and undamaged, so fixing the secret sends it on the next tick.
+3. `event-mailer` deployed with JWT verification off. It is declared in
+   `supabase/config.toml`, so a normal deploy carries it — but a deploy that
+   overrides that setting puts the platform's auth wall in front of a function
+   whose own gate is the shared secret, and every sweep 401s before reaching it.
+
+Nothing is lost while this is broken. Rows sit in `event_messages` as
+`scheduled` and go out when the sweep next runs.
+
+**Two retention jobs exist and neither is scheduled.** `purge_activity_log()`
+drops audit rows past 548 days; `purge_expired_erasures()` hard-deletes the
+financial records of closed accounts once their statutory retention expires.
+Both are written, both are admin-gated, and **neither runs on its own** — so
+the database currently retains past the policy it states, which is its own
+problem under GDPR Article 5(1)(e) rather than a missing nicety. A weekly
+scheduled job calling both closes it.
 
 **A new member cannot redeem their code.** "Confirm email" is on in Supabase
 Auth. See step 1.
