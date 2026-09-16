@@ -966,6 +966,48 @@ async function main() {
     saw(auditSurvives),
   )
 
+  // GDPR Art. 17, the applicant case. No orders, no exemption, nothing kept —
+  // so the whole payload goes rather than being pseudonymised. Phone is the
+  // field profiles never had, so it has never been exercised until now.
+  const applicantEmail = `${TAG}-applicant@events-grid.invalid`
+  const applicantPhone = '+44 7700 900461'
+  const applicantLinkedIn = `https://www.linkedin.com/in/${TAG}-applicant`
+  await insertMinimal(null, 'waitlist_entries', {
+    full_name: 'Grid Applicant',
+    email: applicantEmail,
+    phone: applicantPhone,
+    linkedin_url: applicantLinkedIn,
+  })
+  const entryRow = await get(
+    admin.token,
+    `waitlist_entries?email=eq.${encodeURIComponent(applicantEmail)}&select=id`,
+  )
+  const removed = await rpc(admin.token, 'delete_waitlist_entry', {
+    p_entry_id: entryRow.body?.[0]?.id,
+  })
+  check('an admin can remove a waitlist entry', removed.ok, `${removed.status}`)
+
+  const applicantSweep = await get(
+    admin.token,
+    'activity_log?entity=eq.waitlist_entries&select=detail,action&order=created_at.desc&limit=200',
+  )
+  const applicantDump = JSON.stringify(applicantSweep.body ?? [])
+  check(
+    'a withdrawn applicant leaves no email, phone or profile link behind (Art. 17)',
+    applicantSweep.ok &&
+      !applicantDump.includes(applicantEmail) &&
+      !applicantDump.includes(applicantPhone) &&
+      !applicantDump.includes(applicantLinkedIn),
+    applicantSweep.ok ? `scanned ${applicantSweep.body?.length} rows` : `${applicantSweep.status}`,
+  )
+
+  check(
+    'but the removal itself is still on the record',
+    Array.isArray(applicantSweep.body) &&
+      applicantSweep.body.some((r) => r.action === 'waitlist_entries.delete'),
+    saw(applicantSweep),
+  )
+
   const hostRegisterPeek = await get(host.token, 'data_subject_erasures?select=subject_id')
   check(
     'and the register is readable by administrators only',
