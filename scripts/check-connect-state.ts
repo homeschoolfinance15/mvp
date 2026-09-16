@@ -99,6 +99,13 @@ const checkout = await Deno.readTextFile('supabase/functions/stripe-checkout/ind
 const sources = {
   'stripe-webhook': await Deno.readTextFile('supabase/functions/stripe-webhook/index.ts'),
   'event-refund': await Deno.readTextFile('supabase/functions/event-refund/index.ts'),
+  // The two halves of the confirmation path, which used to be one file. Both
+  // are in `sources` so every rule below that sweeps `Object.values(sources)`
+  // covers them without being told about them individually — a rule that names
+  // its files is a rule that stops applying the moment code moves, which is
+  // exactly what moving the confirmation out of stripe-webhook just did.
+  'order-state': await Deno.readTextFile('supabase/functions/_shared/order-state.ts'),
+  'stripe-reconcile': await Deno.readTextFile('supabase/functions/stripe-reconcile/index.ts'),
 }
 
 function statusMap(source: string, name: string): Record<string, string> {
@@ -226,9 +233,88 @@ check(
 
 /* -- BUY-10: the ticket trigger is the only issuer -------------------------- */
 
+// Asserted over every function, not over stripe-webhook alone. When the
+// confirmation moved into _shared/order-state.ts this rule went on passing
+// while no longer covering the code that confirms anything — a rule naming one
+// file cannot notice that the thing it guards has moved out of it.
 check(
-  'stripe-webhook does not insert event_tickets — issue_ticket_on_confirm does',
-  !/from\('event_tickets'\)/.test(sources['stripe-webhook']),
+  'nothing but issue_ticket_on_confirm inserts event_tickets',
+  !Object.values(sources).some((s) => /from\('event_tickets'\)/.test(s)) &&
+    !/from\('event_tickets'\)/.test(checkout),
+)
+
+/* -- BUY-03/§9: one writer of `paid`, however many callers there are -------- */
+//
+// stripe-reconcile is the second thing that can confirm a payment: the sweep
+// that asks Stripe about orders whose webhook never arrived (PAYMENTS.md §9).
+// Two callers is safe, and two *implementations* would not be — the second one
+// to be edited would be the one nobody watches, and the failure it produces is
+// a double-issued ticket against real money.
+//
+// So the rule is not "only stripe-webhook writes paid". It is: the transition
+// exists once, it is claimed conditionally, and no caller reimplements it.
+
+const orderState = sources['order-state']
+const reconcile = sources['stripe-reconcile']
+
+check(
+  "the pending -> paid transition exists in exactly one place",
+  /status: 'paid'/.test(orderState) &&
+    !/status: 'paid'/.test(sources['stripe-webhook']) &&
+    !/status: 'paid'/.test(reconcile) &&
+    !/status: 'paid'/.test(checkout),
+)
+// Scoped to each transition's own body. A whole-file regex passes as long as
+// *some* function still claims conditionally — which is how the first version
+// of this check went green against a confirmPaidOrder whose guard had been
+// deleted, matching failPendingOrder's guard instead.
+function stateFn(name: string): string {
+  const at = orderState.indexOf(`export async function ${name}(`)
+  if (at < 0) throw new Error(`${name} not found — has it been renamed?`)
+  const next = orderState.indexOf('\nexport async function ', at + 1)
+  return orderState.slice(at, next < 0 ? orderState.length : next)
+}
+
+const confirmBody = stateFn('confirmPaidOrder')
+const failBody = stateFn('failPendingOrder')
+
+check(
+  'confirming claims the row conditionally, so a replay wins nothing',
+  /status: 'paid'[\s\S]*?\.eq\('status', 'pending'\)[\s\S]*?\.select\('id'\)/.test(confirmBody),
+)
+check(
+  'failing an order is claimed the same way',
+  /status: 'failed'[\s\S]*?\.eq\('status', 'pending'\)[\s\S]*?\.select\('id'\)/.test(failBody),
+)
+// The confirmation must stop when it did not win the claim. Without this the
+// guard above is decorative: the update changes nothing on a replay, and the
+// code carries on to confirm the place and queue a second email anyway.
+check(
+  'a confirmation that loses the claim stops before the registration',
+  /if \(!claimed\) return/.test(confirmBody),
+)
+check(
+  'both callers go through the shared transition rather than their own',
+  /confirmPaidOrder\(/.test(sources['stripe-webhook']) && /confirmPaidOrder\(/.test(reconcile),
+)
+
+/* -- §7.2: the sweep asks Stripe on the account that took the money --------- */
+
+check(
+  "stripe-reconcile reads each session on the order's own account",
+  /options\.stripeAccount = order\.stripe_account_id/.test(reconcile),
+)
+check(
+  'stripe-reconcile only touches orders that reached Stripe',
+  /\.not\('stripe_checkout_session_id', 'is', null\)/.test(reconcile) &&
+    /\.eq\('status', 'pending'\)/.test(reconcile),
+)
+// `paid` is the only Stripe answer that confirms. An order whose session is
+// merely `complete` may still be clearing an asynchronous payment method, and
+// treating that as paid would issue a ticket for money that never arrives.
+check(
+  "stripe-reconcile confirms on payment_status 'paid', not on session status",
+  /payment_status === 'paid'/.test(reconcile),
 )
 
 /* -- BUY-01: onboarding is gated server-side -------------------------------- */

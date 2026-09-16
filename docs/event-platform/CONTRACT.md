@@ -345,10 +345,19 @@ to existing bookings and payment support").
 - `supabase/functions/stripe-checkout` — creates a `pending` registration
   (holding a place, `hold_expires_at = now() + 20 min`) and a Checkout
   session. Returns the URL.
-- `supabase/functions/stripe-webhook` — the **only** thing that confirms an
-  order. `checkout.session.completed` → order `paid`, registration
-  `confirmed`, ticket issued, confirmation message queued. Signature verified
-  with `STRIPE_WEBHOOK_SECRET`. Idempotent on `stripe_checkout_session_id`.
+- `supabase/functions/stripe-webhook` — what normally confirms an order.
+  `checkout.session.completed` → order `paid`, registration `confirmed`,
+  ticket issued, confirmation message queued. Signature verified with
+  `STRIPE_WEBHOOK_SECRET`. Idempotent on `stripe_checkout_session_id`.
+- `supabase/functions/stripe-reconcile` — the five-minute sweep that confirms
+  an order whose delivery never arrived, by asking Stripe about the session
+  directly (PAYMENTS.md §9). Scheduled by `pg_cron`.
+- `supabase/functions/_shared/order-state.ts` — the `pending -> paid` and
+  `pending -> failed` transitions themselves, called by both of the above.
+  **One implementation, claimed conditionally**: every transition is guarded by
+  `.eq('status', 'pending')`, so two callers racing over one order produce one
+  confirmation, one ticket and one email. The rule is not "one function writes
+  `paid`" — it is "the transition exists once and exactly one caller wins it".
 - `supabase/functions/event-refund` — authorised refunds, writes
   `event_refunds`, queues the refund-status message.
 - BUY-13: platform events use Amazing's own account. BUY-14: a connector

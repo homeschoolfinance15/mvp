@@ -193,7 +193,10 @@ ${JSON.stringify(candidates, null, 2)}`,
         // per cycle. Raise it if the reasons start reading as generic.
         output_config: {
           effort: 'low',
-          format: zodOutputFormat(Recommendations, 'recommendations'),
+          // One argument. The schema carries its own name; the second
+          // positional argument this used to pass is not in
+          // @anthropic-ai/sdk 0.124.0's signature and is a type error.
+          format: zodOutputFormat(Recommendations),
         },
         messages: [
           {

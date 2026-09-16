@@ -155,7 +155,7 @@ Same page, **OAuth settings** section. There is a field labelled
 
 | Secret | Where it comes from | Used by | Required |
 | --- | --- | --- | --- |
-| `STRIPE_SECRET_KEY` | §2.4, `sk_…` | all four functions | for paid events |
+| `STRIPE_SECRET_KEY` | §2.4, `sk_…` | all five functions | for paid events |
 | `STRIPE_WEBHOOK_SECRET` | §2.5, `whsec_…` | `stripe-webhook` | for paid events |
 | `STRIPE_CONNECT_CLIENT_ID` | §2.3, `ca_…` | `stripe-connect` | for connector events |
 | `SITE_URL` | your own domain | `stripe-connect`, `stripe-checkout` | optional, defaults `https://goamazing.ai` |
@@ -192,6 +192,10 @@ supabase secrets list
 supabase functions deploy stripe-connect
 supabase functions deploy stripe-checkout
 supabase functions deploy event-refund
+
+# The reconciliation sweep (§9). pg_cron calls it with the service-role key,
+# which is a valid project JWT, so verify_jwt stays on and no flag is needed.
+supabase functions deploy stripe-reconcile
 
 # Stripe signs with its own stripe-signature header and carries no Supabase
 # JWT, so JWT verification must be off or every delivery 401s. The signature
@@ -767,12 +771,39 @@ one ticket.
 
 ### What reconciles if Stripe exhausts its retries
 
-**Today: nothing automatic, and that is the honest answer.** After three days
-the delivery is gone and the order sits `pending` for ever. What exists is:
+**`stripe-reconcile`, every five minutes.** The sweep takes `event_orders` that
+are `pending`, are older than their hold, and carry a
+`stripe_checkout_session_id`; re-reads each session on its own
+`stripe_account_id`; confirms the ones Stripe says are `paid` and fails the ones
+Stripe says expired. It is the question `stripe-checkout` asks about one order
+when an attendee returns to a lapsed hold, asked about all of them without
+waiting for anybody to return.
+
+It is **not** a second writer of `paid`. Both transitions live in
+`supabase/functions/_shared/order-state.ts` and stripe-webhook calls the same
+two functions. Each claims the row with `.eq('status', 'pending')`, so the sweep
+and a late delivery racing over one order produce one confirmation, one ticket
+and one email — whichever loses selects no row and stops. Two callers is safe;
+two *implementations* would not be, which is why the logic moved out of
+stripe-webhook rather than being copied.
+
+What it deliberately leaves alone:
+
+- **orders with no session id.** `stripe-checkout` writes the session id in a
+  second statement after `sessions.create` returns, so a missing id can mean
+  the session exists and the write was interrupted. Failing those blind would
+  fail an order somebody has paid for.
+- **orders still inside the twenty-minute hold** — somebody's live checkout.
+- **sessions Stripe still calls `open`**, or `complete` with an asynchronous
+  method still clearing. Nothing is decided until Stripe has decided it.
+
+A confirmation arriving from the sweep rather than from a webhook means
+deliveries are being lost, so it logs at error level with the session id, the
+order id and the account. The backstops below all still apply and are what
+covers an order the sweep will not touch:
 
 - the `payment_confirming` refusal above, so the money is never taken twice and
   the place is never quietly re-sold;
-- a log line naming the session, the registration and the account;
 - Stripe's own **failed-delivery list** on the webhook endpoint, which is where
   a paid session naming one of our orders ends up when the order cannot be
   found — a 500 keeps it there rather than letting it scroll past in a log;
@@ -780,23 +811,32 @@ the delivery is gone and the order sits `pending` for ever. What exists is:
   the whole confirmation path again correctly, because every handler is
   idempotent.
 
-So it is recoverable by a human with the Stripe dashboard, and it is not
-untraceable — but nobody is currently *told*, and that is the gap.
+### How it is scheduled, and when it is not
 
-### The recommendation
+`pg_cron` + `pg_net`, from
+`supabase/migrations/20260916000032_reconcile_pending_payments.sql` — the same
+mechanism and the same two database settings the `event-mailer` schedule
+already needs:
 
-A reconciliation sweep is the missing piece and it is small: every few minutes,
-take `event_orders` that are `pending`, older than their hold, and hold a
-`stripe_checkout_session_id`; re-read each session on its own
-`stripe_account_id`; confirm the ones Stripe says are paid and fail the rest.
-That is the same logic `stripe-checkout` now runs on one order, run over all of
-them without waiting for the attendee to come back.
+```sql
+alter database postgres set app.settings.service_role_key = '...';
+alter database postgres set app.settings.functions_url = 'https://<ref>.supabase.co/functions/v1';
+```
 
-It wants the `pg_cron` / `pg_net` schedule that `event-mailer` already uses
-(§6 of `CONTRACT.md`), so it belongs with whoever owns that scheduler rather
-than being a fourth thing this workstream bolts on. **I have not built it, and
-until it exists an exhausted retry needs a human.** Flagged to the primary
-agent.
+Both extensions are absent on a local `supabase start` and on free projects, so
+the migration is wrapped: without them it logs a notice and applies cleanly.
+**Unlike the mailer there is no GitHub Actions fallback** — if the schedule
+cannot be created the sweep does not run, and the position is exactly what this
+section described before it existed: recoverable by a human from Stripe's
+failed-delivery list. Check `cron.job` for a row named `stripe-reconcile` to
+know which of the two you have.
+
+`verify_jwt` is left **on** for this function, unlike `event-mailer` and
+`stripe-webhook`. pg_cron calls it with the service-role key, which is itself a
+valid project JWT, so the platform's own wall stands in front of it and there
+is no new shared secret to set or rotate. The function then checks that the
+bearer really is the service role — or that the caller is an admin, for a sweep
+run by hand — because the anon key is also a valid JWT.
 
 ---
 
@@ -808,7 +848,7 @@ here, plus the money-status rules that are pure data:
 
 ```bash
 deno run --allow-read scripts/check-connect-state.ts
-# 18/18 checks passed
+# 46/46 checks passed
 ```
 
 It asserts that a `state` re-aimed at another connector is refused, that one
@@ -818,8 +858,26 @@ Stripe's `succeeded` and nothing else, that `event-refund` cannot write
 `completed` at all, that no function sets `application_fee_amount`, and that
 `event-refund` reads the Stripe account off the order rather than the event.
 
-It reads the status maps out of the function sources rather than keeping its
-own copy, so a map edited in production is an edit this check sees.
+Since the reconciliation sweep arrived it also asserts the shape that keeps two
+callers safe: that the `pending -> paid` transition exists in exactly one
+place, that both `confirmPaidOrder` and `failPendingOrder` claim their row
+conditionally, that a confirmation which loses the claim stops before touching
+the registration, that both stripe-webhook and stripe-reconcile go through the
+shared functions rather than their own, and that the sweep reads each session
+on the order's own Stripe account.
+
+Those assertions are scoped to each function's body rather than run over the
+whole file, because a whole-file regex passes as long as *some* function still
+looks right — which is how the first version of the conditional-claim check
+went green against a `confirmPaidOrder` whose guard had been deleted, matching
+`failPendingOrder`'s guard instead. Each one was confirmed to fail against a
+deliberately broken copy before being kept.
+
+It reads the status maps and the transition bodies out of the function sources
+rather than keeping its own copy, so an edit in production is an edit this
+check sees. It runs in CI on every push that touches `supabase/` or `scripts/`
+— see `.github/workflows/deploy-database.yml`, where nothing deploys until it
+and `deno check` over all ten functions have passed.
 
 ---
 
@@ -847,6 +905,8 @@ no Stripe API call in this codebase has been made.
 | Delayed payment methods | `checkout.session.async_payment_*` are handled and subscribed, but unreachable until such a method is enabled in the dashboard. |
 | The QLT-09 missing-order path | A paid session naming an order that is not there raises a 500 so Stripe keeps it in its failed-delivery list. Provable only by deleting an order mid-flight against a real payment. |
 | The lapsed-hold paid-session guard | The extra `sessions.retrieve` on the expired-hold path has never run against a real session. It is the guard that stops a double charge after an undelivered webhook. |
+| The reconciliation sweep confirming anything | `stripe-reconcile` has never read a real session. That two callers of `confirmPaidOrder` produce one ticket is asserted statically and rests on Postgres's conditional update, which is sound locally; the sweep actually finding a paid session Stripe never told us about is not reproducible without a deliberately broken endpoint and a real payment. §6.4 is where to add it. |
+| That the sweep's schedule exists at all | `pg_cron` and `pg_net` are skipped on local and free projects, and the migration logs a notice rather than failing. Whether the job was created is a fact about the deployed project — `select * from cron.job where jobname = 'stripe-reconcile'`. |
 | Stripe's actual retry schedule | Three days is Stripe's documented live-mode behaviour, not something observed here. |
 | Currency behaviour beyond `gbp` | Only `gbp` has been reasoned about. Zero-decimal currencies (`jpy`) would need the minor-unit assumption re-checked before use. |
 

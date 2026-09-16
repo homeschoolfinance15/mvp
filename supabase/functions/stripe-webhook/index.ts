@@ -69,18 +69,13 @@
 
 import Stripe from 'npm:stripe@18'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
-
-/**
- * The service-role client's type, taken from an actual call rather than from
- * `ReturnType<typeof createClient>`. With no generated `Database` type,
- * `createClient`'s schema generics fall back to their *constraints* when read
- * off the bare signature, which resolves to `never` and makes every real
- * client unassignable to it. Inferring from a call that looks like the calls we
- * make gets the type we actually hold. `invite-email` and `waitlist-email`
- * dodge this by having no helper that takes a client; these functions do.
- */
-const clientOfOurs = (url: string, key: string) => createClient(url, key)
-type Db = ReturnType<typeof clientOfOurs>
+import {
+  confirmPaidOrder,
+  failPendingOrder,
+  queueMessage,
+  type Db,
+  type OrderRow,
+} from '../_shared/order-state.ts'
 
 /**
  * BUY-08. The one place a Stripe refund status becomes ours. `completed` is
@@ -248,73 +243,14 @@ async function onCompleted(
     return
   }
 
-  // The guard. Exactly one delivery moves pending -> paid; every replay updates
-  // nothing, selects nothing, and stops here before issuing a second ticket or
-  // queueing a second email.
-  const { data: claimed, error } = await db
-    .from('event_orders')
-    .update({
-      status: 'paid',
-      paid_at: new Date().toISOString(),
-      stripe_checkout_session_id: session.id,
-      stripe_payment_intent_id: intentId(session.payment_intent),
-    })
-    .eq('id', order.id)
-    .eq('status', 'pending')
-    .select('id')
-    .maybeSingle()
-  if (error) throw new Error(`could not mark order ${order.id} paid: ${error.message}`)
-  if (!claimed) return
-
-  if (!order.registration_id) return
-
-  // BUY-06. The hold becomes a place. hold_expires_at is cleared so no sweeper
-  // can later reclaim a seat somebody has paid for.
-  const { data: confirmed, error: confirmError } = await db
-    .from('event_registrations')
-    .update({
-      status: 'confirmed',
-      confirmed_at: new Date().toISOString(),
-      hold_expires_at: null,
-    })
-    .eq('id', order.registration_id)
-    .in('status', ['pending', 'confirmed'])
-    .select('id, event_id, profile_id')
-    .maybeSingle()
-
-  if (confirmError || !confirmed) {
-    // The money is real and stays recorded as paid — we do not un-say a
-    // payment that happened. But the place could not be given, so this is a
-    // refund somebody has to make, and it goes into the same queue an admin
-    // already watches for stuck refunds (QLT-09, ORG-11).
-    await db.from('event_refunds').insert({
-      order_id: order.id,
-      amount_cents: order.amount_cents,
-      status: 'needs_attention',
-      reason: 'Paid, but the place could not be confirmed',
-      failure_message:
-        confirmError?.message ??
-        'The registration was no longer holdable when payment completed. ' +
-          'Refund this order or find the attendee a place.',
-    })
-    return
-  }
-
-  // BUY-10/11. The ticket is not issued here. `issue_ticket_on_confirm()`
-  // fires on the registration landing at `confirmed` and writes it, with an
-  // unguessable code, in the same transaction as the confirmation (QLT-05).
-  // One writer, and the unique registration_id means the trigger cannot be
-  // made to issue two however many times this delivery arrives.
-
-  // EML-01. Queued, not sent — event-mailer is the only thing that sends, and
-  // it re-checks eligibility at send time.
-  // ponytail: one message, the confirmation, which carries the ticket. Stripe
-  // already emails its own receipt; a second `payment` message would be us
-  // telling somebody twice that they paid.
-  await queueMessage(String(confirmed.event_id), String(confirmed.profile_id), {
-    kind: 'confirmation',
-    subject: 'Your place is confirmed',
-    body: 'Your payment went through and your ticket is ready.',
+  // The transition itself lives in _shared/order-state.ts, because this is no
+  // longer the only thing that can cause it — stripe-reconcile runs the same
+  // confirmation for an order whose delivery never arrived (PAYMENTS.md §9).
+  // The guard is inside: pending -> paid is claimed conditionally, so a replay
+  // of this delivery and a concurrent sweep cannot both issue a ticket.
+  await confirmPaidOrder(db, order, {
+    sessionId: session.id,
+    paymentIntentId: intentId(session.payment_intent),
   })
 }
 
@@ -335,23 +271,8 @@ async function onNotPaid(
   const order = await findOrder(db, account, ref)
   if (!order) return
 
-  // Only a pending order can fail. One that is already paid is left alone —
-  // a late `payment_failed` for a retried card must not undo a real payment.
-  const { data: claimed, error } = await db
-    .from('event_orders')
-    .update({ status: 'failed' })
-    .eq('id', order.id)
-    .eq('status', 'pending')
-    .select('id')
-    .maybeSingle()
-  if (error) throw new Error(`could not mark order ${order.id} failed: ${error.message}`)
-  if (!claimed || !order.registration_id) return
-
-  await db
-    .from('event_registrations')
-    .update({ status: 'expired', hold_expires_at: null })
-    .eq('id', order.registration_id)
-    .eq('status', 'pending')
+  // Shared with stripe-reconcile for the same reason as the confirmation above.
+  await failPendingOrder(db, order)
 }
 
 /* -------------------------------------------------------------------------- */
@@ -539,13 +460,6 @@ async function onAccountUpdated(db: Db, account: Stripe.Account): Promise<void> 
 /* Shared                                                                      */
 /* -------------------------------------------------------------------------- */
 
-interface OrderRow {
-  id: string
-  registration_id: string | null
-  amount_cents: number
-  status: string
-}
-
 async function findOrder(
   db: Db,
   account: string | null,
@@ -574,49 +488,6 @@ async function findOrder(
     if (data) return data as OrderRow
   }
   return null
-}
-
-/**
- * EML-05/06. event-email is the queue's front door: it resolves the audience,
- * writes the event_messages row and writes one event_message_recipients row
- * per person. For `confirmation`, `payment` and `refund` that audience is the
- * single named person, which is exactly what a per-person message needs — so
- * this asks it rather than re-implementing the queue with a second set of
- * rules that could drift from the first. It only accepts these three kinds
- * from the service role, because money is only ever reported by the thing
- * that moved it.
- *
- * Best effort on purpose. The payment stands whatever the mail queue does; a
- * message that could not be queued is worth a log line, never worth telling
- * Stripe to redeliver a payment that already succeeded.
- */
-async function queueMessage(
-  eventId: string,
-  profileId: string,
-  copy: { kind: string; subject: string; body: string },
-): Promise<void> {
-  const url = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '')
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  try {
-    const response = await fetch(`${url}/functions/v1/event-email`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        kind: copy.kind,
-        event_id: eventId,
-        profile_id: profileId,
-        subject: copy.subject,
-        body: copy.body,
-        send_now: true,
-      }),
-    })
-    if (!response.ok) {
-      console.error(`stripe-webhook: could not queue ${copy.kind}: ${await response.text()}`)
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    console.error(`stripe-webhook: could not queue ${copy.kind}: ${message}`)
-  }
 }
 
 function intentId(value: string | Stripe.PaymentIntent | null | undefined): string | null {

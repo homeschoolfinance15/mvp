@@ -510,6 +510,31 @@ Deno.serve(async (request: Request) => {
         // not called on any path out of this branch.
         const now = await capacityState(db, String(event.id))
         if (now && now.state !== 'open') return json(refusal(now.state), 409)
+
+        // The trigger refuses on two different questions and only one of them
+        // is about the event. It also caps each ticket option
+        // (20260916000021:133), and that refusal arrives here looking
+        // identical — a raised exception, not a 23505. Asking only the event
+        // meant the common case answered "still open", fell through, and
+        // returned a 500 reading "Could not hold a place for you." for what is
+        // an ordinary, expected sell-out with a perfectly good sentence
+        // available (QLT-02: a refusal has to come with somewhere to go).
+        //
+        // Re-read rather than match the message, for the reason above: the
+        // wording is the schema's to change.
+        const { data: left } = await db
+          .from('ticket_type_availability')
+          .select('remaining')
+          .eq('ticket_type_id', ticket.id)
+          .maybeSingle()
+        const remaining = (left as { remaining: number | null } | null)?.remaining
+        if (remaining !== null && remaining !== undefined && remaining <= 0) {
+          return json(
+            { error: 'That ticket is sold out.', reason: 'ticket_type_sold_out' },
+            409,
+          )
+        }
+
         return json({ error: 'Could not hold a place for you.' }, 500)
       }
     } else {
