@@ -121,6 +121,22 @@ export default function Checkout() {
 
   const paidUp = order?.status === 'paid' || registration?.status === 'confirmed'
 
+  // ORG-04. `remaining` is composed by `attachAvailability`; `quantity` is the
+  // organiser's cap and never moves, so it could never answer this.
+  //
+  // Only bars somebody who does not already hold the place. A pending
+  // registration is a live twenty-minute hold, and the count behind
+  // `remaining` includes it — so the person who took the last one would
+  // otherwise be told it had sold out while they were paying for it, and
+  // BUY-14's "preserve access to existing bookings" would break on the way.
+  const holdsAPlace = paidUp || registration?.status === 'pending'
+  const chosenSoldOut =
+    !holdsAPlace &&
+    chosen !== null &&
+    chosen.remaining !== null &&
+    chosen.remaining !== undefined &&
+    chosen.remaining <= 0
+
   /*
    * BUY-04. A payment in flight: they have been to Stripe and we do not yet
    * know the answer. The signal is the return itself — stripe-checkout sends
@@ -150,10 +166,27 @@ export default function Checkout() {
       return
     }
     setWaitingSince((since) => since ?? Date.now())
-    const slow = waitingSince !== null && Date.now() - waitingSince > PATIENCE_MS
-    const timer = setInterval(() => void reload(true), slow ? 10_000 : 2500)
-    return () => clearInterval(timer)
-  }, [processing, waitingSince, reload])
+
+    // The slow-down has to be decided on each tick, not once when the effect
+    // runs. It used to be computed from `waitingSince`, which is set to
+    // `Date.now()` by the line above and then never changes — so on the one
+    // re-run that setting it caused, the elapsed time was about zero, `slow`
+    // latched false, and the 10-second branch was unreachable for as long as
+    // the tab stayed open. A late webhook meant a database round trip every
+    // 2.5 seconds indefinitely, while the comment above promised otherwise.
+    //
+    // A self-rescheduling timeout rather than setInterval, because an interval
+    // cannot change its own delay, and re-creating one on every tick would
+    // mean tearing the effect down and rebuilding it once a second.
+    const started = Date.now()
+    let timer = 0
+    const tick = () => {
+      void reload(true)
+      timer = window.setTimeout(tick, Date.now() - started > PATIENCE_MS ? 10_000 : 2500)
+    }
+    timer = window.setTimeout(tick, 2500)
+    return () => window.clearTimeout(timer)
+  }, [processing, reload])
 
   if (authLoading || loading) {
     return (
@@ -380,6 +413,32 @@ export default function Checkout() {
           />
         ) : processing ? (
           <Processing since={waitingSince} now={now} />
+        ) : chosenSoldOut ? (
+          /* ORG-04. The event can be open while this one option has gone, and
+             this screen is reachable without passing the event page that would
+             have said so — a bookmark, a remembered ACC-07 choice, the back
+             button from Stripe, or `?ticket=` typed by hand. It used to gate
+             on `capacity_state` alone, which is the *event's* answer, so an
+             exhausted option still rendered an enabled "Pay £45" and the
+             refusal arrived from the capacity trigger as a 500. */
+          <Panel className="mt-6 px-6 py-7 sm:px-8">
+            <h2 className="text-sm font-medium text-fg">This ticket has sold out</h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              The last one went before you got here. You have not been charged and no place has
+              been held for you.{' '}
+              {types.length > 1
+                ? 'Other tickets for this event may still be available.'
+                : 'Places sometimes reopen when somebody cancels.'}
+            </p>
+            <div className="mt-6">
+              <Link
+                to={`/e/${encodeURIComponent(event.slug)}`}
+                className="text-sm text-fg underline-offset-4 hover:underline"
+              >
+                Back to the event
+              </Link>
+            </div>
+          </Panel>
         ) : !canRegister(event.capacity_state) ? (
           /* BUY-05 and ORG-03A. Arriving here after it filled up, closed or
              was called off. Each says which, and each says nothing was taken. */

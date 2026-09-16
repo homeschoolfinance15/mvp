@@ -294,6 +294,13 @@ export interface Notification {
    * the directory, so their name is read off the waitlist row itself.
    */
   waitlist_entries?: { full_name: string } | null
+  /**
+   * Embedded by the bell's query so an invitation can open the event itself
+   * rather than a list the invited person has no row on. Null when the event
+   * is not visible to this reader — RLS applies to the embed — in which case
+   * the bell falls back to /events rather than building a broken link.
+   */
+  event?: { slug: string } | null
   read_at: string | null
   created_at: string
 }

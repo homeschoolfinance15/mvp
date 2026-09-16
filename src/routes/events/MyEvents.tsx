@@ -417,11 +417,11 @@ function BookingCard({
         )}
       </div>
 
-      {error && (
-        <div className="mt-5">
-          <Notice tone="error">{error}</Notice>
-        </div>
-      )}
+      {/* A failed cancellation used to report itself twice: here, on the card,
+          and again inside ConfirmModal, which `cancel()` leaves open on
+          failure. Both were on screen at once, one behind the other. The modal
+          is where the action was taken and where the person is looking, so it
+          keeps the message and this copy is gone. */}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {/* BUY-10. A live ticket, and nothing that looks like one when it is

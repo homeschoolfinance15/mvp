@@ -409,6 +409,7 @@ function PersonDetail({
               rows={3}
               value={text}
               onChange={(e) => setText(e.target.value)}
+              aria-label={`Private note about ${person.profile.full_name}`}
               placeholder={`What should you remember about ${person.profile.full_name.split(' ')[0]}?`}
             />
 

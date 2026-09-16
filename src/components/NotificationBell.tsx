@@ -83,7 +83,21 @@ function destination(notification: Notification): string {
     // carries its id — so send them to that event rather than to a list they
     // then have to search. A notification whose whole value is *which* event
     // is close to useless if pressing it lands you on all of them.
+    // An invitation is the one of the three where /events/mine is certainly
+    // empty: that tab lists `event_registrations`, and being invited creates an
+    // `event_invites` row and no registration. The guest pressed a notification
+    // that says somebody invited them to an event and arrived at a list with
+    // nothing on it and no way to find out which event was meant — the precise
+    // failure the paragraph above describes. The event's own page is where an
+    // invitation can actually be accepted.
     case 'event_invited':
+      return FEATURES.events && notification.event?.slug
+        ? `/e/${notification.event.slug}`
+        : FEATURES.events
+          ? '/events'
+          : ''
+    // These two keep /events/mine: the person does hold a registration, and
+    // what they need is their place and their ticket, not the public page.
     case 'event_updated':
     case 'event_cancelled':
       return FEATURES.events && notification.event_id
@@ -148,7 +162,7 @@ export function NotificationBell() {
         // name comes off the waitlist row the notification points at. RLS
         // still applies to the embed: a non-admin gets null, not a name.
         .from('notifications')
-        .select('*, waitlist_entries(full_name)')
+        .select('*, waitlist_entries(full_name), event:events(slug)')
         .order('created_at', { ascending: false })
         .limit(PAGE),
       supabase.from('member_directory').select('*'),

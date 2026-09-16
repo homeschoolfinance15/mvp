@@ -21,6 +21,7 @@ import {
   type Answer,
   type Draft,
 } from './feedback/FeedbackForms'
+import { EventShell } from './shared'
 
 /**
  * Feedback, after an event.
@@ -73,14 +74,6 @@ const OUTCOME_TONE: Record<FeedbackOutcome, string> = {
   did_not_meet: 'text-muted',
   submitted: 'text-positive',
 }
-
-/**
- * FDB-03. App sends a signed-out visitor to /signin, which then sends them
- * to their dashboard — and the link from the post-event email is lost on the
- * way. Leaving the destination here lets sign-in put them back where they
- * were trying to go.
- */
-export const AFTER_SIGNIN_KEY = 'amazing:after-signin'
 
 /**
  * QLT-03, FDB-07. Drafts survive the tab, not just the component.
@@ -493,14 +486,14 @@ export default function Feedback() {
     )
   }
 
-  if (!session) {
-    // FDB-03. Remember where they were going before handing them to sign-in.
-    try {
-      sessionStorage.setItem(AFTER_SIGNIN_KEY, `/events/feedback/${slug}`)
-    } catch {
-      // Private browsing. The prompt below still gets them signed in; they
-      // just have to follow the emailed link a second time.
-    }
+  // QLT-01. `!session` alone was wrong, and it defeated the guard twenty lines
+  // above it: somebody six answers into reviewing three people whose token
+  // lapsed had this branch replace the whole page, losing every answer — the
+  // exact thing `expired` and its banner exist to prevent, and which they could
+  // never prevent because this test always won the race. Only somebody who
+  // never had a session is sent to sign in; somebody who *lost* one keeps their
+  // answers on screen and gets the banner instead.
+  if (!session && !hadSession.current) {
     return (
       <Shell>
         <Panel className="px-6 py-10">
@@ -510,9 +503,13 @@ export default function Feedback() {
             your account, so we need to know it is you. We will bring you straight back here.
           </p>
           <div className="mt-6">
+            {/* FDB-03. "Straight back here" is a promise the address has to
+                carry — SignIn reads `next`. It used to be written to
+                sessionStorage under a key nothing ever read, so the sentence
+                above was simply untrue. One mechanism, not two. */}
             <Link
-              to="/signin"
-              className="inline-flex h-11 items-center justify-center rounded-[4px] border border-fg bg-fg px-5 text-sm font-medium text-white transition-colors hover:bg-[#353532]"
+              to={`/signin?next=${encodeURIComponent(`/events/feedback/${slug}`)}`}
+              className="inline-flex h-11 items-center justify-center rounded-[4px] border border-fg bg-fg px-5 text-sm font-medium text-white transition-colors hover:bg-[#2c514b]"
             >
               Sign in
             </Link>
@@ -786,11 +783,22 @@ export default function Feedback() {
 /* Small pieces                                                                */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * FDB-03. Feedback is the last step of the attendee journey, so it wears the
+ * same frame as the four screens before it rather than a bare page of its own
+ * — which left whoever followed the emailed link with no way onwards but the
+ * browser's back button. EventShell carries the app nav for a signed-in
+ * respondent and the public header for anybody else, and this screen is
+ * always one of the two.
+ *
+ * The column stays narrow: these are questions to answer one at a time, not a
+ * page to scan.
+ */
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-ink">
-      <div className="mx-auto max-w-2xl px-5 py-10 sm:py-14">{children}</div>
-    </div>
+    <EventShell>
+      <div className="mx-auto max-w-2xl">{children}</div>
+    </EventShell>
   )
 }
 

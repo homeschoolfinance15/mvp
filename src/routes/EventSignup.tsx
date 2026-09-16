@@ -14,6 +14,7 @@ import {
   type PublicEvent,
   type TicketType,
 } from '../lib/events'
+import { loadPublicEvent } from './events/shared'
 import { rememberSignupResume } from '../lib/signupResume'
 
 /**
@@ -63,17 +64,32 @@ export default function EventSignup() {
   const [drift, setDrift] = useState<string[] | null>(null)
   const [next, setNext] = useState<string | null>(null)
 
+  // `loadPublicEvent`, not a bare read of `event_public`. The view carries the
+  // event row and its host names and deliberately nothing else — the migration
+  // says so in as many words ("Capacity is not here"): availability lives in
+  // `event_availability` and the tickets in `ticket_types`, and it is
+  // `attachAvailability` inside this helper that composes the three.
+  //
+  // Reading the view directly and casting to PublicEvent, which is what this
+  // did, produced a row whose `ticket_types`, `capacity_state` and `remaining`
+  // were all `undefined` while TypeScript believed otherwise. Three things
+  // broke quietly and none of them threw: the summary never named the ticket
+  // or its price, so somebody who clicked "Register — £45" saw a signup page
+  // that mentioned no money at all; `CAPACITY_WORDS[undefined]` rendered the
+  // status line empty, so a sold-out event looked identical to an open one;
+  // and `driftAgainst` compared `undefined` with `undefined` on every branch,
+  // so ACC-07's "something moved while you were signing up" could never fire.
   const loadEvent = useCallback(async () => {
     if (!slug) return
-    const { data, error: loadError } = await supabase
-      .from('event_public')
-      .select('*')
-      .eq('slug', slug)
-      .maybeSingle()
-
-    if (loadError) console.error('[amazing] could not load the event:', loadError)
-    setEvent((data as PublicEvent) ?? null)
-    setEventMissing(!data)
+    try {
+      const found = await loadPublicEvent(slug)
+      setEvent(found)
+      setEventMissing(!found)
+    } catch (loadError) {
+      console.error('[amazing] could not load the event:', loadError)
+      setEvent(null)
+      setEventMissing(true)
+    }
     setLoadingEvent(false)
   }, [slug])
 
@@ -162,10 +178,9 @@ export default function EventSignup() {
   async function continueAsExisting() {
     setError('')
     setBusy(true)
-    const { data } = slug
-      ? await supabase.from('event_public').select('*').eq('slug', slug).maybeSingle()
-      : { data: null }
-    const after = (data as PublicEvent) ?? null
+    // Composed, not a bare view read — see loadEvent. A re-read that failed is
+    // not drift, so it reports none rather than inventing a change.
+    const after = slug ? await loadPublicEvent(slug).catch(() => null) : null
     const moved = event ? driftAgainst(event, after) : []
     setBusy(false)
 
@@ -227,10 +242,8 @@ export default function EventSignup() {
 
     await refreshProfile()
 
-    const { data: fresh } = slug
-      ? await supabase.from('event_public').select('*').eq('slug', slug).maybeSingle()
-      : { data: null }
-    const after = (fresh as PublicEvent) ?? null
+    // Composed, not a bare view read — see loadEvent.
+    const after = slug ? await loadPublicEvent(slug).catch(() => null) : null
     const moved = event ? driftAgainst(event, after) : []
     setBusy(false)
 

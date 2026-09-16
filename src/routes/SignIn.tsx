@@ -1,19 +1,43 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage } from '../lib/supabase'
 import { homePathFor, useAuth } from '../context/AuthProvider'
 
+/**
+ * BUY-12, FDB-03. Where to go once the password is accepted.
+ *
+ * `NeedsSignIn` (events/shared.tsx) sends people here as
+ * `/signin?next=/events/tickets/…`, and until this read it the parameter was
+ * written by four screens and read by none: somebody following the ticket link
+ * in their confirmation email on a signed-out phone was told "nothing has been
+ * lost — it is waiting for you", signed in, and landed on a dashboard with no
+ * idea where the ticket went.
+ *
+ * Only same-origin paths are honoured. `next` arrives from the address bar, so
+ * it is attacker-controlled: without the check, `/signin?next=https://…` would
+ * turn our own sign-in screen into an open redirect that sends a freshly
+ * authenticated person somewhere else entirely. A leading `//` or `/\` is how
+ * that is smuggled past a naive `startsWith('/')`, because browsers read both
+ * as protocol-relative.
+ */
+function safeNext(next: string | null): string | null {
+  if (!next || !next.startsWith('/')) return null
+  if (next.startsWith('//') || next.startsWith('/\\')) return null
+  return next
+}
+
 export default function SignIn() {
   const { session, profile, loading, signIn } = useAuth()
+  const [params] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   if (!loading && session && profile) {
-    return <Navigate to={homePathFor(profile)} replace />
+    return <Navigate to={safeNext(params.get('next')) ?? homePathFor(profile)} replace />
   }
 
   async function submit(e: FormEvent) {
