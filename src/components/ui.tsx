@@ -16,10 +16,17 @@ import type { ConnectorStatus, InviteCodeStatus, ProfileStatus } from '../lib/ty
 /* -------------------------------------------------------------------------- */
 
 export function Wordmark({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const scale = { sm: 'text-lg', md: 'text-xl', lg: 'text-2xl' }[size]
   return (
-    <span className={`${scale} font-serif font-bold tracking-[-0.03em] text-fg uppercase`}>
-      Amazing<span className="text-gold-dim">.</span>
+    <span className={`brand-wordmark brand-wordmark--${size}`}>
+      <svg viewBox="0 0 56 56" fill="none" aria-hidden="true">
+        <g fill="#1F5C56">
+          <circle cx="28" cy="10" r="7" />
+          <circle cx="10" cy="28" r="7" />
+          <circle cx="46" cy="28" r="7" />
+        </g>
+        <circle cx="28" cy="46" r="7" fill="#D9A62E" />
+      </svg>
+      <span>amazing</span>
     </span>
   )
 }
@@ -59,8 +66,9 @@ export function Button({
   return (
     <button
       {...rest}
+      data-variant={variant}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center gap-2 rounded-[4px] transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`ui-button inline-flex items-center justify-center gap-2 rounded-[4px] transition-colors duration-300 disabled:cursor-not-allowed disabled:opacity-45 ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
     >
       {loading && <Spinner />}
       {children}

@@ -18,19 +18,21 @@ export default function Questions() {
   if (!profile) return null
 
   return (
-    <DashboardShell title="Let's find your people" caption={INTRO}>
-      <div className="mx-auto max-w-2xl">
-        <QuestionnaireForm
-          profileId={profile.id}
-          mode="signup"
-          onComplete={async () => {
-            // Reload first: the router will not let a member off this page
-            // until the stored answers say they are done.
-            await refreshProfile()
-            navigate(homePathFor(profile), { replace: true })
-          }}
-        />
-      </div>
-    </DashboardShell>
+    <div className="brand-experience signup-questionnaire">
+      <DashboardShell title="Let's find your people" caption={INTRO}>
+        <div className="mx-auto max-w-2xl">
+          <QuestionnaireForm
+            profileId={profile.id}
+            mode="signup"
+            onComplete={async () => {
+              // Reload first: the router will not let a member off this page
+              // until the stored answers say they are done.
+              await refreshProfile()
+              navigate(homePathFor(profile), { replace: true })
+            }}
+          />
+        </div>
+      </DashboardShell>
+    </div>
   )
 }
