@@ -4,7 +4,13 @@ import { AuthLayout } from '../components/AuthLayout'
 import { Button, CopyCode, Field, Input, Notice, Textarea } from '../components/ui'
 import { INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { errorMessage, supabase } from '../lib/supabase'
-import { homePathFor, needsOnboarding, useAuth } from '../context/AuthProvider'
+import {
+  homePathFor,
+  needsOnboarding,
+  needsQuestionnaire,
+  useAuth,
+} from '../context/AuthProvider'
+import { takeSignupResume } from '../lib/signupResume'
 
 /**
  * Collects what makes someone findable: what they do now, what they care
@@ -58,9 +64,44 @@ export default function Onboarding() {
     }
 
     await refreshProfile()
-    // Straight into the curation questionnaire; the handoff puts it right
-    // after the account and location fields.
-    navigate('/questions', { replace: true })
+
+    /*
+     * Where onboarding ends depends on who finished it, and the answer has to
+     * be worked out from the row we just wrote rather than from `profile`.
+     * `refreshProfile` has updated the context, but this closure still holds
+     * the profile as it was a moment ago — one with no profession — and
+     * `needsQuestionnaire` short-circuits to false while onboarding is
+     * outstanding. Asking it about the stale row would send every network
+     * member past the questionnaire, which is the opposite of the bug below.
+     * So we ask it about what we know is now stored.
+     */
+    const settled = { ...profile, current_profession: profession.trim() }
+
+    if (needsQuestionnaire(settled)) {
+      // A member being curated into the network. Straight into the curation
+      // questionnaire; the handoff puts it right after the account fields.
+      //
+      // The signup resume is deliberately left where it is. /questions is the
+      // last required step for this person and reads it there — taking it here
+      // would consume it one screen early and strand them (ACC-07).
+      navigate('/questions', { replace: true })
+      return
+    }
+
+    /*
+     * Everybody else is finished: an admin, a connector, or — the case this
+     * branch exists for — somebody who holds an account only so they can
+     * attend an event. ACC-02's principle is that buying a ticket must not
+     * draw you into a network, and the two-stage curation questionnaire is
+     * precisely the network drawing somebody in. `needsQuestionnaire` already
+     * says they are not owed it; until now nothing asked.
+     *
+     * Which makes this also the end of the ACC-07 journey for an event-only
+     * account, so the resume is read here. It is only taken on the path that
+     * uses it, so a member's resume survives to /questions untouched.
+     */
+    const resume = takeSignupResume()
+    navigate(resume?.path ?? homePathFor(settled), { replace: true })
   }
 
   return (

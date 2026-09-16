@@ -429,3 +429,21 @@ verify_jwt = false
 # The signature check inside the function is what stands in for it.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# The mailer is called by a schedule, which holds no Supabase session. It
+# carries MAILER_SECRET instead, and the function checks it (or an admin JWT)
+# before doing anything — so the gate is real, it is simply inside the function
+# rather than in front of it.
+#
+# This has to be declared here rather than remembered as a --no-verify-jwt flag
+# at deploy time. Verified as a live 401: a POST shaped exactly like
+# .github/workflows/event-mailer.yml sends returns
+# UNAUTHORIZED_NO_AUTH_HEADER from the platform, never reaching the function.
+#
+# It is worth understanding what that costs, because the symptom is silence.
+# Every automatic email in the product goes through this one sweep —
+# confirmations, reminders, cancellations, refund updates, feedback requests —
+# so a redeploy without this line stops all of them, and the only sign is a
+# scheduled job failing every five minutes that nobody is watching.
+[functions.event-mailer]
+verify_jwt = false

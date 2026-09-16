@@ -303,9 +303,8 @@ cold.
 
 → 401 { "error": "Sign in to book a place." }
 → 403 { "error": "...", "reason": "no_account" }                       // BUY-01
-→ 403 { "error": "...", "reason": "onboarding_incomplete" }             // BUY-01, no profession
-→ 403 { "error": "...", "reason": "questionnaire_incomplete" }          // BUY-01, network members only
-→ 403 { "error": "...", "reason": "profile_unreadable" }
+→ 403 { "error": "...", "reason": "onboarding_incomplete" }             // BUY-01
+→ 503 { "error": "...", "reason": "profile_unreadable" }
 → 409 { "error": "...", "reason": "payment_confirming",                // §9
         "session_id": "cs_...", "registration_id": "<uuid>" }
 → 404 { "error": "That event does not exist." }                        // also a draft
@@ -318,12 +317,20 @@ cold.
 → 500 { "error": "...", "reason": "stripe_not_configured" }
 ```
 
-`onboarding_incomplete` and `questionnaire_incomplete` mirror
-`AuthProvider.needsOnboarding` and `needsQuestionnaire`, with one deliberate
-difference: the questionnaire is asked of **network members only**. An
-event-only account (`network_member = false`) is exempt, because the
-questionnaire curates people into the network and §11's first acceptance row
-requires an event-only attendee to register "without joining a network".
+`onboarding_incomplete` comes from the `onboarding_complete()` RPC — asked,
+not reimplemented. That function is this codebase's one definition of BUY-01's
+"required onboarding" (a profession, or being an admin, and not suspended or
+removed), and it is what the RLS policy and `register_free()` already use. The
+edge function asking the same question is what keeps free and paid registration
+from drifting apart.
+
+**The network questionnaire is deliberately not part of it.** An event-only
+account never answers it (ACC-02), and a network member who has not answered it
+is still entitled to buy a ticket. An earlier revision of this function added
+that condition and produced a dead end: such a person could RSVP to a free event
+but was refused at the Pay button, by a rule no other layer applied and no
+screen could route them out of (QLT-02). `scripts/check-connect-state.ts`
+asserts the gate stays exactly `onboarding_complete()` and nothing more.
 
 Calling it twice — a refresh, a retry, a double click — returns the **same**
 session. The `idempotency_key` is derived from the event, the person, the
@@ -622,6 +629,7 @@ The rows in `REQUIREMENTS.md` §11 that land on payments, and where each is met.
 
 | Example | Expected result | How |
 | --- | --- | --- |
+| New visitor comes from an event link | Registers and finds their ticket without joining a network | `stripe-checkout` gates on `onboarding_complete()` only — the same question `register_free()` asks — so an event-only account buys a ticket on the same terms it RSVPs |
 | Two people buy the last available ticket simultaneously | Only one receives that last place | Both pass the pre-Stripe `event_capacity_state()` read; the capacity trigger's row lock on the event serialises the two `event_registrations` inserts and refuses the second. `stripe-checkout` catches that refusal, re-reads the capacity state, and answers 409 `{"reason":"sold_out"}` |
 | Two people try to claim the final place | The other sees Sold out **and is not charged** | Stripe is not called on any path out of that branch. The refusal happens before a session exists, so there is nothing to charge and nothing to abandon |
 | Buyer refreshes after paying | Purchase remains single, ticket recoverable | The `idempotency_key` is derived from event + person + ticket type + live registration id, is unique in Postgres, and is handed to Stripe, so a second create replays the first session. `event_tickets` is unique on `registration_id`, and the webhook's move to `paid` is conditional on `status = 'pending'`, so a replay issues no second ticket and queues no second email |

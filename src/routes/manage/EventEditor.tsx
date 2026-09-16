@@ -592,47 +592,50 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   }
 
   /**
-   * ORG-11. The order matters. The email is queued while the registrations are
-   * still live, because the audience is resolved from them — cancel first and
-   * there is nobody left to tell.
+   * ORG-11. One write, and everything else follows it in the database.
+   *
+   * `reschedule_event_messages` fires on the status change and does all three
+   * things a cancellation owes people: it cancels every message still waiting
+   * to go, queues the cancellation notice, and puts it in the bell for anybody
+   * holding or confirmed on a place.
+   *
+   * This deliberately does not queue that notice itself, and it used to.
+   * EML-01 lists event cancellation as automatic — "automatically when event
+   * cancellation is confirmed" — and a browser tab is not automatic. If this
+   * connection drops between the update and a follow-up call, the trigger has
+   * already told everybody; a client-side send would have told nobody, on the
+   * one message where silence is worst. Two senders also meant two emails per
+   * attendee once the dispatcher learned to resolve an audience for a claimed
+   * message that had none, which is exactly what EML-06 forbids.
+   *
+   * So the honest report below says the cancellation succeeded and that the
+   * notice is on its way. It does not claim this screen sent anything, because
+   * it did not — the same saving-is-not-sending distinction as ORG-10, pointed
+   * the other way.
    */
   async function cancelEvent() {
     setProblem('')
     setSaving(true)
 
-    const { error: mailError } = await supabase.functions.invoke('event-email', {
-      body: { kind: 'cancelled', event_id: event.id, send_now: true },
-    })
-    const mailProblem = mailError ? await functionError(mailError) : ''
+    const { error } = await supabase
+      .from('events')
+      .update({ status: 'cancelled' })
+      .eq('id', event.id)
 
-    const { error } = await supabase.from('events').update({ status: 'cancelled' }).eq('id', event.id)
+    setSaving(false)
     if (error) {
-      setSaving(false)
       setProblem(errorMessage(error))
       return
     }
 
-    // Reminders and the feedback request are no longer wanted. Cancelled
-    // rather than deleted: the history of what was going to be sent stays.
-    const { error: stopError } = await supabase
-      .from('event_messages')
-      .update({ status: 'cancelled', error: 'The event was cancelled.' })
-      .eq('event_id', event.id)
-      .eq('status', 'scheduled')
-      .in('kind', ['reminder', 'feedback_open'])
-
-    setSaving(false)
     setConfirming(null)
     await reload()
     setOutcome(
       <>
-        Cancelled. Registration is closed, tickets no longer admit anybody, and pending reminders
-        and feedback requests have been stopped.{' '}
-        {mailProblem
-          ? `Attendees were NOT emailed: ${mailProblem} You can send the cancellation again from the Emails tab.`
-          : 'Attendees have been emailed.'}
-        {stopError ? ` Some scheduled emails may still be queued: ${errorMessage(stopError)}` : ''}{' '}
-        Paid orders and their refunds are listed under Results.
+        Cancelled. Registration is closed and tickets no longer admit anybody. Everyone holding or
+        confirmed on a place is being emailed automatically, and pending reminders and the feedback
+        request have been stopped. The Emails tab shows the notice going out, copy by copy. Paid
+        orders and their refunds are listed under Results.
       </>,
     )
   }

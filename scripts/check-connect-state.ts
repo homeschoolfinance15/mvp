@@ -175,11 +175,22 @@ check(
 
 check(
   'stripe-checkout gates on onboarding, not only on has_account',
-  /onboardingGate\(/.test(checkout) && /onboarding_incomplete/.test(checkout),
+  /rpc\('onboarding_complete'\)/.test(checkout) && /onboarding_incomplete/.test(checkout),
+)
+
+// The gate must be `onboarding_complete()` and **nothing more**. A stricter
+// rule here than in `register_free()` produces the dead end the audit found:
+// you may RSVP to a free event but not pay for one, refused at the Pay button
+// by a condition no other layer applies and no screen can route you out of
+// (QLT-02). The tempting future edit is to "tighten" this back up; these two
+// assertions are what should stop it.
+check(
+  'the gate asks onboarding_complete() rather than reimplementing it',
+  !/current_profession/.test(checkout),
 )
 check(
-  'an event-only account is exempt from the network questionnaire (ACC-01)',
-  /role === 'user' && profile\.network_member/.test(checkout),
+  'the gate adds no questionnaire condition of its own',
+  !/profile_answers/.test(checkout) && !/questionnaire_incomplete/.test(checkout),
 )
 
 /* -- §7.1: connecting Stripe is consent, not administration ----------------- */

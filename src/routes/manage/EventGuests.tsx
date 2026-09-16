@@ -365,8 +365,18 @@ function Guests({ data }: { data: ManagedEvent }) {
       return
     }
     setMarking(null)
+    /*
+     * ATT-06 and FDB-06. Attendance is the gate on giving and receiving
+     * feedback, so a correction is not only a tidier record — it puts somebody
+     * back into a round they were wrongly left out of. A trigger adds them to
+     * the feedback request if it has already gone out, for them alone, and
+     * nobody who received it gets it twice. Worth saying, because a host who
+     * does not know that will go looking for a way to do it by hand.
+     */
     setOutcome(
-      `${guest.name} is recorded as having attended, as a correction made by you just now. It is kept as a correction, not as a scan that never happened.`,
+      `${guest.name} is recorded as having attended, as a correction made by you just now — kept as a ` +
+        'correction, not as a scan that never happened. They now count towards attendance, and they ' +
+        'can give and receive feedback for this event like anybody else who was there.',
     )
     await load()
   }
@@ -903,6 +913,10 @@ function MarkAttendedModal({
       <p className="text-sm leading-relaxed text-muted">
         This is recorded as a correction made by you, now — not as a scan at the door. Your name,
         the time and your reason are kept with it.
+      </p>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        It also makes them eligible for this event's feedback. If the request has already gone out,
+        they are added to it; nobody who has already received it gets a second copy.
       </p>
       <div className="mt-5">
         <Field label="Why" hint="Optional, but it is what makes the record make sense later.">

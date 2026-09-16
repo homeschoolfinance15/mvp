@@ -29,13 +29,12 @@ export const FEATURES = {
    * turning it back on finds them (QLT-08).
    */
   events: true,
-  /**
-   * The post thread on an event page. Off on its own so events can be
-   * switched on without the feed coming with them. Existing threads are
-   * hidden, not deleted — and note they are ordinary feed posts, so they
-   * reappear in the network feed when `feed` is switched on.
-   */
-  eventPosts: false,
 } as const
+
+// `eventPosts` lived here and is gone. It gated the post thread on the old
+// members-only event page, which this release replaced — the public event page
+// has no thread, so the flag had no reader left. The threads themselves are
+// untouched: they are ordinary feed posts carrying an `event_id`, and they
+// reappear in the network feed when `feed` is switched on (QLT-08).
 
 export type FeatureName = keyof typeof FEATURES

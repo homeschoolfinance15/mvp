@@ -196,8 +196,37 @@ Deno.serve(async (request: Request) => {
   // /e/:slug and /events at all. So the client-side gate makes this true for
   // people who come through our UI and for nobody else. It is enforced here
   // because this is the last point before money moves.
-  const gate = await onboardingGate(db, me)
-  if (gate) return json(gate, 403)
+  //
+  // `onboarding_complete()` is asked rather than reimplemented. It is this
+  // codebase's one definition of the phrase — a profession, or being an admin,
+  // and not suspended or removed — and it is what the RLS policy and
+  // `register_free()` already use. Asking it means free and paid registration
+  // cannot drift apart, and it means nobody can reach the Pay button having
+  // passed every other gate only to be refused here by a stricter rule of our
+  // own (QLT-02: a refusal has to come with somewhere to go).
+  //
+  // The network questionnaire is deliberately **not** part of this. An
+  // event-only account never answers it (ACC-02), and a network member who has
+  // not is still entitled to buy a ticket.
+  const { data: onboarded, error: onboardedError } = await asCaller.rpc('onboarding_complete')
+  if (onboardedError) {
+    return json(
+      {
+        error: 'Could not check your account setup, so the booking was not started.',
+        reason: 'profile_unreadable',
+      },
+      503,
+    )
+  }
+  if (!onboarded) {
+    return json(
+      {
+        error: 'Finish setting up your profile before booking a place.',
+        reason: 'onboarding_incomplete',
+      },
+      403,
+    )
+  }
 
   // ---- what is being bought ----------------------------------------------
 
@@ -639,76 +668,6 @@ async function alreadyPaid(
     )
     return null
   }
-}
-
-/**
- * BUY-01. Mirrors `AuthProvider.needsOnboarding` / `needsQuestionnaire` rather
- * than inventing a second definition of "finished onboarding":
- *
- *   needsOnboarding      role is not admin, and current_profession is missing
- *   needsQuestionnaire   role is user, onboarding done, no completed_at
- *
- * **One deliberate difference, and it needs a decision above my level.**
- * `needsQuestionnaire` predates event-only accounts and does not look at
- * `network_member`. Mirrored literally, it would stop an event-only attendee
- * buying a ticket until they answered a network-matching questionnaire — which
- * contradicts ACC-01 and fails §11's first acceptance row outright: "can create
- * account, finish onboarding, return, register, and find their ticket **without
- * joining a network**". The questionnaire curates people into the network;
- * somebody who is explicitly not in it has nothing to be curated for. So it is
- * asked of network members only.
- *
- * ponytail: this is the drift the primary agent asked db2 to resolve with a
- * single source. Until that exists, the exemption lives here and is reported.
- *
- * Returns null when the caller may proceed, or the refusal body when not.
- */
-async function onboardingGate(
-  db: Db,
-  profileId: string,
-): Promise<{ error: string; reason: string } | null> {
-  const { data, error } = await db
-    .from('profiles')
-    .select('id, role, current_profession, network_member')
-    .eq('id', profileId)
-    .maybeSingle()
-
-  // A profile we cannot read is not a profile we may wave through. `has_account()`
-  // already said one exists, so failing here is a fault, not an absence.
-  if (error || !data) {
-    return {
-      error: 'Could not check your account setup, so the booking was not started.',
-      reason: 'profile_unreadable',
-    }
-  }
-  const profile = data as {
-    role: string
-    current_profession: string | null
-    network_member: boolean
-  }
-
-  if (profile.role !== 'admin' && !profile.current_profession) {
-    return {
-      error: 'Finish setting up your profile before booking a place.',
-      reason: 'onboarding_incomplete',
-    }
-  }
-
-  if (profile.role === 'user' && profile.network_member) {
-    const { data: answers } = await db
-      .from('profile_answers')
-      .select('completed_at')
-      .eq('profile_id', profileId)
-      .maybeSingle()
-    if (!(answers as { completed_at: string | null } | null)?.completed_at) {
-      return {
-        error: 'Answer your member questions before booking a place.',
-        reason: 'questionnaire_incomplete',
-      }
-    }
-  }
-
-  return null
 }
 
 /** ORG-03A, BUY-05. The single judge of whether an event is taking bookings. */
