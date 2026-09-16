@@ -889,6 +889,7 @@ async function main() {
 
   const probe = await makeAccountOnly('probe', 'Grid Deletion Probe')
   const probeId = probe.id
+  const probeEmail = probe.email
   await rpc(probe.token, 'register_free', { p_event: free.id })
   await rpc(host.token, 'mark_attended', {
     p_event: free.id,
@@ -937,6 +938,32 @@ async function main() {
       /^Former attendee [0-9A-F]{4}$/.test(register.body[0].pseudonym ?? '') &&
       typeof register.body[0].retention_until === 'string',
     JSON.stringify(register.body?.[0]),
+  )
+
+  // GDPR Art. 17, and the property rather than the mechanism: wherever their
+  // details were, under whatever entity, they are not there now. Asserting on
+  // the email keeps holding if the payload shape changes.
+  const auditSweep = await get(
+    admin.token,
+    'activity_log?select=detail&order=created_at.desc&limit=500',
+  )
+  check(
+    'no audit row anywhere still names an erased person (Art. 17)',
+    auditSweep.ok && !JSON.stringify(auditSweep.body ?? []).includes(probeEmail),
+    auditSweep.ok ? `scanned ${auditSweep.body?.length} rows` : `${auditSweep.status}`,
+  )
+
+  // And the event itself survives the scrub — erasure is not deletion of the
+  // record that something happened.
+  const auditSurvives = await get(
+    admin.token,
+    `activity_log?entity=eq.profiles&entity_id=eq.${probeId}&select=action`,
+  )
+  check(
+    'but the audit events themselves survive it',
+    Array.isArray(auditSurvives.body) &&
+      auditSurvives.body.some((r) => r.action === 'profiles.delete'),
+    saw(auditSurvives),
   )
 
   const hostRegisterPeek = await get(host.token, 'data_subject_erasures?select=subject_id')
