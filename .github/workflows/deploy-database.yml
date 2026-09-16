@@ -72,12 +72,32 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
-      # The recommender. Its secrets (ANTHROPIC_API_KEY, RECOMMEND_SECRET) are
-      # set once with `supabase secrets set` and live in Supabase, not here —
-      # this step only ships the code.
+      # Every function, not a named one.
+      #
+      # This step used to deploy `recommend` alone, which was correct when it
+      # was the only function whose code changed. It is now nine, and a named
+      # list is a thing to forget: the event platform's six were deployed by
+      # hand, and a later change to the mailer or to Stripe would have been
+      # committed, reviewed, merged, and never reached production — with the
+      # old code still running and nothing saying so.
+      #
+      # Function secrets (RESEND_API_KEY, MAILER_SECRET, ANTHROPIC_API_KEY,
+      # STRIPE_*) are set once with `supabase secrets set` and live in
+      # Supabase, not here. This ships code only.
+      #
+      # Per-function settings come from supabase/config.toml, which is why
+      # `verify_jwt = false` for `event-mailer` and `stripe-webhook` is
+      # declared there rather than passed as a flag. Both are called by things
+      # that hold no Supabase session — a cron and Stripe — and each carries
+      # its own gate inside the function. A deploy that lost those settings
+      # would put the platform's auth wall in front of both and stop every
+      # automatic email, silently.
       - name: Deploy edge functions
         if: steps.guard.outputs.ready == 'true'
-        run: supabase functions deploy recommend --project-ref "$SUPABASE_PROJECT_REF"
+        # --use-api bundles server-side instead of in Docker. It is how these
+        # nine were built for production, and matching it means the first
+        # automated deploy is not also the first change of bundler.
+        run: supabase functions deploy --use-api --project-ref "$SUPABASE_PROJECT_REF"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
