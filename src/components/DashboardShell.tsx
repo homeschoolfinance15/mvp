@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { homePathFor, useAuth } from '../context/AuthProvider'
+import { homePathFor, isNetworkMember, useAuth } from '../context/AuthProvider'
 import { NotificationBell } from './NotificationBell'
 import { Wordmark } from './ui'
 import { FEATURES } from '../lib/features'
@@ -28,13 +28,58 @@ const ROLE_LABEL: Record<string, string> = {
  * A menu, not a sideways scroll — a link you have to scroll to is a link most
  * people never find, and nothing on screen says it is there.
  */
-function navLinks(profile: Parameters<typeof homePathFor>[0]) {
+// Exported for EventShell, which wears different chrome but the same nav.
+// eslint-disable-next-line react-refresh/only-export-components
+export function navLinks(profile: Parameters<typeof homePathFor>[0]) {
+  // ORG-01, ORG-01C. `/events` is the attendee's page — what is on, and what
+  // they can book. It is not a way in to hosting, and until this link existed
+  // there was none: every route into /manage/events came from inside
+  // /manage/events itself or from a notification, so an administrator with no
+  // events and no notifications had to type the address to create their first
+  // one. A screen you can only reach by knowing the URL is a screen that does
+  // not exist.
+  //
+  // Shown on role rather than on `may_create_events`, deliberately. A
+  // connector whose permission is switched *off* still manages the events they
+  // already host (ORG-01C), so the page is theirs either way; the list itself
+  // asks the real question and replaces the create button with the reason when
+  // the answer is no. Ordinary members are the ones excluded, and for them the
+  // page would be empty in every state.
+  const hosts = profile?.role === 'admin' || profile?.role === 'connector'
+
+  // ACC-01, ACC-05. An event-only account is not allowed into the feed or the
+  // circle — RequireMember meets it with a sentence, which is the right answer
+  // but a poor destination. A link that is certain to bounce whoever follows it
+  // is worse than no link, so it is not offered. This is also what let the
+  // attendee screens keep their own header for so long: EventShell could not
+  // borrow a nav that pointed event-only accounts at doors closed to them.
+  const member = isNetworkMember(profile)
+
+  // /events/mine is where a ticket is found, and BUY-12 means that has to be
+  // reachable from anywhere rather than only from the confirmation email.
+  // Omitted for an event-only account, whose Dashboard link is already this
+  // exact address (homePathFor) — one nav should not offer the same page twice.
+  const home = homePathFor(profile)
+
   return [
-    { to: homePathFor(profile), label: 'Dashboard' },
+    { to: home, label: 'Dashboard' },
     // Held back until the client signs them off. See src/lib/features.ts.
-    ...(FEATURES.feed ? [{ to: '/feed', label: 'Feed' }] : []),
+    ...(FEATURES.feed && member ? [{ to: '/feed', label: 'Feed' }] : []),
     ...(FEATURES.events ? [{ to: '/events', label: 'Events' }] : []),
-    { to: '/circle', label: 'Circle' },
+    ...(FEATURES.events && home !== '/events/mine'
+      ? [{ to: '/events/mine', label: 'My events' }]
+      : []),
+    ...(FEATURES.events && hosts ? [{ to: '/manage/events', label: 'Hosting' }] : []),
+    // BUY-14. A connector's own Stripe setup was reachable from exactly one
+    // place: the "this event cannot sell" banner on an event they had already
+    // created and tried to put paid tickets on. So the only route to connecting
+    // an account ran through failing to sell first. Admins are not offered it —
+    // platform events pay Amazing's own account (BUY-13) and there is no
+    // connector row behind an admin to set up.
+    ...(FEATURES.events && profile?.role === 'connector'
+      ? [{ to: '/connector/payments', label: 'Payments' }]
+      : []),
+    ...(member ? [{ to: '/circle', label: 'Circle' }] : []),
     { to: '/profile', label: 'Profile' },
   ]
 }

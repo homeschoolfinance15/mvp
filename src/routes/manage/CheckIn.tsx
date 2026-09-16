@@ -81,7 +81,7 @@ const OUTCOMES: Record<Outcome, OutcomeStyle> = {
   ok: {
     headline: 'Checked in',
     instruction: 'Welcome them in.',
-    frame: 'border-[#b9d8c4] bg-[#eff8f2]',
+    frame: 'border-[#b9d8c4] bg-[#dcf0e4]',
     badge: 'text-positive',
   },
   // ATT-03. A second scan — a second door, a second phone, somebody scanning
@@ -90,7 +90,7 @@ const OUTCOMES: Record<Outcome, OutcomeStyle> = {
   already: {
     headline: 'Already checked in',
     instruction: 'This is not a problem. They have arrived once and are counted once.',
-    frame: 'border-[#efc98f] bg-gold-wash',
+    frame: 'border-[#efc98f] bg-[#f6ecd9]',
     badge: 'text-[#8a4b00]',
   },
   wrong_event: {
@@ -407,6 +407,16 @@ export default function CheckIn() {
           <div className="min-w-0">
             <div className="eyebrow">Check-in</div>
             <h1 className="mt-1 truncate text-sm font-medium text-fg">{event.title}</h1>
+            {/* One way out, and only one. The nav bar stays off this screen for
+                the reason above, but a steward who has finished at the door
+                should not have to reach for the browser's back button to get
+                to the rest of the event. */}
+            <Link
+              to={`/manage/events/${event.id}/guests`}
+              className="eyebrow mt-1 inline-block text-dim transition-colors hover:text-fg"
+            >
+              &#8592; Manage event
+            </Link>
           </div>
           <div className="shrink-0 text-right">
             <div className="text-2xl font-light tabular-nums text-fg">

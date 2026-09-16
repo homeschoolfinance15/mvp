@@ -399,6 +399,7 @@ function ConnectorsTab({
               </div>
               <div className="w-32 shrink-0">
                 <Select
+                  aria-label={`Invitation status for ${connector.profiles?.full_name ?? 'this connector'}`}
                   value={connector.invite_status}
                   onChange={(e) =>
                     setPending({
@@ -671,6 +672,7 @@ function MembersTab({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search members"
+              aria-label="Search members by name"
             />
           </div>
         }
@@ -703,6 +705,7 @@ function MembersTab({
               </div>
               <div className="w-36 shrink-0">
                 <Select
+                  aria-label={`Membership status for ${member.full_name}`}
                   value={member.profile_status}
                   onChange={(e) =>
                     setPending({ member, status: e.target.value as ProfileStatus })
@@ -784,12 +787,34 @@ function EventsTab({
         title="Events"
         caption="Every event on the platform. Open one to see its full record — registrations, payments, tickets, emails and feedback."
         action={
-          <div className="w-56">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search events"
-            />
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="w-56">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search events"
+              aria-label="Search events by title, link or host"
+              />
+            </div>
+            {/* ORG-01. This tab is the administrator's read-only record of the
+                platform (ORG-14) and stays that way — but it was also the only
+                place an administrator ever saw the word "Events", so with no
+                control here the create screen had no door at all. The button
+                leaves rather than opening an editor in place: hosting lives
+                under /manage/events for administrators and connectors alike,
+                and one editor for both is what keeps ORG-01 and ORG-01B the
+                same code path. */}
+            <Link to="/manage/events/new">
+              <Button variant="primary" size="sm">
+                Create event
+              </Button>
+            </Link>
+            <Link
+              to="/manage/events"
+              className="text-xs text-dim underline-offset-4 hover:text-fg hover:underline"
+            >
+              Hosting
+            </Link>
           </div>
         }
       />
