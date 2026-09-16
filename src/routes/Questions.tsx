@@ -3,6 +3,7 @@ import { DashboardShell } from '../components/DashboardShell'
 import { QuestionnaireForm } from '../components/QuestionnaireForm'
 import { homePathFor, useAuth } from '../context/AuthProvider'
 import { INTRO } from '../lib/questionnaire'
+import { takeSignupResume } from '../lib/signupResume'
 
 /**
  * The questionnaire as its own screen, reached after the account exists.
@@ -28,7 +29,13 @@ export default function Questions() {
               // Reload first: the router will not let a member off this page
               // until the stored answers say they are done.
               await refreshProfile()
-              navigate(homePathFor(profile), { replace: true })
+              // ACC-07. This is the last step of required onboarding, so it is
+              // where somebody who started at an event gets taken back to it —
+              // rather than being dropped on a dashboard to find their own way
+              // back to the ticket they had already chosen. Reads and clears;
+              // nobody who arrived any other way has one.
+              const resume = takeSignupResume()
+              navigate(resume?.path ?? homePathFor(profile), { replace: true })
             }}
           />
         </div>

@@ -249,6 +249,19 @@ export function needsOnboarding(profile: Profile | null): boolean {
 // eslint-disable-next-line react-refresh/only-export-components
 export function needsQuestionnaire(profile: Profile | null): boolean {
   if (!profile || profile.role !== 'user') return false
+  // Somebody who holds an account only to attend events is not being curated
+  // into the network, so the questionnaire that does the curating is not owed
+  // (ACC-01, ACC-02). ACC-01's "required signup/profile questions" is
+  // onboarding — enough to put a name and a face on a guest list. Asking
+  // whoever bought one dinner ticket how often they travel would be asking
+  // them to join something they did not ask to join, and RequireRole would
+  // hold them at /questions until they did.
+  //
+  // They keep the same profile if they later redeem an invitation code, and
+  // redemption flips network_member true, at which point this turns true with
+  // it and they are asked then — once, at the moment it starts to mean
+  // something (ACC-06).
+  if (!profile.network_member) return false
   if (needsOnboarding(profile)) return false
   return !questionnaireDone(profile.profile_answers)
 }
@@ -259,5 +272,25 @@ export function homePathFor(profile: Profile | null): string {
   if (needsOnboarding(profile)) return '/onboarding'
   if (profile.role === 'admin') return '/admin'
   if (profile.role === 'connector') return '/connector'
+  // Somebody who holds an account only so they can attend events has no
+  // network to go home to (ACC-01, ACC-02). /home is the member dashboard —
+  // the directory, the circle, the people their connector introduced them to
+  // — and none of it is theirs. Their events are.
+  if (!profile.network_member) return '/events/mine'
   return '/home'
+}
+
+/**
+ * True for an account that belongs to the network rather than only to the
+ * event platform.
+ *
+ * The mirror of `is_member()` in Postgres, and it must stay the mirror: row
+ * level security is what actually protects the feed, the circle and the
+ * member directory, and this only decides whether to offer a door that would
+ * open. A profile from before the event platform has `network_member` true,
+ * so this is true for every existing member (QLT-06).
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function isNetworkMember(profile: Profile | null): boolean {
+  return Boolean(profile && profile.network_member)
 }

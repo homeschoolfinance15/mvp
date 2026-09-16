@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { DashboardShell, type Tab } from '../../components/DashboardShell'
 import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import { FlagsPanel } from '../../components/FlagsPanel'
@@ -25,7 +26,6 @@ import { errorMessage, supabase } from '../../lib/supabase'
 import {
   CONNECTOR_STATUSES,
   PROFILE_STATUSES,
-  type Connector,
   type ConnectorInvitation,
   type ConnectorNote,
   type ConnectorStatus,
@@ -44,6 +44,10 @@ import {
   TEXT_QUESTIONS,
   TRAVEL_OPTIONS,
 } from '../../lib/questionnaire'
+import { eventWhen, type EventRecord } from '../../lib/events'
+import { EventStatusBadge } from '../manage/shared'
+import type { ConnectorPayments } from '../connector/payouts'
+import { ConnectorEventPermission } from './ConnectorEventPermission'
 
 /**
  * What each status actually does, rather than what it is called.
@@ -78,7 +82,12 @@ const PROFILE_STATUS_EFFECT: Record<ProfileStatus, string> = {
     'They lose both reading and writing, and disappear from the member directory. This does not delete the account — use Delete for that.',
 }
 
-interface ConnectorRow extends Connector {
+/**
+ * `select('*, profiles(*)')` already brings back every Stripe column on the
+ * connector row; `ConnectorPayments` is only the type saying so, until those
+ * columns land on `Connector` itself in src/lib/types.ts.
+ */
+interface ConnectorRow extends ConnectorPayments {
   profiles: Profile | null
 }
 
@@ -104,6 +113,10 @@ export default function AdminDashboard() {
   const [notes, setNotes] = useState<ConnectorNote[]>([])
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
   const [circleMessages, setCircleMessages] = useState<CircleMessage[]>([])
+  // ORG-14/ORG-15. Events are platform records, so administration lists all of
+  // them — drafts included, which the RLS policy allows an admin and nobody
+  // else outside the hosting team.
+  const [events, setEvents] = useState<EventRecord[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
   // Labels for the chips a waitlist applicant picked, so the detail view can
   // show "Starting a business" rather than current_focus.starting_a_business.
@@ -122,6 +135,7 @@ export default function AdminDashboard() {
       activityRes,
       circlesRes,
       tagsRes,
+      eventsRes,
     ] = await Promise.all([
       supabase.from('connectors').select('*, profiles(*)').order('created_at', { ascending: false }),
       supabase.from('connector_invitations').select('*').order('created_at', { ascending: false }),
@@ -145,6 +159,7 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: true })
         .limit(500),
       supabase.from('profile_tags').select('*').order('field').order('position'),
+      supabase.from('events').select('*').order('starts_at', { ascending: false }),
     ])
 
     const firstError = [
@@ -158,6 +173,7 @@ export default function AdminDashboard() {
       activityRes.error,
       circlesRes.error,
       tagsRes.error,
+      eventsRes.error,
     ].find(Boolean)
     if (firstError) setError(errorMessage(firstError))
 
@@ -174,6 +190,7 @@ export default function AdminDashboard() {
     setActivity((activityRes.data as ActivityLogEntry[]) ?? [])
     setCircleMessages((circlesRes.data as CircleMessage[]) ?? [])
     setProfileTags((tagsRes.data as ProfileTag[]) ?? [])
+    setEvents((eventsRes.data as EventRecord[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -210,6 +227,7 @@ export default function AdminDashboard() {
   const tabs: Tab[] = [
     { id: 'connectors', label: 'Connectors', count: connectors.length },
     { id: 'members', label: 'Members', count: members.length },
+    { id: 'events', label: 'Events', count: events.length },
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'waitlist', label: 'Waitlist', count: waitingCount },
     { id: 'circles', label: 'Circles', count: connectors.length },
@@ -262,6 +280,7 @@ export default function AdminDashboard() {
                 onChanged={load}
               />
             )}
+            {tab === 'events' && <EventsTab events={events} profilesById={profilesById} />}
             {tab === 'notes' && (
               <NotesTab notes={notes} connectors={connectors} profilesById={profilesById} />
             )}
@@ -361,11 +380,9 @@ function ConnectorsTab({
       ) : (
         <Panel className="divide-y divide-line">
           {connectors.map((connector) => (
-            <div
-              key={connector.id}
-              className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap"
-            >
-              <Initials name={connector.profiles?.full_name ?? '?'} role="connector" />
+            <div key={connector.id}>
+              <div className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap">
+                <Initials name={connector.profiles?.full_name ?? '?'} role="connector" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-fg">
                   {connector.profiles?.full_name ?? 'Unknown'}
@@ -397,14 +414,29 @@ function ConnectorsTab({
                   ))}
                 </Select>
               </div>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={!connector.profiles}
-                onClick={() => setConnectorToDelete(connector)}
-              >
-                Delete
-              </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={!connector.profiles}
+                  onClick={() => setConnectorToDelete(connector)}
+                >
+                  Delete
+                </Button>
+              </div>
+
+              {/*
+                ORG-01A and §7.3. The two gates on the same thing — may they
+                put an event on at all, and can their Stripe account take
+                money for it — sit together under the connector they belong
+                to, so neither is somewhere else.
+              */}
+              <ConnectorEventPermission
+                connector={connector}
+                changedByName={
+                  profilesById[connector.events_permission_changed_by ?? '']?.full_name ?? null
+                }
+                onChanged={onChanged}
+              />
             </div>
           ))}
         </Panel>
@@ -710,6 +742,82 @@ function MembersTab({
         onClose={() => setMemberToDelete(null)}
         onDeleted={onChanged}
       />
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Events                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ORG-14 and ORG-15. Every event on the platform, drafts included, and one
+ * click to its full operational record.
+ *
+ * Deliberately a plain index rather than a management console: an
+ * administrator opens an event to read what happened to it, and this is the
+ * door. Nothing here is framed as the administrator's own events, because
+ * these are the platform's records and most of them belong to somebody else.
+ */
+function EventsTab({
+  events,
+  profilesById,
+}: {
+  events: EventRecord[]
+  profilesById: Record<string, Profile>
+}) {
+  const [query, setQuery] = useState('')
+
+  const filtered = events.filter((event) => {
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
+    return (
+      event.title.toLowerCase().includes(q) ||
+      event.slug.toLowerCase().includes(q) ||
+      (profilesById[event.host_id]?.full_name ?? '').toLowerCase().includes(q)
+    )
+  })
+
+  return (
+    <>
+      <SectionHeader
+        title="Events"
+        caption="Every event on the platform. Open one to see its full record — registrations, payments, tickets, emails and feedback."
+        action={
+          <div className="w-56">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search events"
+            />
+          </div>
+        }
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState>
+          {events.length === 0 ? 'No events yet.' : 'No events match that search.'}
+        </EmptyState>
+      ) : (
+        <Panel className="divide-y divide-line">
+          {filtered.map((event) => (
+            <Link
+              key={event.id}
+              to={`/admin/events/${event.id}`}
+              className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-raised/60"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-fg">{event.title}</span>
+                <span className="block truncate text-xs text-dim">
+                  {eventWhen(event)} · hosted by{' '}
+                  {profilesById[event.host_id]?.full_name ?? 'a removed account'}
+                </span>
+              </span>
+              <EventStatusBadge event={event} />
+            </Link>
+          ))}
+        </Panel>
+      )}
     </>
   )
 }

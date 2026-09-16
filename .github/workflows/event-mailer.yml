@@ -1,0 +1,73 @@
+name: Event mailer
+
+# Drains the event email queue. Everything in the event platform enqueues into
+# event_messages + event_message_recipients; supabase/functions/event-mailer is
+# the only thing that sends, and this is what wakes it up.
+#
+# Every five minutes, not every minute, because a scheduled GitHub run is not
+# punctual anyway — the cron field is a request, not a promise — and a reminder
+# is the only message here that cares about minutes. Everything else is queued
+# with scheduled_for = now() and nudged straight away by event-email's send_now
+# path, so a host pressing Send watches it go rather than waiting for this.
+#
+# CONTRACT §6 wants both triggers shipped. The database side may also run
+# pg_cron + pg_net against the same function; running both is harmless, because
+# the dispatcher claims a message with one conditional update and the loser
+# claims nothing (EML-06). docs/event-platform/EMAILS.md says which is live.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      message_id:
+        description: 'One message to dispatch. Also retries its failed recipients (EML-08). Blank sweeps everything due.'
+        required: false
+        default: ''
+
+# A second run must never overlap the first. Claiming is atomic, so an overlap
+# is safe rather than duplicating — but there is nothing to gain from it, and
+# cancel-in-progress would kill a run halfway through a Resend batch.
+concurrency:
+  group: event-mailer
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      # Skip cleanly rather than failing a scheduled run every five minutes
+      # while the secrets are unset, matching the other workflows.
+      - name: Check whether the mailer is configured
+        id: guard
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          MAILER_SECRET: ${{ secrets.MAILER_SECRET }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$MAILER_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::VITE_SUPABASE_URL or MAILER_SECRET is not set — skipping."
+          fi
+
+      - name: Send what is due
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          MAILER_SECRET: ${{ secrets.MAILER_SECRET }}
+          MESSAGE_ID: ${{ inputs.message_id }}
+        run: |
+          if [ -n "$MESSAGE_ID" ]; then
+            BODY="{\"message_id\":\"${MESSAGE_ID}\"}"
+          else
+            BODY='{}'
+          fi
+          curl -fsS --max-time 600 -X POST \
+            "${SUPABASE_URL%/}/functions/v1/event-mailer" \
+            -H "x-mailer-secret: ${MAILER_SECRET}" \
+            -H 'content-type: application/json' \
+            -d "$BODY" \
+            | tee response.json
+          echo "::notice::$(jq -r '"\(.claimed) claimed, \(.sent) sent, \(.failed) failed"' response.json)"

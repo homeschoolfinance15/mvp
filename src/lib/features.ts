@@ -14,7 +14,21 @@
  */
 export const FEATURES = {
   feed: false,
-  events: false,
+  /**
+   * The event platform: public event pages, ticketing, check-in, feedback and
+   * the organiser and administrator surfaces around them.
+   *
+   * On, because it replaces the basic event experience rather than sitting
+   * beside it — the old members-only RSVP page is gone and this is what
+   * `/events` now means. The flag stays as the kill switch: one boolean hides
+   * every address in §4 of the contract and sends anyone following an old
+   * link home, which is a safer thing to own than a half-reverted deploy.
+   *
+   * Switching it off does not touch data. Events, registrations, orders,
+   * tickets, attendance and feedback all remain exactly where they are, and
+   * turning it back on finds them (QLT-08).
+   */
+  events: true,
   /**
    * The post thread on an event page. Off on its own so events can be
    * switched on without the feed coming with them. Existing threads are

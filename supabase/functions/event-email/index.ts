@@ -1,460 +1,457 @@
 // ============================================================================
-// event-email — the five messages an event sends
+// event-email — the enqueue API
 //
-//   invited    a host put you on the list
-//   cohost     a host asked you to run it with them
-//   updated    the time, the place or the name of it changed
-//   cancelled  it is not happening
-//   rsvp       somebody is coming, told to every host
+// This used to send the five event emails itself. It no longer sends
+// anything. It resolves who should hear a thing, writes one event_messages
+// row and one event_message_recipients row per person, and stops.
+// supabase/functions/event-mailer drains that queue and does the sending.
 //
-// Why this is an edge function and not four lines in Events.tsx:
+// Splitting it in two is what buys the three rules that matter:
 //
-//   member_directory deliberately has no email column — that is what keeps
-//   one member's address out of another member's hands. So the addresses can
-//   only be read with the service role, which must never reach a browser.
-//   The caller's own token answers "who is asking", exactly as invite-email
-//   does, and the service role does the reading.
+//   EML-06  the queue is claimed atomically, so nobody gets two copies even
+//           when two dispatch runs overlap.
+//   EML-07  the audience resolved here is re-checked at send time. This list
+//           is a starting point, never the final word — somebody who cancels
+//           between now and the send is dropped there, not here.
+//   EML-08  status is per recipient, so a partial failure retries only the
+//           people it failed for.
 //
-// Who may send what:
+// Why it is still an edge function: member_directory deliberately has no
+// email column — that is what keeps one member's address out of another
+// member's hands. Addresses can only be read with the service role, which
+// must never reach a browser. The caller's own token answers "who is
+// asking", exactly as invite-email does, and the service role does the
+// reading.
 //
-//   invited, cohost, updated and cancelled are host business, so the caller
-//   has to host the event. rsvp is the one a guest triggers about themselves,
-//   so the caller has to be somebody with a 'going' row on that event — it
-//   sends to the hosts and to nobody else, and says only that they are
-//   coming, which the hosts can already see.
+// Who may ask for what:
 //
-// Order matters for one of them: cancelled has to be sent before the event is
-// deleted, because the delete cascades the guest list away with it.
+//   Host business — reminder, invite, update, cancelled, feedback_open —
+//   needs hosts_event() or is_admin() (EML-09).
+//   attendee_cancelled is the one an attendee triggers, and only about
+//   themselves.
+//   confirmation, payment and refund are queued by stripe-webhook and
+//   event-refund with the service role; money is only ever confirmed by the
+//   thing that took it.
+//
+// Queueing a message never changes the event. Saving an event and notifying
+// the people coming to it are two separate outcomes with two separate
+// results (ORG-10, EML-03) — a failure here has never undone a saved change
+// and must not start.
 //
 // Deploy:  supabase functions deploy event-email
-// Secrets: supabase secrets set RESEND_API_KEY=re_...
-//          supabase secrets set SITE_URL=https://goamazing.ai   (optional)
-//          supabase secrets set EVENT_TZ=Europe/London          (optional)
+// Secrets: supabase secrets set SITE_URL=https://goamazing.ai   (optional)
+//          supabase secrets set MAILER_SECRET=...   (needed for send_now)
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import {
+  addressesFor,
+  type Db,
+  KINDS,
+  type MessageKind,
+  PERSONAL,
+  resolveAudience,
+  SERVICE_ONLY,
+  unresolvedProfiles,
+  withoutHosts,
+} from '../_shared/audience.ts'
 
-const FROM = 'Amazing AI <noreply@goamazing.ai>'
-const SITE = (Deno.env.get('SITE_URL') ?? 'https://goamazing.ai').replace(/\/+$/, '')
-
-// Everyone reads the same times, so they are written in the network's own
-// timezone rather than the sender's. Set EVENT_TZ if the network moves.
-const TZ = Deno.env.get('EVENT_TZ') ?? 'Europe/London'
-
-/** Resend takes 100 per batch call. */
-const BATCH = 100
-
-type Kind = 'invited' | 'cohost' | 'updated' | 'cancelled' | 'rsvp'
-const KINDS: Kind[] = ['invited', 'cohost', 'updated', 'cancelled', 'rsvp']
-
-interface Recipient {
-  email: string
-  full_name: string
+interface Body {
+  kind: MessageKind
+  event_id: string
+  profile_id?: string
+  subject?: string
+  body?: string
+  changed_details?: Record<string, { from: unknown; to: unknown }>
+  audience_count?: number
+  reminder_id?: string
+  scheduled_for?: string
+  send_now?: boolean
 }
 
-Deno.serve(async (request: Request) => {
+async function handle(request: Request): Promise<Response> {
   if (request.method === 'OPTIONS') return json(null, 204)
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
-
-  const resendKey = Deno.env.get('RESEND_API_KEY')
-  if (!resendKey) return json({ error: 'RESEND_API_KEY is not set.' }, 500)
 
   const authorization = request.headers.get('Authorization') ?? ''
   if (!authorization) return json({ error: 'Sign in first.' }, 401)
 
-  let kind = '' as Kind
-  let eventId = ''
-  let profileId = ''
+  let body: Body
   try {
-    const body = await request.json()
-    kind = String(body?.kind ?? '') as Kind
-    eventId = String(body?.event_id ?? '').trim()
-    profileId = String(body?.profile_id ?? '').trim()
+    body = (await request.json()) as Body
   } catch {
     return json({ error: 'Expected a JSON body.' }, 400)
   }
+
+  const kind = String(body?.kind ?? '') as MessageKind
+  const eventId = String(body?.event_id ?? '').trim()
+  const profileId = String(body?.profile_id ?? '').trim()
+
   if (!KINDS.includes(kind)) return json({ error: 'Unknown kind.' }, 400)
   if (!eventId) return json({ error: 'An event is required.' }, 400)
-  if (kind === 'cohost' && !profileId) {
+  if (PERSONAL.includes(kind) && !profileId) {
     return json({ error: 'A recipient is required.' }, 400)
+  }
+  if (kind === 'update' && !String(body?.subject ?? '').trim()) {
+    return json({ error: 'An update needs a subject.' }, 400)
   }
 
   const url = Deno.env.get('SUPABASE_URL')!
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
   if (!anonKey) return json({ error: 'SUPABASE_ANON_KEY is not set.' }, 500)
 
-  const asCaller = createClient(url, anonKey, {
-    global: { headers: { Authorization: authorization } },
-  })
-  const db = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  const db = createClient(url, serviceKey)
 
-  const { data: userData } = await asCaller.auth.getUser()
-  const me = userData?.user?.id
-  if (!me) return json({ error: 'Sign in first.' }, 401)
+  // stripe-webhook and event-refund call this with the service role. They are
+  // server-side and already established the fact they are reporting.
+  const asService = authorization === `Bearer ${serviceKey}`
 
-  const { data: event } = await db
-    .from('events')
-    .select('id, host_id, title, description, location, starts_at, ends_at')
-    .eq('id', eventId)
-    .maybeSingle()
-  if (!event) return json({ error: 'That event does not exist.' }, 404)
+  let me: string | null = null
+  if (!asService) {
+    const asCaller = createClient(url, anonKey, {
+      global: { headers: { Authorization: authorization } },
+    })
+    const { data: userData } = await asCaller.auth.getUser()
+    me = userData?.user?.id ?? null
+    if (!me) return json({ error: 'Sign in first.' }, 401)
 
-  // ---- may the caller send this ------------------------------------------
-
-  if (kind === 'rsvp') {
-    const { data: mine } = await db
-      .from('event_invitations')
-      .select('status')
-      .eq('event_id', eventId)
-      .eq('profile_id', me)
-      .maybeSingle()
-    if (mine?.status !== 'going') {
+    if (SERVICE_ONLY.includes(kind)) {
       return json({ error: 'That is not yours to send.' }, 403)
     }
-  } else {
-    const [{ data: hosts }, { data: isAdmin }] = await Promise.all([
-      asCaller.rpc('hosts_event', { p_event: eventId }),
-      asCaller.rpc('is_admin'),
-    ])
-    if (!hosts && !isAdmin) return json({ error: 'That is not yours to send.' }, 403)
+
+    if (kind === 'attendee_cancelled' && profileId === me) {
+      // EML-09. An attendee may ask for this about themselves and nobody else.
+      // No further check: it is their own cancellation, their own address.
+    } else {
+      const [{ data: hosts }, { data: isAdmin }] = await Promise.all([
+        asCaller.rpc('hosts_event', { p_event: eventId }),
+        asCaller.rpc('is_admin'),
+      ])
+      if (!hosts && !isAdmin) return json({ error: 'That is not yours to send.' }, 403)
+    }
   }
 
-  // ---- who hears it -------------------------------------------------------
-
-  const hostIds = await allHostIds(db, eventId)
-  let recipientIds: string[] = []
-
-  switch (kind) {
-    case 'invited': {
-      // With a profile_id it is one person being added to an existing event.
-      // Without one it is everybody currently sitting at 'invited', which is
-      // how a newly created event mails its whole guest list in one call
-      // rather than one invocation per guest.
-      const query = db
-        .from('event_invitations')
-        .select('profile_id')
-        .eq('event_id', eventId)
-        .eq('status', 'invited')
-      const { data: rows } = profileId ? await query.eq('profile_id', profileId) : await query
-
-      // Only people actually on the list, so this can never be used to mail a
-      // member who was never invited.
-      if (profileId && (rows ?? []).length === 0) {
-        return json({ error: 'They are not on the list.' }, 409)
-      }
-      recipientIds = (rows ?? [])
-        .map((r) => r.profile_id as string)
-        .filter((id) => !hostIds.includes(id))
-      break
-    }
-    case 'cohost': {
-      const { data: row } = await db
-        .from('event_hosts')
-        .select('profile_id')
-        .eq('event_id', eventId)
-        .eq('profile_id', profileId)
-        .maybeSingle()
-      if (!row) return json({ error: 'They do not host that event.' }, 409)
-      recipientIds = [profileId]
-      break
-    }
-    case 'updated':
-    case 'cancelled': {
-      // Everyone with a live answer. Somebody who already said no is left
-      // alone, and the hosts are not told what they just did themselves.
-      const { data: rows } = await db
-        .from('event_invitations')
-        .select('profile_id')
-        .eq('event_id', eventId)
-        .in('status', ['invited', 'going'])
-      recipientIds = (rows ?? [])
-        .map((r) => r.profile_id as string)
-        .filter((id) => !hostIds.includes(id))
-      break
-    }
-    case 'rsvp':
-      recipientIds = hostIds.filter((id) => id !== me)
-      break
-  }
-
-  if (recipientIds.length === 0) return json({ sent: 0 }, 200)
-
-  const recipients = await addressesFor(db, recipientIds)
-  if (recipients.length === 0) return json({ sent: 0 }, 200)
-
-  // ---- the one name that appears inside the message -----------------------
-
-  const actorId = kind === 'rsvp' ? me : event.host_id
-  const { data: actor } = await db
-    .from('profiles')
-    .select('full_name')
-    .eq('id', actorId)
+  const { data: eventRow, error: readError } = await db
+    .from('events')
+    .select('id, title, slug, starts_at, ends_at, status, venue_name, address, location,' +
+      ' attendee_instructions, timezone, refund_terms')
+    .eq('id', eventId)
     .maybeSingle()
-  const actorName = String(actor?.full_name ?? 'Someone')
 
-  // ---- send ---------------------------------------------------------------
+  // A failed read is not "no such event", and the difference matters for the
+  // next block: EML-04 compares the preview against this row, so running that
+  // comparison on an error object would find every field changed and refuse a
+  // perfectly good announcement with a nonsense list of what moved.
+  if (readError) return json({ error: 'Could not read the event.' }, 500)
+  if (!eventRow) return json({ error: 'That event does not exist.' }, 404)
 
-  const link = `${SITE}/events?event=${encodeURIComponent(eventId)}`
-  const when = formatWhen(event.starts_at as string, event.ends_at as string | null)
-  const detail = { title: String(event.title), when, location: event.location as string | null, link }
+  const event = eventRow as unknown as Record<string, unknown>
 
-  const messages = recipients.map((person) => {
-    const first = person.full_name.split(' ')[0] || 'there'
-    const copy = WRITE[kind](first, actorName, detail)
-    return {
-      from: FROM,
-      to: person.email,
-      subject: copy.subject,
-      text: copy.text,
-      html: shell(copy.body, kind === 'cancelled' ? null : link, copy.cta),
+  // EML-04. The organiser approved a preview built against the event as it
+  // read a moment ago. If it has moved again since, the announcement they
+  // approved is not the announcement that would go out, so it is refused
+  // rather than sent stale. Nothing is queued and nothing is lost — they
+  // build the preview again against what the event says now.
+  if (kind === 'update') {
+    const moved = staleChanges(body.changed_details ?? {}, event)
+    if (moved.length > 0) {
+      return json(
+        {
+          error: 'The event changed again after this preview was built.',
+          stale: moved,
+          refresh_preview: true,
+        },
+        409,
+      )
     }
-  })
-
-  let sent = 0
-  for (let i = 0; i < messages.length; i += BATCH) {
-    const chunk = messages.slice(i, i + BATCH)
-    const response = await fetch('https://api.resend.com/emails/batch', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(chunk),
-    })
-    if (!response.ok) {
-      // Say how far it got. The caller has already made the change in the
-      // database; a failed send is worth reporting but never worth undoing
-      // an event that was correctly created, edited or cancelled.
-      return json({ error: `Resend refused it: ${await response.text()}`, sent }, 502)
-    }
-    sent += chunk.length
   }
 
-  return json({ sent }, 200)
-})
+  // Only somebody who actually hosts the event can be told they host it. The
+  // original checked this too, and it is what stops this kind being used to
+  // mail an arbitrary member a message about an event they have nothing to do
+  // with.
+  if (kind === 'cohost') {
+    const { data: row } = await db
+      .from('event_hosts')
+      .select('profile_id')
+      .eq('event_id', eventId)
+      .eq('profile_id', profileId)
+      .maybeSingle()
+    if (!row) return json({ error: 'They do not host that event.' }, 409)
+  }
 
-/* -------------------------------------------------------------------------- */
-/* Reading people                                                              */
-/* -------------------------------------------------------------------------- */
+  // EML-01, the paid row: "Payment and ticket confirmation may be combined
+  // into one clear email." They are. The paid path sends `payment`, which
+  // already states the amount, that the place is confirmed, and where the
+  // ticket is — so a `confirmation` for somebody who has paid is suppressed
+  // here rather than relying on two workstreams agreeing about which of the
+  // two to call. One purchase, one email, whoever asks.
+  if (kind === 'confirmation') {
+    const { data: order } = await db
+      .from('event_orders')
+      .select('id')
+      .eq('event_id', eventId)
+      .eq('profile_id', profileId)
+      .eq('status', 'paid')
+      .limit(1)
+      .maybeSingle()
+    if (order) {
+      return json({ message_id: null, audience_count: 0, superseded_by: 'payment' }, 200)
+    }
+  }
 
-async function allHostIds(
-  db: ReturnType<typeof createClient>,
-  eventId: string,
-): Promise<string[]> {
-  const { data } = await db.rpc('event_host_ids', { p_event: eventId })
-  return ((data ?? []) as { profile_id: string }[]).map((r) => r.profile_id)
-}
+  // FDB-06. A missed check-in corrected after the feedback email already went
+  // out. The corrected guest gets their initial request; nobody who already
+  // had one gets a second.
+  if (kind === 'feedback_open' && profileId) {
+    const late = await addLateRecipient(db, eventId, profileId)
+    if (late) {
+      if (late.reopened) await dispatch(url, late.message_id)
+      return json(late, 200)
+    }
+  }
 
-/** Addresses live on profiles, which is why this runs with the service role. */
-async function addressesFor(
-  db: ReturnType<typeof createClient>,
-  ids: string[],
-): Promise<Recipient[]> {
-  const { data } = await db
-    .from('profiles')
-    .select('email, full_name')
-    .in('id', ids)
-    // Somebody suspended or removed is not written to.
-    .eq('profile_status', 'active')
-  return ((data ?? []) as { email: string | null; full_name: string | null }[])
-    .filter((p): p is { email: string; full_name: string | null } => Boolean(p.email))
-    .map((p) => ({ email: p.email, full_name: String(p.full_name ?? '') }))
-}
+  const audience = await resolveAudience(db, kind, eventId, profileId)
+  if (audience.length === 0) return json({ message_id: null, audience_count: 0 }, 200)
 
-/* -------------------------------------------------------------------------- */
-/* Words                                                                       */
-/* -------------------------------------------------------------------------- */
+  const scheduledFor =
+    body.send_now || !body.scheduled_for ? new Date().toISOString() : body.scheduled_for
 
-interface Detail {
-  title: string
-  when: string
-  location: string | null
-  link: string
-}
+  const { data: message, error: messageError } = await db
+    .from('event_messages')
+    .insert({
+      event_id: eventId,
+      kind,
+      reminder_id: body.reminder_id ?? null,
+      scheduled_for: scheduledFor,
+      status: 'scheduled',
+      subject: body.subject ?? null,
+      body: body.body ?? null,
+      changed_details: body.changed_details ?? null,
+      // The count that goes on the record is the one just resolved, not the
+      // one the preview guessed — the preview is what the organiser saw, this
+      // is what was actually queued.
+      audience_count: audience.length,
+      triggered_by: me,
+    })
+    .select('id, kind, scheduled_for, status, audience_count')
+    .single()
 
-interface Copy {
-  subject: string
-  /** Paragraphs. Plain text; the shell escapes them for the HTML version. */
-  body: string[]
-  cta: string
-  text: string
-}
+  if (messageError || !message) {
+    return json({ error: `Could not queue it: ${messageError?.message}` }, 500)
+  }
 
-/** Where and when, written once. */
-function place(d: Detail): string {
-  return d.location ? `${d.when} at ${d.location}` : d.when
-}
-
-const WRITE: Record<Kind, (first: string, actor: string, d: Detail) => Copy> = {
-  invited: (first, actor, d) => ({
-    subject: `${actor} invited you to ${d.title}`,
-    body: [
-      `Hello ${first},`,
-      `${actor} has put you on the list for ${d.title}.`,
-      place(d) + '.',
-      'Let them know whether you are coming.',
-    ],
-    cta: 'See the event',
-    text: `Hello ${first},
-
-${actor} has put you on the list for ${d.title}.
-
-${place(d)}.
-
-Let them know whether you are coming:
-${d.link}
-
-— Amazing AI
-`,
-  }),
-
-  cohost: (first, actor, d) => ({
-    subject: `You are hosting ${d.title}`,
-    body: [
-      `Hello ${first},`,
-      `${actor} has asked you to host ${d.title} with them.`,
-      place(d) + '.',
-      'You can edit it, invite people and see who is coming, the same as they can.',
-    ],
-    cta: 'Open the event',
-    text: `Hello ${first},
-
-${actor} has asked you to host ${d.title} with them.
-
-${place(d)}.
-
-You can edit it, invite people and see who is coming, the same as they can:
-${d.link}
-
-— Amazing AI
-`,
-  }),
-
-  updated: (first, _actor, d) => ({
-    subject: `${d.title} has changed`,
-    body: [
-      `Hello ${first},`,
-      `Something about ${d.title} has changed. It is now:`,
-      place(d) + '.',
-      'Nothing is needed from you — your answer still stands.',
-    ],
-    cta: 'See what changed',
-    text: `Hello ${first},
-
-Something about ${d.title} has changed. It is now:
-
-${place(d)}.
-
-Nothing is needed from you — your answer still stands. The full details:
-${d.link}
-
-— Amazing AI
-`,
-  }),
-
-  cancelled: (first, actor, d) => ({
-    subject: `${d.title} is not happening`,
-    body: [
-      `Hello ${first},`,
-      `${actor} has cancelled ${d.title}, which was to be ${place(d)}.`,
-      'There is nothing you need to do. Sorry for the change of plan.',
-    ],
-    cta: '',
-    text: `Hello ${first},
-
-${actor} has cancelled ${d.title}, which was to be ${place(d)}.
-
-There is nothing you need to do. Sorry for the change of plan.
-
-— Amazing AI
-`,
-  }),
-
-  rsvp: (first, actor, d) => ({
-    subject: `${actor} is coming to ${d.title}`,
-    body: [
-      `Hello ${first},`,
-      `${actor} has said they are coming to ${d.title}, ${place(d)}.`,
-    ],
-    cta: 'See who is coming',
-    text: `Hello ${first},
-
-${actor} has said they are coming to ${d.title}, ${place(d)}.
-
-${d.link}
-
-— Amazing AI
-`,
-  }),
-}
-
-/** The same envelope every other message from here arrives in. */
-function shell(paragraphs: string[], link: string | null, cta: string): string {
-  const body = paragraphs
-    .map(
-      (p, i) =>
-        `<p style="margin:0 0 ${i === paragraphs.length - 1 ? 28 : 18}px;">${escapeHtml(p)}</p>`,
+  // EML-06. Unique (message_id, profile_id) in the schema means a repeated
+  // call cannot put the same person on the same message twice, whatever this
+  // code does. upsert leans on that rather than re-asserting it.
+  const { error: recipientError } = await db
+    .from('event_message_recipients')
+    .upsert(
+      audience.map((person) => ({
+        message_id: message.id,
+        profile_id: person.profile_id,
+        email: person.email,
+        status: 'scheduled',
+      })),
+      { onConflict: 'message_id,profile_id', ignoreDuplicates: true },
     )
-    .join('\n        ')
 
-  const button =
-    link && cta
-      ? `<p style="margin:0 0 28px;">
-          <a href="${link}" style="display:inline-block;padding:12px 22px;background:#2f2f2c;color:#faf9f7;text-decoration:none;font-size:14px;">${escapeHtml(cta)}</a>
-        </p>`
-      : ''
+  if (recipientError) {
+    await db
+      .from('event_messages')
+      .update({ status: 'cancelled', error: recipientError.message })
+      .eq('id', message.id)
+    return json({ error: `Could not queue the recipients: ${recipientError.message}` }, 500)
+  }
 
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:32px 16px;background:#faf9f7;font-family:Georgia,'Times New Roman',serif;color:#2f2f2c;">
-    <table role="presentation" style="max-width:520px;margin:0 auto;border-collapse:collapse;">
-      <tr><td style="padding-bottom:28px;">
-        <span style="font-size:20px;font-weight:700;letter-spacing:-0.03em;text-transform:uppercase;">Amazing<span style="color:#b08d3f;">.</span></span>
-      </td></tr>
-      <tr><td style="font-size:15px;line-height:1.65;">
-        ${body}
-        ${button}
-        <p style="margin:0;color:#6f6f68;font-size:13px;">&mdash; Amazing AI</p>
-      </td></tr>
-    </table>
-  </body>
-</html>
-`
+  // A host pressing Send watches it go rather than waiting for the next cron
+  // tick. The dispatcher claims conditionally, so this racing the schedule is
+  // harmless — one of them gets the message and the other gets nothing.
+  let dispatched = false
+  if (body.send_now) {
+    dispatched = await dispatch(url, String(message.id))
+  }
+
+  return json(
+    {
+      message_id: message.id,
+      kind,
+      audience_count: audience.length,
+      scheduled_for: scheduledFor,
+      status: 'scheduled',
+      dispatched,
+    },
+    200,
+  )
 }
 
-/** "Thursday 12 March, 7:00 pm" — and the end time when there is one. */
-function formatWhen(startsAt: string, endsAt: string | null): string {
-  const date = new Intl.DateTimeFormat('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: TZ,
-  })
-  const time = new Intl.DateTimeFormat('en-GB', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: TZ,
-  })
+/* -------------------------------------------------------------------------- */
+/* FDB-06 — a check-in corrected after the feedback email went out             */
+/* -------------------------------------------------------------------------- */
 
-  const start = new Date(startsAt)
-  const opening = `${date.format(start)}, ${time.format(start)}`
-  if (!endsAt) return opening
-
-  const end = new Date(endsAt)
-  // Same day reads as a range; a different day gets written out in full.
-  return date.format(end) === date.format(start)
-    ? `${opening} to ${time.format(end)}`
-    : `${opening} until ${date.format(end)}, ${time.format(end)}`
+interface LateAdd {
+  message_id: string
+  audience_count: number
+  added: boolean
+  reopened: boolean
+  note: string
 }
 
-/** Titles, locations and names are all typed by members. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+/**
+ * FDB-06: "Include them in the initial feedback email if it has not yet been
+ * sent. If feedback has already opened, make the feedback link available and
+ * send their initial request without duplicating an earlier send. A corrected
+ * guest must not remain blocked solely because the original check-in was
+ * missed."
+ *
+ * The first half is free — a correction made before the send is picked up by
+ * the dispatcher's EML-07 re-check. This is the second half.
+ *
+ * It adds the one person to the **existing** feedback_open message rather than
+ * making a second one, because a second message is a second audience and the
+ * only thing stopping it mailing everybody twice would be care. Unique
+ * (message_id, profile_id) on the existing row is a guard that holds whatever
+ * this code does (EML-06).
+ *
+ * Re-opening a finished message to 'scheduled' is safe: the dispatcher only
+ * ever writes to recipients still sitting at 'scheduled' or 'failed', so the
+ * people who already received it are not written to a second time (EML-08).
+ *
+ * Returns null when there is no feedback_open message yet — then the ordinary
+ * enqueue path runs and the correction simply lands in the first send.
+ */
+async function addLateRecipient(
+  db: Db,
+  eventId: string,
+  profileId: string,
+): Promise<LateAdd | null> {
+  const { data: existing } = await db
+    .from('event_messages')
+    .select('id, status')
+    .eq('event_id', eventId)
+    .eq('kind', 'feedback_open')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!existing) return null
+
+  const message = existing as { id: string; status: string }
+
+  const { data: already } = await db
+    .from('event_message_recipients')
+    .select('id')
+    .eq('message_id', message.id)
+    .eq('profile_id', profileId)
+    .maybeSingle()
+  if (already) {
+    // They were on the original send. Nothing to do, and saying so is not an
+    // error — a host correcting attendance twice is not a fault.
+    return {
+      message_id: message.id,
+      audience_count: 0,
+      added: false,
+      reopened: false,
+      note: 'Already on this message.',
+    }
+  }
+
+  const [person] = await addressesFor(db, [profileId])
+  if (!person) {
+    return {
+      message_id: message.id,
+      audience_count: 0,
+      added: false,
+      reopened: false,
+      note: 'No active profile to write to.',
+    }
+  }
+
+  const { error } = await db.from('event_message_recipients').insert({
+    message_id: message.id,
+    profile_id: profileId,
+    email: person.email,
+    status: 'scheduled',
+  })
+  if (error) {
+    return {
+      message_id: message.id,
+      audience_count: 0,
+      added: false,
+      reopened: false,
+      note: error.message,
+    }
+  }
+
+  const reopened = message.status !== 'scheduled'
+  if (reopened) {
+    await db.from('event_messages').update({ status: 'scheduled' }).eq('id', message.id)
+  }
+
+  return {
+    message_id: message.id,
+    audience_count: 1,
+    added: true,
+    reopened,
+    note: 'Added to the original feedback request.',
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* EML-04 — is this preview still true                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The preview recorded, per field, what the value was about to become. If the
+ * event still says that, the preview is current. If it says something else,
+ * the organiser is about to announce a time or a place that is already wrong.
+ *
+ * Returns the fields that have moved on. Pure, so the mailer's self-check can
+ * borrow the same reasoning.
+ */
+export function staleChanges(
+  changed: Record<string, { from: unknown; to: unknown }>,
+  event: Record<string, unknown>,
+): string[] {
+  return Object.entries(changed)
+    .filter(([field, change]) => {
+      if (!(field in event)) return false
+      return normalise(event[field]) !== normalise(change?.to)
+    })
+    .map(([field]) => field)
+}
+
+/** Timestamps come back from Postgres spelled differently to how they went in. */
+function normalise(value: unknown): string {
+  if (value == null) return ''
+  const text = String(value)
+  const asDate = Date.parse(text)
+  return Number.isNaN(asDate) ? text.trim() : String(asDate)
+}
+
+/* -------------------------------------------------------------------------- */
+/* Send now                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Nudges the dispatcher for this one message. Best effort on purpose: the
+ * message is already queued and the schedule will pick it up within five
+ * minutes regardless, so a failure here is not worth failing the request the
+ * organiser made.
+ */
+async function dispatch(url: string, messageId: string): Promise<boolean> {
+  const secret = Deno.env.get('MAILER_SECRET')
+  if (!secret) return false
+  try {
+    const response = await fetch(`${url.replace(/\/+$/, '')}/functions/v1/event-mailer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mailer-secret': secret },
+      body: JSON.stringify({ message_id: messageId }),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
 }
 
 function json(body: unknown, status = 200): Response {
@@ -468,4 +465,104 @@ function json(body: unknown, status = 200): Response {
         'authorization, x-client-info, apikey, content-type',
     },
   })
+}
+
+/* -------------------------------------------------------------------------- */
+/* Self-check                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * EML-04 is the one decision here that is wrong quietly rather than loudly:
+ * a stale preview sends a correct-looking announcement carrying last week's
+ * address. It is pure, so it is checked without a database.
+ *
+ *   deno run -A supabase/functions/event-email/index.ts --check
+ */
+function demo(): void {
+  const ok = (claim: boolean, what: string) => {
+    if (!claim) throw new Error(`FAILED: ${what}`)
+    console.log(`  ok  ${what}`)
+  }
+
+  const event = {
+    title: 'Dinner',
+    venue_name: 'The Hoxton',
+    starts_at: '2026-03-12T19:00:00+00:00',
+    address: null,
+  }
+
+  ok(
+    staleChanges({ venue_name: { from: 'The Standard', to: 'The Hoxton' } }, event).length === 0,
+    'EML-04 a preview that matches the event is sent',
+  )
+  ok(
+    staleChanges({ venue_name: { from: 'The Standard', to: 'The Standard' } }, event)[0] ===
+      'venue_name',
+    'EML-04 a preview built before a later edit is refused, not sent stale',
+  )
+  ok(
+    staleChanges({ starts_at: { from: null, to: '2026-03-12T19:00:00Z' } }, event).length === 0,
+    'EML-04 the same instant spelled differently by Postgres is not a change',
+  )
+  ok(
+    staleChanges({ starts_at: { from: null, to: '2026-03-12T20:00:00Z' } }, event)[0] ===
+      'starts_at',
+    'EML-04 a moved start time is caught',
+  )
+  ok(
+    staleChanges({ address: { from: '12 Holywell Lane', to: null } }, event).length === 0,
+    'EML-04 a cleared field reads as cleared, not as a change',
+  )
+
+  // ---- EML-01: who hears a cancellation ------------------------------------
+
+  const registrations = [{ profile_id: 'confirmed' }, { profile_id: 'mid-checkout' }]
+  const orders = [
+    { id: 'o1', profile_id: 'mid-checkout', status: 'pending' },
+    { id: 'o2', profile_id: 'paid-up', status: 'paid' },
+    // Refunded already, so not an unresolved obligation on its own …
+    { id: 'o3', profile_id: 'settled', status: 'refunded' },
+    // … but this one's refund is still in flight, which is.
+    { id: 'o4', profile_id: 'awaiting-refund', status: 'refunded' },
+    { id: 'o5', profile_id: 'never-paid', status: 'failed' },
+  ]
+  const hears = unresolvedProfiles(registrations, orders, ['o4']).sort()
+
+  ok(
+    JSON.stringify(hears) ===
+      JSON.stringify(['awaiting-refund', 'confirmed', 'mid-checkout', 'paid-up']),
+    'EML-01 a cancellation reaches everyone with an unresolved booking or payment',
+  )
+  ok(
+    !hears.includes('never-paid') && !hears.includes('settled'),
+    'EML-01 a failed purchase and a finished refund are not unresolved obligations',
+  )
+  ok(
+    hears.filter((id) => id === 'mid-checkout').length === 1,
+    'EML-06 somebody who is both registered and mid-payment hears once, not twice',
+  )
+
+  // ---- a host is not a guest of their own event ----------------------------
+
+  ok(
+    JSON.stringify(withoutHosts(['guest', 'cohost', 'other'], ['cohost', 'creator'])) ===
+      JSON.stringify(['guest', 'other']),
+    'somebody hosting the event is left out of the invite audience',
+  )
+  ok(
+    withoutHosts(['cohost'], ['cohost']).length === 0,
+    'a new cohost hears "you are hosting this" and not "you are invited to this"',
+  )
+  ok(
+    JSON.stringify(withoutHosts(['guest'], [])) === JSON.stringify(['guest']),
+    'an event with no cohosts still invites its guests',
+  )
+
+  console.log('\nevent-email: all checks passed.')
+}
+
+if (Deno.args.includes('--check')) {
+  demo()
+} else {
+  Deno.serve(handle)
 }

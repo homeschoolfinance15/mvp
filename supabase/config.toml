@@ -423,3 +423,9 @@ enabled = true
 # Supabase, where that key never leaves.
 [functions.recommend]
 verify_jwt = false
+
+# Stripe signs its deliveries with its own stripe-signature header and carries
+# no Supabase JWT, so JWT verification has to be off or every delivery 401s.
+# The signature check inside the function is what stands in for it.
+[functions.stripe-webhook]
+verify_jwt = false

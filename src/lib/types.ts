@@ -20,6 +20,18 @@ export interface Profile {
   current_profession: string | null
   semantic_summary: string | null
   profile_status: ProfileStatus
+  /**
+   * Whether this person belongs to the network, as opposed to holding an
+   * account only so they can attend events (ACC-01, ACC-02).
+   *
+   * `is_member()` is `has_account()` AND this, so the feed, the circle and
+   * the member directory stay exactly as closed as they were. Every profile
+   * that existed before the event platform backfilled to true, so nobody's
+   * access changed. An event-only signup writes false; redeeming an invite
+   * code later flips it true on the same row, which is what keeps one person
+   * one person (ACC-06).
+   */
+  network_member: boolean
   interests: string[]
   /** Object path in the media bucket. Null means fall back to initials. */
   avatar_path: string | null
@@ -245,6 +257,10 @@ export type NotificationKind =
   | 'report_resolved'
   | 'recommendations'
   | 'waitlist_joined'
+  | 'event_registered'
+  | 'event_updated'
+  | 'event_cancelled'
+  | 'feedback_open'
 
 /**
  * Something worth telling somebody, inside the platform.
@@ -291,6 +307,25 @@ export interface Connector {
   invite_status: ConnectorStatus
   invite_capacity: number
   created_at: string
+  /**
+   * Whether this connector may put events on the calendar (ORG-01A).
+   *
+   * Off for everybody until an administrator turns it on, and deliberately
+   * separate from `invite_status`: bringing people into the network and
+   * hosting events are different powers, and neither implies the other.
+   *
+   * Switching it off blocks new events and nothing else — see ORG-01C. The
+   * events they already host stay theirs to run, which is why the check sits
+   * on creation and first publication rather than on every management action.
+   */
+  can_create_events: boolean
+  events_permission_changed_by: string | null
+  events_permission_changed_at: string | null
+  /**
+   * Where this connector's own event revenue lands (BUY-14). Null until they
+   * connect an account, and paid sales stay shut until it is set.
+   */
+  stripe_account_id: string | null
 }
 
 export interface InviteCode {

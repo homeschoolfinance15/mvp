@@ -22,7 +22,9 @@ import {
 import { errorMessage, supabase } from '../../lib/supabase'
 import { SendInvite } from '../../components/SendInvite'
 import { useAuth } from '../../context/AuthProvider'
-import type { Connector, ConnectorNote, InviteCode, Profile } from '../../lib/types'
+import type { ConnectorNote, InviteCode, Profile } from '../../lib/types'
+import { PaymentsPanel } from './PaymentSetup'
+import type { ConnectorPayments } from './payouts'
 
 interface Person {
   linkId: string
@@ -34,7 +36,9 @@ interface Person {
 export default function ConnectorDashboard() {
   const { profile } = useAuth()
   const [tab, setTab] = useState('people')
-  const [connector, setConnector] = useState<Connector | null>(null)
+  // `select('*')` already returns the Stripe columns; ConnectorPayments is the
+  // type that says so until they land on `Connector` in src/lib/types.ts.
+  const [connector, setConnector] = useState<ConnectorPayments | null>(null)
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [notes, setNotes] = useState<ConnectorNote[]>([])
@@ -57,7 +61,7 @@ export default function ConnectorDashboard() {
       setLoading(false)
       return
     }
-    setConnector(connectorRow as Connector)
+    setConnector(connectorRow as ConnectorPayments)
 
     const [codesRes, linksRes, notesRes] = await Promise.all([
       supabase
@@ -113,6 +117,8 @@ export default function ConnectorDashboard() {
   const tabs: Tab[] = [
     { id: 'people', label: 'Your people', count: people.length },
     { id: 'codes', label: 'Invitations', count: codes.length },
+    // BUY-14. Their own Stripe account, and what it lets their events do.
+    { id: 'payments', label: 'Payments' },
     { id: 'flags', label: 'Raised' },
   ]
 
@@ -229,6 +235,10 @@ export default function ConnectorDashboard() {
               canInvite={connector?.invite_status === 'active'}
               onChanged={load}
             />
+          )}
+
+          {tab === 'payments' && connector && (
+            <PaymentsPanel connector={connector} onChanged={load} />
           )}
 
           {tab === 'flags' && (
