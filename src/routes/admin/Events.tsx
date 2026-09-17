@@ -100,16 +100,16 @@ export default function Events() {
                 under /manage/events for administrators and connectors alike,
                 and one editor for both is what keeps ORG-01 and ORG-01B the
                 same code path. */}
+            {/* The only door. An administrator manages every event, so the
+                "Hosting" list that used to sit beside this ran the identical
+                query and showed the identical rows — the same platform, listed
+                twice, differing only in which page a row opened. Creating
+                starts here; opening a row gives the record, and the record
+                links on to the editor. */}
             <Link to="/manage/events/new">
               <Button variant="primary" size="sm">
                 Create event
               </Button>
-            </Link>
-            <Link
-              to="/manage/events"
-              className="text-xs text-dim underline-offset-4 hover:text-fg hover:underline"
-            >
-              Hosting
             </Link>
           </div>
         }

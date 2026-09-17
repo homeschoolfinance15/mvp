@@ -90,13 +90,25 @@ function navLinks(profile: Profile | null): NavEntry[] {
   // one. A screen you can only reach by knowing the URL is a screen that does
   // not exist.
   //
-  // Shown on role rather than on `may_create_events`, deliberately. A
+  // Connectors only, and an administrator deliberately not.
+  //
+  // `/manage/events` filters to the events you host — except for an
+  // administrator, for whom it does not filter at all, because they manage
+  // every event. That made it the same query as `/admin/events`: the same list
+  // of every event on the platform, in two places, differing only in whether a
+  // row opened the editor or the record. Two doors to one room read as two
+  // rooms, and the person using it reasonably asked which was which.
+  //
+  // So an administrator has one door, `/admin/events`, where creating and
+  // opening an event both live, and the record view links on to the editor for
+  // the one they picked. A connector keeps this link, because for them it is
+  // genuinely their own events and they have no admin area at all.
+  //
+  // Shown on role rather than on `may_create_events`, deliberately: a
   // connector whose permission is switched *off* still manages the events they
-  // already host (ORG-01C), so the page is theirs either way; the list itself
-  // asks the real question and replaces the create button with the reason when
-  // the answer is no. Ordinary members are the ones excluded, and for them the
-  // page would be empty in every state.
-  const hosts = profile?.role === 'admin' || profile?.role === 'connector'
+  // already host (ORG-01C), so the page is theirs either way — the list asks
+  // the real question and replaces the create button with the reason.
+  const hosts = profile?.role === 'connector'
 
   // ACC-01, ACC-05. An event-only account is not allowed into the feed or the
   // circle — RequireMember meets it with a sentence, which is the right answer

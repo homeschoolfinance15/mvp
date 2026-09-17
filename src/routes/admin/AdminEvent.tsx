@@ -519,10 +519,25 @@ export default function AdminEvent() {
       caption="The platform's record of this event, in full. Read-only: this is what the system holds, not a second place to change it."
     >
       <div className="flex flex-wrap items-center gap-4">
-        <Link to="/admin" className="text-xs text-dim underline-offset-4 hover:text-fg hover:underline">
-          &larr; Administration
+        <Link
+          to="/admin/events"
+          className="text-xs text-dim underline-offset-4 hover:text-fg hover:underline"
+        >
+          &larr; Events
         </Link>
         <EventStatusBadge event={event} />
+        {/* ORG-14 says this page is where an administrator sees everything
+            without hunting; it did not follow that it should be a dead end.
+            The caption promises "read-only: not a second place to change it",
+            and that is only a kindness if there is a first place to go — until
+            this link there was none, and the way to edit an event you had just
+            opened was to type its other address. */}
+        <Link
+          to={`/manage/events/${event.id}`}
+          className="text-xs text-gold underline-offset-4 hover:underline"
+        >
+          Manage this event
+        </Link>
         <a
           href={`/e/${encodeURIComponent(event.slug)}`}
           target="_blank"
