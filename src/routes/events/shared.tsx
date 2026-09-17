@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { navLinks } from '../../components/DashboardShell'
-import { Button, Wordmark } from '../../components/ui'
-import { useAuth } from '../../context/AuthProvider'
+import { Link } from 'react-router-dom'
+import { SiteHeader } from '../../components/SiteHeader'
+import { Button } from '../../components/ui'
 import {
   CAPACITY_WORDS,
   eventWhen,
@@ -25,18 +24,12 @@ import { loadFailed, supabase } from '../../lib/supabase'
  * the one Landing.tsx and the sign-in pages already wear) rather than
  * switching to the member dashboard's chrome halfway through checkout.
  *
- * What the brand chrome must NOT do is strand a member. Signing in and then
- * pressing "Events" used to drop the whole app nav, leaving the browser's back
- * button and the wordmark as the only ways back — which is the bug this
- * branch fixes. So the frame is public, and the nav inside it is whoever is
- * reading: anonymous visitors get browse-and-sign-in, a signed-in person gets
- * the same links they see everywhere else in the app.
- *
- * The old objection to that — ACC-01 gives us event-only accounts, and the
- * member nav offered the feed and the circle, which they are not allowed into
- * — is answered in navLinks() itself, which no longer offers a door that will
- * not open. Showing somebody links that bounce them is worse than not showing
- * them, and it was worth fixing there rather than avoiding here.
+ * What the brand chrome must NOT do is strand a member, and for a while it
+ * did: pressing "Events" dropped the whole app nav and moved what was left to
+ * the other side of the screen. The header is no longer this file's business
+ * at all — SiteHeader is the same header on every page, and it is the one
+ * place that decides what an anonymous visitor, an event-only account and a
+ * member each get. What is left here is the layout around it.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -46,9 +39,11 @@ import { loadFailed, supabase } from '../../lib/supabase'
 /**
  * The frame every attendee screen sits in, signed in or not.
  *
- * `brand-experience` re-declares the palette variables on itself, so the
- * shared primitives in ui.tsx — Button, Panel, Field — pick up the teal
- * without any of them knowing this file exists. The same trick AuthLayout uses.
+ * `brand-experience` carries the public layout — rounder controls, the wider
+ * `brand-container` measure, the softer focus ring — which the shared
+ * primitives in ui.tsx pick up without any of them knowing this file exists.
+ * The same trick AuthLayout uses. The palette itself is site-wide now, which
+ * is why SiteHeader can be dropped in here and look like it belongs.
  */
 export function EventShell({
   children,
@@ -58,66 +53,13 @@ export function EventShell({
   /** Where the back link goes, when this screen is somewhere you came from. */
   back?: { to: string; label: string }
 }) {
-  const { session, profile, signOut } = useAuth()
-  const navigate = useNavigate()
-  // Both, not just the session: an account with no profile row cannot use the
-  // app nav (App.tsx meets it with NotProvisioned), so it reads as anonymous.
-  const signedIn = Boolean(session && profile)
-
   return (
     <div className="brand-experience flex min-h-screen flex-col">
       <a className="brand-skip-link" href="#event-main">
         Skip to content
       </a>
 
-      <header className="brand-container flex flex-wrap items-center justify-between gap-4 py-6">
-        <Link to="/" aria-label="Amazing home">
-          <Wordmark />
-        </Link>
-        <nav
-          aria-label={signedIn ? 'Main' : 'Events'}
-          className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]"
-        >
-          {signedIn ? (
-            <>
-              {/* The same links, in the same order, as the header on every
-                  other signed-in page. Rendered here rather than by wrapping
-                  the page in DashboardShell, because the shell also owns the
-                  dark chrome and the page title, and these five screens are
-                  the public brand experience described above. One nav, two
-                  frames. */}
-              {navLinks(profile).map((link) => (
-                <Link
-                  key={link.label}
-                  to={link.to}
-                  className="hover:text-fg hover:underline hover:underline-offset-4"
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <button
-                type="button"
-                onClick={async () => {
-                  await signOut()
-                  navigate('/')
-                }}
-                className="text-dim transition-colors hover:text-fg"
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to="/events" className="hover:text-fg hover:underline hover:underline-offset-4">
-                Browse events
-              </Link>
-              <Link to="/signin" className="hover:text-fg hover:underline hover:underline-offset-4">
-                Sign in
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main id="event-main" className="brand-container flex-1 pb-24">
         {back && (
