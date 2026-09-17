@@ -377,6 +377,61 @@ check(
   /row\.profile_id === me/.test(mustOwnBody) && !/isAdmin/.test(mustOwnBody),
 )
 
+/* -- payments-status never hands a key to a browser ------------------------ */
+//
+// The admin Payments screen reports whether Stripe is configured. It reads
+// secrets out of the edge runtime, which is exactly the position from which a
+// well-meaning convenience — "show the last four so I can tell which key this
+// is" — puts key material into a browser, a devtools tab, a screenshot and a
+// log aggregator. The rule is that the response carries booleans and a
+// test/live mode and nothing else, and these assert the shape of that rather
+// than the current wording of it.
+
+const payments = await Deno.readTextFile('supabase/functions/payments-status/index.ts')
+
+// Everything between the final `return json(` and the end of the handler: what
+// actually crosses the wire.
+const payload = payments.slice(payments.lastIndexOf('return json('))
+
+// Comments stripped, for the reason checkoutCode above is: this file explains
+// at length why it must not return a masked key, and an assertion that cannot
+// tell prose from code fails on the explanation of its own rule.
+const paymentsCode = payments
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split(/\r?\n/)
+  .filter((line) => !line.trim().startsWith('//'))
+  .join(' ')
+
+check(
+  'payments-status is admin-only',
+  /rpc\('is_admin'\)/.test(payments) && /Not authorised/.test(payments),
+)
+check(
+  'the response never names a key variable',
+  !/secretKey/.test(payload) &&
+    !/Deno\.env\.get\(['"]STRIPE_SECRET_KEY/.test(payload) &&
+    !/Deno\.env\.get\(['"]STRIPE_WEBHOOK_SECRET/.test(payload),
+)
+// The ways a partial key gets exposed while looking helpful.
+for (const [name, pattern] of [
+  ['no substring of a key', /(secretKey|webhookSecret)\s*\.\s*(slice|substring|substr|at)/],
+  ['no masked key', /mask|last4|lastFour|redact/i],
+  ['no key length', /(secretKey|webhookSecret)\s*\.\s*length/],
+] as const) {
+  check(name, !pattern.test(paymentsCode))
+}
+check(
+  'presence() reports only whether a value is set',
+  /function presence\([\s\S]*?return \{ set: Boolean\(/.test(payments),
+)
+// Mode is the one derived fact that may be returned. It must come from the
+// documented prefixes and nothing else — a regex over the whole key would be
+// one edit away from returning a capture group.
+check(
+  'mode is derived from the documented prefixes only',
+  /startsWith\('sk_test_'\)/.test(payments) && /startsWith\('sk_live_'\)/.test(payments),
+)
+
 /* -------------------------------------------------------------------------- */
 
 const failed = results.filter((r) => !r.pass)

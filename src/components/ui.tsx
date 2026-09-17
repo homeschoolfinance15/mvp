@@ -292,14 +292,35 @@ export function CopyCode({
 /* Messages                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export function Notice({ tone, children }: { tone: 'error' | 'success'; children: ReactNode }) {
+/**
+ * `warning` is the third state and not a softer error: something is true,
+ * working, and not what you probably meant — test keys in place of live ones
+ * being the case it was added for. Calling that an error would cry wolf on a
+ * correct configuration; calling it a success would let somebody ship to test
+ * mode believing they had gone live. It uses the amber already used for
+ * sold-out and payment-blocked states rather than introducing a fourth colour.
+ */
+export function Notice({
+  tone,
+  children,
+}: {
+  tone: 'error' | 'success' | 'warning'
+  children: ReactNode
+}) {
   if (!children) return null
   const styles =
     tone === 'error'
       ? 'border-[#e6b5ad] bg-[#fff0ec] text-negative'
-      : 'border-[#b9d8c4] bg-[#dcf0e4] text-positive'
+      : tone === 'warning'
+        ? 'border-[#efc98f] bg-[#f6ecd9] text-[#8a4b00]'
+        : 'border-[#b9d8c4] bg-[#dcf0e4] text-positive'
   return (
-    <div role={tone === 'error' ? 'alert' : 'status'} className={`rounded-sm border px-3.5 py-2.5 text-sm ${styles}`}>
+    <div
+      // A warning is announced, not interrupted — `alert` is for the one the
+      // reader has to deal with now.
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={`rounded-sm border px-3.5 py-2.5 text-sm ${styles}`}
+    >
       {children}
     </div>
   )

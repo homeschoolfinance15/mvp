@@ -9,6 +9,7 @@ import Events from './Events'
 import Log from './Log'
 import Members from './Members'
 import Notes from './Notes'
+import Payments from './Payments'
 import Waitlist from './Waitlist'
 
 /**
@@ -76,6 +77,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 
   // ORG-14. The platform's own records.
   { to: '/admin/events', label: 'Events', group: 'Platform', badge: 'events', element: <Events /> },
+  { to: '/admin/payments', label: 'Payments', group: 'Platform', element: <Payments /> },
   { to: '/admin/log', label: 'Log', group: 'Platform', element: <Log /> },
 ]
 
