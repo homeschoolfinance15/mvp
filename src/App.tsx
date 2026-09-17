@@ -48,7 +48,7 @@ import EventResults from './routes/manage/EventResults'
 import CheckIn from './routes/manage/CheckIn'
 import AdminEvent from './routes/admin/AdminEvent'
 import PaymentSetup from './routes/connector/PaymentSetup'
-import AdminDashboard from './routes/admin/AdminDashboard'
+import AdminLayout, { ADMIN_SECTIONS } from './routes/admin/AdminLayout'
 import ConnectorDashboard from './routes/connector/ConnectorDashboard'
 import UserDashboard from './routes/user/UserDashboard'
 import { FEATURES } from './lib/features'
@@ -373,14 +373,25 @@ export default function App() {
               </RequireRole>
             }
           />
+          {/* Administration. One layout, and a route per section rather than
+              tabs on a single page: an address is linkable, survives a
+              refresh, and gives the back button something to do — none of
+              which local tab state can. The section list itself lives in
+              ADMIN_SECTIONS, so a new screen is one entry there and never a
+              change here. */}
           <Route
             path="/admin"
             element={
               <RequireRole role="admin">
-                <AdminDashboard />
+                <AdminLayout />
               </RequireRole>
             }
-          />
+          >
+            <Route index element={<Navigate to={ADMIN_SECTIONS[0].to} replace />} />
+            {ADMIN_SECTIONS.map((section) => (
+              <Route key={section.to} path={section.to} element={section.element} />
+            ))}
+          </Route>
           <Route
             path="/connector"
             element={
