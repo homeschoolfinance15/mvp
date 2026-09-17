@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { SiteHeader, useDrawer } from '../../components/SiteHeader'
 import { FlagsPanel } from '../../components/FlagsPanel'
+import { useLive } from '../../lib/live'
 import { supabase } from '../../lib/supabase'
 import Circles from './Circles'
 import Connectors from './Connectors'
@@ -128,13 +129,19 @@ function useAdminCounts(): AdminCounts {
     })
   }, [])
 
-  // ponytail: refreshed when you change section, not when a section writes.
-  // Assigning somebody on /admin/waitlist leaves the badge one behind until
-  // you navigate. Thread a refresh through the Outlet context if that starts
-  // to matter.
   useEffect(() => {
     void load()
   }, [load, pathname])
+
+  // Live, not on navigation. These used to recount only when you changed
+  // section, so approving somebody on /admin/waitlist left the badge beside it
+  // reading the old number until you clicked away and back — the sidebar
+  // quietly disagreeing with the page you were looking at. Counts are the one
+  // thing on screen whose whole job is to be current.
+  useLive(
+    ['connectors', 'profiles', 'events', 'connector_notes', 'waitlist_entries', 'invite_codes'],
+    load,
+  )
 
   return counts
 }

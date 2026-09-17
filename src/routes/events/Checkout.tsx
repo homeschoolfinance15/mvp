@@ -12,6 +12,7 @@ import {
   type PublicEvent,
   type TicketType,
 } from '../../lib/events'
+import { useLive } from '../../lib/live'
 import { rememberSignupResume } from '../../lib/signupResume'
 import { errorMessage, functionError, supabase } from '../../lib/supabase'
 import {
@@ -187,6 +188,24 @@ export default function Checkout() {
     timer = window.setTimeout(tick, 2500)
     return () => window.clearTimeout(timer)
   }, [processing, reload])
+
+  /*
+   * The same verdict, usually sooner. The webhook writes the order and the
+   * registration, so a subscriber hears about it within a moment of it
+   * happening rather than up to 2.5 seconds later — and after the slow-down
+   * has kicked in, up to ten.
+   *
+   * This accelerates the poll above; it does not replace it, and the poll is
+   * deliberately left exactly as it was. A websocket drops, a phone changes
+   * network on the walk back from Stripe, and the one screen in this product
+   * where somebody's money has already left is not a screen to make dependent
+   * on a connection staying up. Two mechanisms, either of which is sufficient.
+   *
+   * Nothing is lost if this fires at a bad moment: which ticket they are
+   * buying is in the URL, not in state, so there is nothing typed on this page
+   * to rebuild underneath them.
+   */
+  useLive(['event_orders', 'event_registrations'], () => void reload(true))
 
   if (authLoading || loading) {
     return (

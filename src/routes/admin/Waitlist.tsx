@@ -13,6 +13,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { InviteCode, ProfileTag, TagAnswer, WaitlistEntry } from '../../lib/types'
 import {
@@ -70,6 +71,22 @@ export default function Waitlist() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * New applications land on this page as they are made, and an entry
+   * assigned or declined in another tab stops sitting here looking untouched.
+   * `invite_codes` is watched too, because whether a code has been spent is
+   * half of what each row says.
+   *
+   * Off while any of the three dialogs is open. The assign dialog is the one
+   * that matters: it holds a freshly minted invite code shown once and stored
+   * nowhere the administrator can go back to, so a reload underneath it would
+   * destroy the only copy. The view and delete dialogs hold the entry their
+   * decision is about.
+   */
+  useLive(['waitlist_entries', 'invite_codes', 'connectors'], () => void load(), {
+    enabled: !assigning && !viewing && !deleting && !decliningId && !deleteBusy,
+  })
 
   const waiting = entries.filter((e) => !e.declined_at)
   const declined = entries.filter((e) => e.declined_at)

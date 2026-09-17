@@ -40,6 +40,7 @@ import {
   formatDateTime,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { useLive } from '../../lib/live'
 import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
 import {
   REFUND_WORDS,
@@ -173,9 +174,14 @@ function Guests({ data }: { data: ManagedEvent }) {
   const [refunding, setRefunding] = useState<Guest | null>(null)
   const [resending, setResending] = useState<Invite | null>(null)
 
-  const load = useCallback(async () => {
+  // `quiet` skips the "Loading the guest list…" swap, for the reloads nobody
+  // asked for. It is the same distinction `useLoader` already draws on the
+  // public screens: a reload somebody triggered should say it is working, and
+  // a reload caused by a stranger registering should not take the list away
+  // from the host reading it.
+  const load = useCallback(async (quiet = false) => {
     setFailed(false)
-    setLoading(true)
+    if (!quiet) setLoading(true)
 
     /*
      * ORG-07 and ORG-08 in one view.
@@ -322,6 +328,25 @@ function Guests({ data }: { data: ManagedEvent }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * A host watching people arrive should not have to refresh to see them.
+   * Registrations, the orders and refunds behind the money column, the door's
+   * scans and the invitations all land here, so all five are watched.
+   *
+   * QLT-03 is why this switches off. Every modal on this page holds something
+   * typed that is not saved anywhere — the refund's reason, the correction's
+   * reason, the invitation's note and who was ticked — and `load` puts the
+   * list back to "Loading the guest list…" while it runs. The refund one is
+   * the sharp case: it is money, and it can be mid-flight. So while any of
+   * them is open nothing reloads underneath it, and closing it reloads
+   * immediately because the actions all call `load` themselves.
+   */
+  useLive(
+    ['event_registrations', 'event_orders', 'event_refunds', 'event_attendance', 'event_invites'],
+    () => void load(true),
+    { enabled: !marking && !refunding && !resending && !inviting },
+  )
 
   /** ATT-04. Nobody ran the door on an event with no attendance rows at all. */
   const checkInRan = guests.some((g) => g.attendedAt !== null)

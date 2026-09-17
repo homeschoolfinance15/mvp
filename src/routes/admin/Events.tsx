@@ -9,6 +9,7 @@ import {
   SectionHeader,
   Spinner,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { Profile } from '../../lib/types'
 import { eventWhen, type EventRecord } from '../../lib/events'
@@ -52,6 +53,11 @@ export default function Events() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // ORG-14/ORG-15. An event published, cancelled or rescheduled by any host on
+  // the platform. Nothing on this page is unsaved — `query` filters what is
+  // already loaded — so this runs unconditionally.
+  useLive(['events', 'profiles'], () => void load())
 
   const filtered = events.filter((event) => {
     if (!query.trim()) return true

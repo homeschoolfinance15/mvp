@@ -16,6 +16,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import {
   CONNECTOR_STATUSES,
@@ -101,6 +102,21 @@ export default function Connectors() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * The connector list stops being a photograph. Somebody accepting an
+   * invitation, a member joining a community, a code being spent — all of it
+   * shows up here without a refresh, and the sidebar count beside it agrees.
+   *
+   * Off while anything is open. The add form holds a name, an email and a
+   * capacity that are nowhere else yet; the delete dialog and the status
+   * confirmation both hold a row that the confirmation is about, and deciding
+   * about a row that was swapped underneath the dialog is exactly the kind of
+   * thing a confirmation exists to prevent.
+   */
+  useLive(['connectors', 'connector_user_links', 'invite_codes', 'profiles'], () => void load(), {
+    enabled: !open && !connectorToDelete && !pending && !busy,
+  })
 
   const invitedCount = useMemo(() => {
     const counts: Record<string, number> = {}

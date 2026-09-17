@@ -24,6 +24,7 @@ import {
   type OrderStatus,
   type TicketType,
 } from '../../lib/events'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import { EventShell, NeedsSignIn, useLoader } from './shared'
 
@@ -102,6 +103,22 @@ export default function MyEvents() {
   const { data, loading, failed, reload } = useLoader<Loaded>(load, [profileId])
   const [tab, setTab] = useState<Bucket>('upcoming')
   const [notice, setNotice] = useState('')
+
+  /*
+   * Somebody's own bookings, which move without them doing anything: a
+   * payment clears, a host cancels the event, a refund settles, the door
+   * records them as having arrived. Watching `events` too is what catches a
+   * cancellation — BUY-14 makes the ticket keep working, so the only way this
+   * page tells them the evening is off is the event row changing.
+   *
+   * Quietly, and safe to fire at any moment: `tab` and `notice` are this
+   * reader's own state and no reload writes them, and the cancel confirmation
+   * keeps its own state inside the row it belongs to.
+   */
+  useLive(
+    ['event_registrations', 'event_orders', 'event_refunds', 'event_tickets', 'events', 'event_attendance'],
+    () => void reload(true),
+  )
 
   if (authLoading || loading) {
     return (

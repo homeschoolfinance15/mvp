@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState, LoadFailed, Panel, Spinner } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import {
   eventLink,
   eventWhen,
@@ -26,6 +27,19 @@ import { EventShell, StateBadge, loadUpcomingEvents, remainingWords, useCovers, 
 export default function Browse() {
   const load = useCallback(() => loadUpcomingEvents(), [])
   const { data: events, loading, failed, reload } = useLoader<PublicEvent[]>(load, [])
+
+  /*
+   * ORG-03A. "Two places left" on a card somebody has had open for ten minutes
+   * is the card telling them something that is no longer true, and they find
+   * out at checkout. Watching registrations as well as the events themselves
+   * is what makes that number move — capacity is counted from them, so an
+   * event goes from open to sold out without its own row ever changing.
+   *
+   * Reloaded quietly: there is nothing here to lose, but swapping a read list
+   * for a spinner because somebody elsewhere bought a ticket is its own kind
+   * of rudeness.
+   */
+  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true))
 
   const covers = useCovers((events ?? []).map((e) => e.cover_path))
 

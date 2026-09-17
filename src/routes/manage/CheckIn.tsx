@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button, Field, Input, LoadFailed, Panel, Spinner } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { loadFailed, supabase } from '../../lib/supabase'
 import type { CheckInResult, EventAttendance, EventRecord } from '../../lib/events'
 
@@ -222,6 +223,22 @@ export default function CheckIn() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * ATT-03. Two stewards on two phones are one door. Until now each saw only
+   * their own scans, so the second one to meet a guest had a count that was
+   * wrong and a roster that did not include the person standing in front of
+   * them. Registrations are watched as well, because somebody can still buy a
+   * ticket while the queue is moving and the expected count has to follow.
+   *
+   * This refreshes the roster rather than the whole screen, and it is not
+   * suppressed while a scan is in flight: `refreshRoster` writes the arrivals,
+   * the names and the count and touches neither the result panel nor the typed
+   * code nor the camera, so there is nothing here for it to interrupt. Holding
+   * it back during a scan would silence it at precisely the busiest moment at
+   * the door, which is the moment ATT-03 is about.
+   */
+  useLive(['event_attendance', 'event_registrations'], () => void refreshRoster())
 
   /* ---- the scan itself -------------------------------------------------- */
 

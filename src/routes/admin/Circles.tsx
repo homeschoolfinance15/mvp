@@ -9,6 +9,7 @@ import {
   Spinner,
   StatusBadge,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { CircleMessage, Profile } from '../../lib/types'
 import { byId, loadConnectors, loadLinks, loadProfiles, type ConnectorRow, type LinkRow } from './shared'
@@ -65,6 +66,15 @@ export default function Circles() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Circles move when somebody is added to one or posts in it.
+  // `circle_messages` has been in the realtime publication since the circle
+  // chat shipped; this is the administrator's read-only view of the same
+  // thing, and it holds nothing unsaved.
+  useLive(
+    ['connectors', 'connector_user_links', 'profiles', 'circle_messages'],
+    () => void load(),
+  )
 
   if (loading) {
     return (

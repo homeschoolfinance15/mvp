@@ -29,6 +29,7 @@ import {
   formatDateTime,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { useLive } from '../../lib/live'
 import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
 import { eventWhen, type EventMessage, type EventRecord } from '../../lib/events'
 import {
@@ -114,9 +115,12 @@ function Emails({ data }: { data: ManagedEvent }) {
     enabled !== stored.enabled || JSON.stringify(reminders) !== JSON.stringify(stored.reminders)
   useWarnOnUnsaved(dirty)
 
-  const load = useCallback(async () => {
+  // `quiet` keeps the page on screen for a reload nobody asked for. The send
+  // status below is a thing hosts sit and watch; swapping it for a spinner
+  // every few seconds would make watching it impossible.
+  const load = useCallback(async (quiet = false) => {
     setFailed(false)
-    setLoading(true)
+    if (!quiet) setLoading(true)
 
     const [settingsRes, reminderRes, messageRes] = await Promise.all([
       supabase
@@ -188,6 +192,27 @@ function Emails({ data }: { data: ManagedEvent }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * EML-08. "Sent 41, failed 2" is the one number on this screen somebody
+   * actually waits in front of: a send is queued, worked through and finished
+   * over the following minutes, and until now watching it meant refreshing.
+   * Recipients are watched as well as messages, because the counts are
+   * composed from the recipient rows and the message row does not change as
+   * they land.
+   *
+   * QLT-03 is why this is conditional, and this page is the sharpest case of
+   * it in the product. `load` calls `setEnabled` and `setReminders`, which is
+   * the host's reminder schedule — a draft, with `dirty` and an unsaved-work
+   * warning already built around it. A reload while they are part-way through
+   * changing it would silently put it back, and they would find out when the
+   * reminders they thought they had set never went. So: only while there is
+   * nothing unsaved, and not at all while they are composing an update to
+   * everybody registered. Saving clears `dirty` and the watch resumes.
+   */
+  useLive(['event_messages', 'event_message_recipients'], () => void load(true), {
+    enabled: !dirty && !updating,
+  })
 
   /* ---------------------------------------------------------------------- */
 

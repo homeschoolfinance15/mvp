@@ -25,6 +25,7 @@ import {
   Spinner,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { useLive } from '../../lib/live'
 import { loadFailed, supabase } from '../../lib/supabase'
 import { eventWhen, type EventRecord } from '../../lib/events'
 import { whyNoCreate } from './rules'
@@ -46,10 +47,12 @@ export default function EventList() {
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
-  const load = useCallback(async () => {
+  // `quiet` is for the reloads nobody asked for: a live signal should not
+  // take the list away and show a spinner. Same distinction `useLoader` draws.
+  const load = useCallback(async (quiet = false) => {
     if (!profile) return
     setFailed(false)
-    setLoading(true)
+    if (!quiet) setLoading(true)
 
     const isAdmin = profile.role === 'admin'
 
@@ -113,6 +116,12 @@ export default function EventList() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // An event a co-host publishes, cancels or reschedules, and the confirmed
+  // count beside each one, which is counted from registrations rather than
+  // stored on the event. Read-only list: `tab` and `query` are this reader's
+  // own state and no reload writes them.
+  useLive(['events', 'event_registrations'], () => void load(true))
 
   const now = Date.now()
   const buckets = useMemo(() => {

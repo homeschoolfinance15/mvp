@@ -26,6 +26,7 @@ import {
   formatDateTime,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { useLive } from '../../lib/live'
 import { loadFailed, supabase } from '../../lib/supabase'
 import {
   REFUND_WORDS,
@@ -80,9 +81,12 @@ function Results({ data }: { data: ManagedEvent }) {
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
-  const load = useCallback(async () => {
+  // `quiet` for the reloads nobody asked for — see the live subscription
+  // below. Replacing the figures with a spinner every time a late refund
+  // settles is worse than the figures being a moment old.
+  const load = useCallback(async (quiet = false) => {
     setFailed(false)
-    setLoading(true)
+    if (!quiet) setLoading(true)
 
     const [regRes, attendRes, orderRes, connectorRes] = await Promise.all([
       supabase.from('event_registrations').select('status').eq('event_id', event.id),
@@ -147,6 +151,15 @@ function Results({ data }: { data: ManagedEvent }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  // These figures keep moving after the doors close: a refund settles days
+  // later, a host corrects an attendance record, a cancellation arrives. All
+  // four tables feed a number on this page, and there is nothing here but
+  // numbers, so nothing a reload can take away.
+  useLive(
+    ['event_registrations', 'event_attendance', 'event_orders', 'event_refunds'],
+    () => void load(true),
+  )
 
   if (loading) {
     return (

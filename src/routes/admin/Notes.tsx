@@ -6,6 +6,7 @@ import {
   SectionHeader,
   Spinner,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { ConnectorNote, Profile } from '../../lib/types'
 import { byId, loadConnectors, loadProfiles, type ConnectorRow } from './shared'
@@ -37,6 +38,10 @@ export default function Notes() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // A note written by a connector about somebody they met appears here as it
+  // is written. This page only reads, so there is nothing a reload can take.
+  useLive(['connector_notes', 'connectors', 'profiles'], () => void load())
 
   const connectorName = useMemo(() => {
     const map: Record<string, string> = {}

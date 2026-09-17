@@ -17,6 +17,7 @@ import {
   type RegistrationStatus,
   type TicketType,
 } from '../../lib/events'
+import { useLive } from '../../lib/live'
 import { rememberSignupResume } from '../../lib/signupResume'
 import { loadFailed, supabase } from '../../lib/supabase'
 import {
@@ -66,6 +67,21 @@ export default function PublicEvent() {
   /** ACC-07. Set when something moved while they were away making an account. */
   const [changedWhileAway, setChangedWhileAway] = useState('')
   const [mine, setMine] = useState<MyPlace | null>(null)
+
+  /*
+   * ORG-03A. The last two places go while somebody is reading the description.
+   * Watching registrations is what catches that: capacity is counted from
+   * them, so an event sells out without its own row changing at all. A host
+   * closing registration or changing the price lands here too.
+   *
+   * Nothing on this page is lost to it. `chosen` is the visitor's own state
+   * and no reload writes it, and the ACC-07 resume above consumes its
+   * remembered choice once, so a second pass finds nothing and leaves the
+   * selection alone. If the ticket they picked is withdrawn, `selected` stops
+   * resolving and the page already says so — which is the point, rather than
+   * letting them discover it on the card screen.
+   */
+  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true))
 
   const covers = useCovers([event?.cover_path])
   const coverUrl = event?.cover_path ? covers[event.cover_path] : undefined

@@ -13,6 +13,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
+import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import { PROFILE_STATUSES, type Profile, type ProfileStatus } from '../../lib/types'
 import { loadLinks, type LinkRow } from './shared'
@@ -73,6 +74,20 @@ export default function Members() {
   useEffect(() => {
     void load()
   }, [load])
+
+  /*
+   * Members arrive by being let in off the waitlist, and their status changes
+   * from other screens. Neither used to show here until the page was
+   * reloaded. `query` is a filter over what is already loaded and no reload
+   * writes it, so searching is undisturbed.
+   *
+   * Off while a deletion or a status change is waiting to be confirmed: the
+   * dialog is about one specific person, and the row behind it must not move
+   * while the administrator is reading it.
+   */
+  useLive(['profiles', 'connector_user_links'], () => void load(), {
+    enabled: !memberToDelete && !pending && !busy,
+  })
 
   const connectorByMember = useMemo(() => {
     const map: Record<string, string> = {}
