@@ -155,6 +155,15 @@ export default function CheckIn() {
   const [attendance, setAttendance] = useState<EventAttendance[]>([])
   const [names, setNames] = useState<Record<string, string>>({})
   const [expected, setExpected] = useState<number | null>(null)
+  /**
+   * ATT-02 treats "a temporary service problem" as its own answer rather
+   * than a silence, and the roster deserves the same. A live refresh that
+   * fails leaves the tally on screen looking current, and a steward reading
+   * "18 / 30" has no way to know it stopped counting — at a door that is the
+   * number they act on. Not an error banner: the door is the wrong place to
+   * shout, and the previous figure is still the best one available.
+   */
+  const [rosterStale, setRosterStale] = useState(false)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
 
@@ -204,6 +213,11 @@ export default function CheckIn() {
       )
     }
     if (typeof confirmed.count === 'number') setExpected(confirmed.count)
+
+    // Each read is allowed to fail on its own — a flaky phone at a venue
+    // door loses one of three as easily as all three — so the flag is set
+    // from any of them and cleared only when the whole roster came back.
+    setRosterStale(Boolean(arrivals.error || people.error || confirmed.error))
   }, [id])
 
   const load = useCallback(async () => {
@@ -445,6 +459,12 @@ export default function CheckIn() {
             <div className="eyebrow mt-0.5">
               {expected === null ? 'Arrived' : 'Arrived of expected'}
             </div>
+            {/* The tally is what a steward acts on, so it has to admit when it
+                stopped counting. The word, not a colour (QLT-04), and the
+                figure stays on screen because a moment-old count beats none. */}
+            {rosterStale && (
+              <div className="mt-1 text-[0.6875rem] text-[#8a4b00]">Not up to date</div>
+            )}
           </div>
         </div>
       </header>

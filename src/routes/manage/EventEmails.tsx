@@ -544,6 +544,19 @@ function Emails({ data }: { data: ManagedEvent }) {
           }
         />
 
+        {/* This list updates itself while a send is going out — unless there
+            are unsaved reminder changes above, because reloading would revert
+            them. That is the right trade, but a list that quietly stops moving
+            looks like a send that quietly stopped, so it says which it is. */}
+        {dirty && (
+          <div className="mb-4">
+            <Notice tone="warning">
+              Live updates are paused while you have unsaved reminder changes, so this list may
+              be behind. Save or discard above and it will catch up.
+            </Notice>
+          </div>
+        )}
+
         {history.length === 0 ? (
           <EmptyState>Nothing has been queued for this event yet.</EmptyState>
         ) : (
