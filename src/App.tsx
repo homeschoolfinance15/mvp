@@ -110,9 +110,46 @@ function RequireRole({ role, children }: { role?: AppRole; children: ReactNode }
   if (needsQuestionnaire(profile) && pathname !== '/questions') {
     return <Navigate to="/questions" replace />
   }
-  if (role && profile.role !== role) return <Navigate to={homePathFor(profile)} replace />
+  // QLT-02. A silent bounce to your own dashboard is what this used to do, and
+  // it reads as a broken link rather than a closed door: a connector who
+  // follows a colleague's /admin/waitlist link simply finds themselves on
+  // /connector with nothing said. The admin area is about to grow a great many
+  // more addresses, so the number of ways to arrive somewhere that is not
+  // yours only goes up. Same shape as RequireMember below — say what happened,
+  // say it is not a fault, and give somewhere to go.
+  if (role && profile.role !== role) return <WrongPlace />
 
   return <>{children}</>
+}
+
+/**
+ * QLT-02. Signed in, and this is somebody else's part of the product.
+ *
+ * Deliberately vague about what lives here. "Administration" would tell a
+ * member that an administration area exists at the address they guessed, and
+ * the row-level policies are what actually keep them out — this is only the
+ * sentence that stops it reading as a fault.
+ */
+function WrongPlace() {
+  const { profile } = useAuth()
+
+  return (
+    <div className="ambient flex min-h-screen items-center justify-center px-5">
+      <Panel className="relative z-10 w-full max-w-md px-8 py-10 text-center">
+        <Wordmark size="sm" />
+        <h1 className="display mt-8 text-2xl">That page isn't yours to open</h1>
+        <p className="mt-4 text-sm leading-relaxed text-muted">
+          You are signed in — this address just belongs to a different kind of account.
+          Nothing has gone wrong, and nothing of yours has changed.
+        </p>
+        <div className="mt-8 flex justify-center gap-3">
+          <Button variant="primary" onClick={() => window.location.assign(homePathFor(profile))}>
+            Back to your dashboard
+          </Button>
+        </div>
+      </Panel>
+    </div>
+  )
 }
 
 /**

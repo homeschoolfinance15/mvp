@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { SiteHeader, useDrawer } from '../../components/SiteHeader'
 import { FlagsPanel } from '../../components/FlagsPanel'
-import { StatTile } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
 import Circles from './Circles'
 import Connectors from './Connectors'
@@ -13,7 +12,7 @@ import Notes from './Notes'
 import Waitlist from './Waitlist'
 
 /**
- * The counts the sidebar and the tiles put on screen.
+ * The counts the sidebar badges put on screen.
  *
  * Deliberately a separate, tiny read rather than a by-product of the section
  * pages: a number next to "Waitlist" is only useful when you are *not* on the
@@ -252,14 +251,19 @@ export default function AdminLayout() {
             </h1>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 pt-8 lg:grid-cols-4">
-            <StatTile label="Connectors" value={counts.connectors ?? '—'} />
-            <StatTile label="Members" value={counts.members ?? '—'} />
-            <StatTile label="Live codes" value={counts.codes ?? '—'} />
-            <StatTile label="Waitlist" value={counts.waitlist ?? '—'} />
-          </div>
+          {/* The four tiles that used to sit here are gone.
 
-          <div className="pt-12">
+              They were right when this was one page with eight tabs: you saw
+              the shape of the platform once, on arrival. Repeated above all
+              eight sections they became furniture — three of the four numbers
+              are already in the sidebar beside the section they count, and
+              reading "Connectors 0 / Members 0" above the activity log tells
+              you nothing about the activity log.
+
+              `Live codes` was the one figure with nowhere else to live, so it
+              moved to the Connectors page, which is where codes are minted and
+              the only place the number is actionable. */}
+          <div className="pt-10">
             <Outlet />
           </div>
         </main>

@@ -50,6 +50,8 @@ export default function Connectors() {
   const [invitations, setInvitations] = useState<ConnectorInvitation[]>([])
   const [links, setLinks] = useState<LinkRow[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
+  /** Outstanding invitation codes. Null until counted, and on a failed count. */
+  const [liveCodes, setLiveCodes] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -66,7 +68,7 @@ export default function Connectors() {
 
   const load = useCallback(async () => {
     setLoadError('')
-    const [connectorsRes, invitationsRes, linksRes, profilesRes] = await Promise.all([
+    const [connectorsRes, invitationsRes, linksRes, profilesRes, codesRes] = await Promise.all([
       loadConnectors(),
       supabase
         .from('connector_invitations')
@@ -74,6 +76,8 @@ export default function Connectors() {
         .order('created_at', { ascending: false }),
       loadLinks(),
       loadProfiles(),
+      // `head: true` — the number, not the codes. Nobody reads a code here.
+      supabase.from('invite_codes').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     ])
 
     const firstError = [
@@ -88,6 +92,9 @@ export default function Connectors() {
     setInvitations((invitationsRes.data as ConnectorInvitation[]) ?? [])
     setLinks((linksRes.data as unknown as LinkRow[]) ?? [])
     setProfilesById(byId((profilesRes.data as Profile[]) ?? []))
+    // Left null on a failed count rather than shown as zero: "0 codes are
+    // live" and "we could not count" are different claims.
+    setLiveCodes(codesRes.error ? null : codesRes.count)
     setLoading(false)
   }, [])
 
@@ -140,7 +147,18 @@ export default function Connectors() {
 
       <SectionHeader
         title="Connectors"
-        caption="Connectors are the only people who can bring new members in."
+        caption={
+          // The live-code figure used to sit in a row of four tiles repeated
+          // above every admin section. Three of those numbers are in the
+          // sidebar beside the section they count; this one had nowhere else
+          // to go, and this is the page where codes are minted and where
+          // knowing how many are outstanding changes what you do next.
+          liveCodes === null
+            ? 'Connectors are the only people who can bring new members in.'
+            : `Connectors are the only people who can bring new members in. ${liveCodes} invitation ${
+                liveCodes === 1 ? 'code is' : 'codes are'
+              } live.`
+        }
         action={
           <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
             Create connector
