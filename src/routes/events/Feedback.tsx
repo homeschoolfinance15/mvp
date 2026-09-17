@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   EmptyState,
   Initials,
+  Input,
   LoadFailed,
   Notice,
   Panel,
@@ -148,6 +149,8 @@ export default function Feedback() {
   const [peerDrafts, setPeerDrafts] = useState<Record<string, Draft>>({})
   const [eventDraft, setEventDraft] = useState<Draft>({})
   const [selected, setSelected] = useState<string | null>(null)
+  /** FDB-04. Narrows the peer list by name. Empty until somebody types. */
+  const [peerQuery, setPeerQuery] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [justSent, setJustSent] = useState('')
@@ -292,6 +295,26 @@ export default function Feedback() {
         .sort((a, b) => (a.subject_name ?? '').localeCompare(b.subject_name ?? '')),
     [progress, me],
   )
+
+  /**
+   * FDB-04: "make it practical to find people in larger events". A dinner for
+   * twelve is a list you read; sixty people is sixty rows of scrolling to find
+   * the one person you actually want to write about, on a phone, which is
+   * where FDB-07 says this has to work.
+   *
+   * The search appears only once the list is long enough to need it —
+   * a search box above eight names is clutter offering to solve nothing.
+   * Matching is case- and accent-insensitive so "jose" finds "José"; the
+   * counts above stay counts of everybody, because "3 of 60 done" is the true
+   * figure whether or not a filter is applied.
+   */
+  const SEARCH_FROM = 8
+  const shownPeers = useMemo(() => {
+    const q = peerQuery.trim().toLocaleLowerCase()
+    if (!q) return peers
+    const fold = (v: string) => v.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase()
+    return peers.filter((p) => fold(p.subject_name ?? '').includes(fold(q)))
+  }, [peers, peerQuery])
 
   const eventOutcome =
     progress.find((row) => row.subject_id === null)?.outcome ?? 'pending'
@@ -676,15 +699,34 @@ export default function Feedback() {
               }
             />
 
+            {/* FDB-04. Only once the list is long enough to be a problem. */}
+            {peers.length >= SEARCH_FROM && (
+              <div className="mb-4">
+                <Input
+                  value={peerQuery}
+                  onChange={(e) => setPeerQuery(e.target.value)}
+                  placeholder="Search by name"
+                  aria-label="Search the people you met by name"
+                />
+              </div>
+            )}
+
             {peers.length === 0 ? (
               <EmptyState>
                 Nobody else has been checked in at this event yet, so there is nobody to
                 write about. That is not the same as nobody having come — if check-in was
                 not finished on the door, a host can still put it right.
               </EmptyState>
+            ) : shownPeers.length === 0 ? (
+              // QLT-02. An empty filter is not an empty event, and saying so
+              // stops it reading as "they were not there".
+              <EmptyState>
+                Nobody at this event matches &ldquo;{peerQuery.trim()}&rdquo;. Clear the search
+                to see all {peers.length}.
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-line rounded-[6px] border border-line bg-white">
-                {peers.map((peer) => {
+                {shownPeers.map((peer) => {
                   const draft = peerDrafts[peer.subject_id] ?? {}
                   const unsent =
                     peer.outcome === 'pending' && anyAnswered(draft, peerQuestions)
