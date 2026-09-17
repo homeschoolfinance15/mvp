@@ -137,12 +137,23 @@ export default function AdminDashboard() {
       tagsRes,
       eventsRes,
     ] = await Promise.all([
-      supabase.from('connectors').select('*, profiles(*)').order('created_at', { ascending: false }),
+      supabase
+        .from('connectors')
+        // `profiles!connectors_profile_id_fkey`, not `profiles`. The event
+        // platform added `connectors.events_permission_changed_by` (ORG-01B,
+        // which admin last moved the permission) as a second foreign key to
+        // profiles, and PostgREST refuses an ambiguous embed rather than
+        // guessing: "more than one relationship was found". The whole
+        // Connectors tab came back empty with that sentence above it.
+        .select('*, profiles!connectors_profile_id_fkey(*)')
+        .order('created_at', { ascending: false }),
       supabase.from('connector_invitations').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase
         .from('connector_user_links')
-        .select('id, created_at, connector_id, user_profile_id, connectors(profiles(full_name))'),
+        .select(
+          'id, created_at, connector_id, user_profile_id, connectors(profiles!connectors_profile_id_fkey(full_name))',
+        ),
       supabase.from('invite_codes').select('*'),
       supabase.from('waitlist_entries').select('*').order('created_at', { ascending: false }),
       supabase.from('connector_notes').select('*').order('created_at', { ascending: false }),

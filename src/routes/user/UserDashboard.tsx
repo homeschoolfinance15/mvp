@@ -38,7 +38,7 @@ export default function UserDashboard() {
     const { data, error } = await supabase
       .from('connector_user_links')
       .select(
-        'created_at, invite_codes(code), connectors(id, invite_status, profiles(full_name, current_profession, semantic_summary))',
+        'created_at, invite_codes(code), connectors(id, invite_status, profiles!connectors_profile_id_fkey(full_name, current_profession, semantic_summary))',
       )
       .eq('user_profile_id', profile.id)
       .maybeSingle()
