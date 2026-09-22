@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthProvider'
 import { formatInterests, INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { forgetSigned, removeMedia, signMedia, uploadMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
+import { toLink } from '../lib/url'
 import {
   Button,
   Field,
@@ -118,7 +119,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
         current_profession: profession.trim(),
         semantic_summary: summary.trim() || null,
         interests: parseInterests(interests),
-        linkedin_url: linkedin.trim() || null,
+        linkedin_url: toLink(linkedin),
       })
       .eq('id', profile.id)
 
@@ -127,6 +128,8 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
       setError(errorMessage(updateError))
       return
     }
+    // Show the link as stored, or the form reads as unsaved straight after saving.
+    setLinkedin(toLink(linkedin) ?? '')
     await refreshProfile()
     await onSaved?.()
     setSaved(true)
@@ -183,7 +186,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
 
           <Field label="LinkedIn" hint="Optional. Seen by your connector and administrators, not by other members.">
             <Input
-              type="url"
+              inputMode="url"
               value={linkedin}
               onChange={(e) => edit(setLinkedin)(e.target.value)}
               placeholder="https://linkedin.com/in/you"

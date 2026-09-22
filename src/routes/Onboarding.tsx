@@ -4,6 +4,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { Button, CopyCode, Field, Input, Notice, Textarea } from '../components/ui'
 import { INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { errorMessage, supabase } from '../lib/supabase'
+import { toLink } from '../lib/url'
 import {
   homePathFor,
   needsOnboarding,
@@ -53,7 +54,7 @@ export default function Onboarding() {
         current_profession: profession.trim(),
         semantic_summary: summary.trim() || null,
         interests: parseInterests(interests),
-        linkedin_url: linkedin.trim() || null,
+        linkedin_url: toLink(linkedin),
       })
       .eq('id', profile.id)
 
@@ -150,7 +151,7 @@ export default function Onboarding() {
 
         <Field label="LinkedIn" hint="Optional.">
           <Input
-            type="url"
+            inputMode="url"
             value={linkedin}
             onChange={(e) => setLinkedin(e.target.value)}
             placeholder="linkedin.com/in/..."

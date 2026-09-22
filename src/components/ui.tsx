@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -342,28 +343,38 @@ export function Modal({
   children: ReactNode
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // Callers pass a fresh onClose every render. Depending on it re-ran the
+  // effect on each keystroke, which pulled focus onto the ✕ button, so the
+  // next space typed into a name closed the dialog. Read it through a ref.
+  const onCloseRef = useRef(onClose)
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) return
     const previouslyFocused = document.activeElement as HTMLElement | null
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
 
-    // The first field, or the panel itself, so a keyboard starts inside.
-    panelRef.current
-      ?.querySelector<HTMLElement>('input, textarea, select, button')
-      ?.focus({ preventScroll: true })
+    // The first field, or else the first button, so a keyboard starts inside.
+    // Fields first: the header's ✕ comes before them in the document.
+    const panel = panelRef.current
+    ;(
+      panel?.querySelector<HTMLElement>('input, textarea, select') ??
+      panel?.querySelector<HTMLElement>('button')
+    )?.focus({ preventScroll: true })
 
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
       previouslyFocused?.focus?.()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 

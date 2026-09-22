@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { supabase, errorMessage } from '../lib/supabase'
+import { toLink } from '../lib/url'
 import { Button, Field, Input, Modal, Notice, Textarea, Wordmark } from '../components/ui'
 import { CitySearch } from '../components/CitySearch'
 import { TagPicker } from '../components/TagPicker'
@@ -70,7 +71,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
     const body: Record<string, unknown> = {
       full_name: fullName.trim(),
       email: email.trim().toLowerCase(),
-      linkedin_url: linkedin.trim() || null,
+      linkedin_url: toLink(linkedin),
       phone: phone.trim(),
       home_city: homeCity.trim() || null,
       travel_preference: travel || null,
@@ -164,7 +165,7 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
 
           <Field label="LinkedIn" hint="Optional">
             <Input
-              type="url"
+              inputMode="url"
               value={linkedin}
               onChange={(e) => setLinkedin(e.target.value)}
               placeholder="linkedin.com/in/..."
