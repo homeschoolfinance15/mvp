@@ -89,13 +89,28 @@ check(
  * them — and RLS would refuse it, so the bug would surface as a broken page
  * rather than as the leak it was trying to be. Catch it here instead.
  */
-for (const table of ['peer_feedback', 'event_feedback']) {
-  const calls = [...feedbackSource.matchAll(new RegExp(`from\\('${table}'\\)\\s*\\.(\\w+)`, 'g'))]
-  const verbs = calls.map((m) => m[1])
+/*
+ * ATT-1. And written only through the submit functions. An upsert on these
+ * tables is checked against their admin-only select policy, so from an
+ * attendee's token it fails every time — the screen rendered, the types
+ * checked, and no feedback could ever be saved. Any direct .from() on an
+ * answer table, whatever the verb, is the same mistake or the leak above.
+ */
+for (const table of ['peer_feedback', 'event_feedback', 'feedback_subjects']) {
+  const verbs = [...feedbackSource.matchAll(new RegExp(`from\\(\\s*'${table}'\\s*\\)\\s*\\.(\\w+)`, 'g'))]
+    .map((m) => m[1])
   check(
-    `FDB-09: ${table} is only ever written from the feedback screen`,
-    verbs.length > 0 && verbs.every((verb) => verb === 'upsert'),
-    verbs.length ? verbs.join(', ') : 'no calls found at all — has the table been renamed?',
+    `FDB-09/ATT-1: ${table} is never touched directly by the feedback screen`,
+    verbs.length === 0,
+    verbs.length ? `found .from('${table}').${verbs.join(', .')}` : 'writes go through the functions',
+  )
+}
+for (const fn of ['submit_peer_feedback', 'submit_event_feedback', 'set_feedback_outcome']) {
+  const called = new RegExp(`\\.rpc\\(\\s*'${fn}'`).test(feedbackSource)
+  check(
+    `ATT-1: the feedback screen writes through ${fn}()`,
+    called,
+    called ? '' : 'no call found — has the function been renamed?',
   )
 }
 
@@ -192,7 +207,7 @@ const checkinSource = read(CHECKIN)
 const headlines = [...checkinSource.matchAll(/headline:\s*'([^']+)'/g)].map((m) => m[1])
 check(
   'ATT-02: every check-in outcome has its own headline',
-  headlines.length === 6 && new Set(headlines).size === 6,
+  headlines.length >= 6 && new Set(headlines).size === headlines.length,
   `${headlines.length} outcomes: ${headlines.join(' / ')}`,
 )
 

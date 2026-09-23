@@ -28,13 +28,14 @@ import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 const FROM = 'Amazing AI <noreply@goamazing.ai>'
 const SITE = (Deno.env.get('SITE_URL') ?? 'https://goamazing.ai').replace(/\/+$/, '')
+// What the person sending sees when the mail cannot go. The reason is for the
+// operator, in the function log: a config name or the provider's own words
+// mean nothing to a connector, and an anonymous caller should not learn them.
+const UNAVAILABLE = { error: "Email isn't available right now. Copy the code and send it yourself." }
 
 Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return json(null, 204)
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
-
-  const resendKey = Deno.env.get('RESEND_API_KEY')
-  if (!resendKey) return json({ error: 'RESEND_API_KEY is not set.' }, 500)
 
   const authorization = request.headers.get('Authorization') ?? ''
   if (!authorization) return json({ error: 'Sign in to send an invitation.' }, 401)
@@ -58,7 +59,10 @@ Deno.serve(async (request: Request) => {
 
   const url = Deno.env.get('SUPABASE_URL')!
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
-  if (!anonKey) return json({ error: 'SUPABASE_ANON_KEY is not set.' }, 500)
+  if (!anonKey) {
+    console.error('[amazing] invite-email: SUPABASE_ANON_KEY is not set')
+    return json(UNAVAILABLE, 503)
+  }
 
   // Two clients on purpose: the caller's token establishes who is asking, and
   // the service role reads the code itself. Reading the code as the caller
@@ -104,6 +108,15 @@ Deno.serve(async (request: Request) => {
     recipientName = claim.full_name
   }
 
+  // Checked only once the caller is known to be allowed to send this code, so
+  // a stranger (or a signed-out browser, whose client still sends the anon
+  // key as its bearer) is told to sign in and learns nothing about config.
+  const resendKey = Deno.env.get('RESEND_API_KEY')
+  if (!resendKey) {
+    console.error('[amazing] invite-email: RESEND_API_KEY is not set')
+    return json(UNAVAILABLE, 503)
+  }
+
   const firstName = String(recipientName ?? '').split(' ')[0] || null
   const link = `${SITE}/join?code=${encodeURIComponent(code)}`
 
@@ -123,7 +136,8 @@ Deno.serve(async (request: Request) => {
   })
 
   if (!response.ok) {
-    return json({ error: `Resend refused it: ${await response.text()}` }, 502)
+    console.error('[amazing] invite-email: Resend refused it:', response.status, await response.text())
+    return json(UNAVAILABLE, 502)
   }
 
   // Recorded only now, after the provider accepted it, so the dashboard shows

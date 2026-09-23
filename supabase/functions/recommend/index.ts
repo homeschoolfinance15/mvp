@@ -20,6 +20,7 @@
 //
 // Deploy:  supabase functions deploy recommend
 // Secrets: supabase secrets set ANTHROPIC_API_KEY=... RECOMMEND_SECRET=...
+//          FEED_ENABLED=true only once FEATURES.feed is on in the client.
 // ============================================================================
 
 import Anthropic from 'npm:@anthropic-ai/sdk@0.124.0'
@@ -83,6 +84,15 @@ Deno.serve(async (request: Request) => {
     return json({ error: 'Not authorised.' }, 401)
   }
 
+  // Picks are only ever shown on the feed, and a 'recommendations' notice is
+  // written by trigger for every insert below. While the client's
+  // FEATURES.feed is off there is nowhere to read them, so the run stops here:
+  // no rows, no notices, no model spend (NET-10). Off unless set, so the
+  // server side cannot be switched on by forgetting it.
+  if (Deno.env.get('FEED_ENABLED') !== 'true') {
+    return json({ skipped: 'The feed is switched off (FEED_ENABLED is not "true").' })
+  }
+
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!anthropicKey) return json({ error: 'ANTHROPIC_API_KEY is not set.' }, 500)
 
@@ -99,10 +109,13 @@ Deno.serve(async (request: Request) => {
   // than the same query once per person.
   const [{ data: people }, { data: posts }, { data: events }, { data: history }] =
     await Promise.all([
+      // Network members only: this list is both who gets recommendations and
+      // who can be recommended, and an event-only account is neither (ACC-05).
       db
         .from('profiles')
         .select('id, full_name, current_profession, interests, profile_status, role')
-        .eq('profile_status', 'active'),
+        .eq('profile_status', 'active')
+        .eq('network_member', true),
       db
         .from('posts')
         .select('id, author_id, body, created_at')
@@ -112,6 +125,9 @@ Deno.serve(async (request: Request) => {
       db
         .from('events')
         .select('id, title, description, location, starts_at')
+        // A draft or cancelled event is not the host's to announce yet, and
+        // its title would otherwise reach the model and a reason sentence.
+        .eq('status', 'published')
         .gte('starts_at', new Date().toISOString())
         .order('starts_at', { ascending: true })
         .limit(UPCOMING_EVENTS),

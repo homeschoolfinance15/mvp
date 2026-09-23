@@ -161,16 +161,20 @@ Deno.serve(async (request: Request) => {
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   if (!stripeKey) {
-    // Named precisely, because the person who can fix this is reading the log.
+    // Named precisely in the log, because the person who can fix this reads
+    // it. The attendee gets a sentence that is theirs to act on (ATT-8).
+    console.error(
+      'stripe-checkout: card payments are not configured. Set STRIPE_SECRET_KEY on this ' +
+        'project (supabase secrets set STRIPE_SECRET_KEY=sk_...) and deploy again. ' +
+        'Free events are unaffected.',
+    )
     return json(
       {
         error:
-          'Card payments are not configured yet. Set STRIPE_SECRET_KEY on this project ' +
-          '(supabase secrets set STRIPE_SECRET_KEY=sk_...) and deploy again. ' +
-          'Free events are unaffected.',
+          'Card payments are not available right now. Any booking you have already made is unaffected.',
         reason: 'stripe_not_configured',
       },
-      500,
+      503,
     )
   }
 

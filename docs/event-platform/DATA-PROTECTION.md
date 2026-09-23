@@ -115,6 +115,52 @@ what it destroyed each time it runs.
 
 ---
 
+## 4a. Two ways to close an account
+
+Since 23 September 2026 anybody closing an account — themselves, or an
+administrator or connector closing it for them — chooses one of two answers.
+The database decides what each removes; the screen only asks.
+
+| | **Delete the account** | **Delete the account and everything in it** |
+| --- | --- | --- |
+| Profile, login, posts, comments, likes, circle messages, registrations, tickets, recommendations, questionnaire answers | Deleted | Deleted |
+| Their own waitlist application (matched on their confirmed email) | Deleted | Deleted |
+| Events they host that nobody else is part of | Deleted | Deleted |
+| Their attendance records | Kept, pseudonymised (§1) | **Deleted** |
+| Event feedback they wrote | Kept, pseudonymised | **Deleted** |
+| Notes they wrote about other people (§5) | Kept, pseudonymised | **Deleted** |
+| Notifications their actions sent to other people | Kept, sender removed | **Deleted** |
+| Uploaded photos and video | Left in storage | **Deleted** (by whoever closes the account: themselves, their connector or an administrator; the database refuses while any are left) |
+| **Orders and refunds** | **Kept, pseudonymised, seven years** | **Kept, pseudonymised, seven years** |
+| Anything of another person's: tickets, registrations, orders, attendance, invitations (including ones this person sent them), co-hosting, posts and feedback | Never touched | Never touched |
+
+**What is always kept, and why.** Payment records, for the reason in §1: Art.
+17(3)(b) and Companies Act 2006 s.388. The dialog says so in those words:
+*"Payment records are kept, without your name, for seven years because
+accounting law requires it."* Eventbrite, Stripe and Airbnb make the same
+split — the profile and content go, the transaction stays with the person
+removed.
+
+**What still refuses a closure, in both modes.** A refund in progress; hosting
+an event anybody else is part of — registered, paid, attended, invited,
+co-hosting, posted about it or left feedback — because deleting the host
+deletes the event and those rows with it (reassign it first; there is no
+screen for that yet); and a connector who still has members, or whose circle holds messages
+other people wrote — deleting the connector would take those people's words
+with it.
+
+**One known edge.** The screen removes the uploaded files before it asks the
+database, because afterwards nobody but an administrator may. If the database
+then refuses for one of the reasons above, the files are already gone and the
+account is still open. Only the second answer removes files, and it asked for
+them to go either way.
+
+**Typed confirmation.** The second answer cannot be undone and is wider than
+people expect, so it asks for the word DELETE to be typed, as GitHub does
+before deleting a repository.
+
+---
+
 ## 5. The open question, and it is the only one
 
 **Peer feedback is split by direction when somebody is erased.**
@@ -152,6 +198,10 @@ it be deleted with the rest of them?
 **Either answer is cheap.** Deleting them as well is a one-line change and no
 data has been lost in the meantime.
 
+**Partly answered since (§4a).** A person who chooses *delete the account and
+everything in it* has asked for exactly this, so their notes go. The question
+above now applies only to the default choice, *delete the account*.
+
 ---
 
 ## What is not at stake here
@@ -173,5 +223,6 @@ data has been lost in the meantime.
 > *Decision:*
 
 Record it here and it stays next to the code it governs. The implementation
-lives in migrations `20260916000011`, `22`, `29`, `30` and `31`; each carries
-its reasoning in its own header.
+lives in migrations `20260916000011`, `22`, `29`, `30`, `31` and
+`20260923000801` (the two ways to close an account); each carries its
+reasoning in its own header.

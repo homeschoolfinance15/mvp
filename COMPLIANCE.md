@@ -83,9 +83,20 @@ execution. A log that can be quietly trimmed is not evidence of anything.
 
 - `export_my_data()` returns everything held about the caller as one JSON
   document, and the UI offers it as a download.
-- `delete_my_account()` closes the caller's own account. Foreign keys cascade
-  through every table; the audit trail keeps the event and loses the actor,
-  because `activity_log.actor_id` is `ON DELETE SET NULL`.
+- `delete_my_account(p_scope)` closes the caller's own account, and
+  `delete_managed_profile(p_profile_id, p_scope)` lets an admin or connector
+  close somebody else's. `'account'` (the default) deletes the person and
+  keeps event history under a pseudonym; `'everything'` also deletes their
+  attendance, feedback they wrote, notifications they caused and their
+  uploaded files. Both erase their own waitlist application. Neither ever
+  touches another person's ticket, registration, order, invitation, post or
+  feedback: an account that hosts an event anybody else is part of is
+  refused until the event has another host. Both keep
+  orders and refunds pseudonymised for seven years (Companies Act s.388), as
+  Eventbrite, Stripe and Airbnb do. Any other scope is refused by the
+  database. The audit trail keeps the event and loses the actor, because
+  `activity_log.actor_id` is `ON DELETE SET NULL`. Full table in
+  `docs/event-platform/DATA-PROTECTION.md` §4a.
 
 Both deliberately exclude reports *about* the person: returning those would
 name the reporter and undo the rule the trust layer depends on.

@@ -354,31 +354,39 @@ check(
   `HTTP ${noPhone.status}`,
 )
 
+// return=minimal, as the app sends it: anon may insert but not read back, so
+// asking for the row costs a 401 on an insert that would have succeeded.
+const phoneEmail = `phone-check-${Date.now()}@example.invalid`
 const withPhone = await fetch(`${URL_}/rest/v1/waitlist_entries`, {
   method: 'POST',
-  headers: { ...anon, Prefer: 'return=representation' },
+  headers: { ...anon, Prefer: 'return=minimal' },
   body: JSON.stringify({
     full_name: 'Phone Check',
-    email: `phone-check-${Date.now()}@example.invalid`,
+    email: phoneEmail,
     phone: '+44 7700 900000',
     linkedin_url: null,
   }),
 })
-const phoneRow = withPhone.ok ? (await withPhone.json())[0] : null
 
 check(
   'an application with a phone number and no LinkedIn is accepted',
-  Boolean(phoneRow),
-  phoneRow ? 'stored' : `HTTP ${withPhone.status}`,
+  withPhone.status === 201,
+  `HTTP ${withPhone.status}`,
 )
 
 // Leave nothing behind: the suite runs against a live project.
-if (phoneRow) {
-  await fetch(`${URL_}/rest/v1/rpc/delete_waitlist_entry`, {
-    method: 'POST',
-    headers: auth(admin.token),
-    body: JSON.stringify({ p_entry_id: phoneRow.id }),
-  })
+if (withPhone.status === 201) {
+  const found = await fetch(
+    `${URL_}/rest/v1/waitlist_entries?select=id&email=eq.${encodeURIComponent(phoneEmail)}`,
+    { headers: auth(admin.token) },
+  )
+  for (const row of found.ok ? await found.json() : []) {
+    await fetch(`${URL_}/rest/v1/rpc/delete_waitlist_entry`, {
+      method: 'POST',
+      headers: auth(admin.token),
+      body: JSON.stringify({ p_entry_id: row.id }),
+    })
+  }
 }
 
 /* -------------------------------------------------------------------------- */

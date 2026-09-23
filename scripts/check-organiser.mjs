@@ -166,7 +166,7 @@ check('EML-06 a skipped reminder reads as a schedule fact, not a fault', () => {
   assert.match(skippedSentence('reminder', null), /moved\s+earlier/)
 })
 
-check('EML-01 all nine situations are on screen, and a paid purchase is one email', () => {
+check('EML-01 all nine situations are accounted for, and a paid purchase is one email', () => {
   assert.equal(AUTOMATIC_MESSAGES.length, 9)
   // Only the reminder is the organiser's to switch off (EML-02).
   assert.deepEqual(
@@ -191,7 +191,7 @@ check('ORG-01A a missing create button always carries its reason', () => {
   assert.equal(whyNoCreate('admin', false), null)
   assert.equal(whyNoCreate('connector', true), null)
   assert.match(whyNoCreate('connector', false), /administrator can switch this on/)
-  assert.match(whyNoCreate('user', false), /connectors and administrators/)
+  assert.match(whyNoCreate('user', false), /Ask an administrator/)
 })
 
 /* -------------------------------------------------------------------------- */

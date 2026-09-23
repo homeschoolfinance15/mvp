@@ -569,32 +569,21 @@ async function main() {
     saw(ticket),
   )
 
-  // QLT-08. A host pulls the event back to draft. The person holding a place
-  // must not lose sight of the event their ticket is for.
-  await write(host.token, 'PATCH', `events?id=eq.${lastPlace.id}`, { status: 'draft' })
+  // ORG-22 replaced the QLT-08 draft round-trip: with a confirmed place the
+  // host cannot pull the event back to draft at all; cancelling is the path.
+  const unpublish = await write(host.token, 'PATCH', `events?id=eq.${lastPlace.id}`, { status: 'draft' })
+  check(
+    'an event with a confirmed place cannot go back to draft (ORG-22)',
+    !unpublish.ok && /cannot be taken down/.test(String(unpublish.body?.message ?? '')),
+    `${unpublish.status} ${String(unpublish.body?.message ?? '').slice(0, 60)}`,
+  )
 
   const bookedView = await get(winner.token, `events?id=eq.${lastPlace.id}&select=id,status`)
   check(
-    'an unpublished event stays readable to somebody holding a place (QLT-08)',
-    Array.isArray(bookedView.body) && bookedView.body.length === 1,
+    'and it stays published for the person holding a place',
+    Array.isArray(bookedView.body) && bookedView.body[0]?.status === 'published',
     saw(bookedView),
   )
-
-  const strangerView = await get(loser.token, `events?id=eq.${lastPlace.id}&select=id`)
-  check(
-    'and is still invisible to everybody else (ORG-02)',
-    blocked(strangerView),
-    saw(strangerView),
-  )
-
-  const bookedPublicView = await get(winner.token, `event_public?id=eq.${lastPlace.id}&select=id`)
-  check(
-    'event_public agrees with the table about that (QLT-08)',
-    Array.isArray(bookedPublicView.body) && bookedPublicView.body.length === 1,
-    saw(bookedPublicView),
-  )
-
-  await write(host.token, 'PATCH', `events?id=eq.${lastPlace.id}`, { status: 'published' })
 
   // ---------------------------------------------------------------------------
   // 6. ATT-02/03/06 — the door

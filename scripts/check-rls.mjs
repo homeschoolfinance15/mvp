@@ -14,6 +14,10 @@ async function signIn(email) {
     body: JSON.stringify({ email, password: PASSWORD }),
   })
   const j = await r.json()
+  if (!r.ok || !j.access_token) {
+    console.error(`sign-in failed for ${email}: ${j.msg || j.error_description || j.error || r.status}`)
+    process.exit(1)
+  }
   return { token: j.access_token, id: j.user.id }
 }
 

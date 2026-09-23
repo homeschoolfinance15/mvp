@@ -258,11 +258,14 @@ async function main() {
   const freeTickets = await svc(`event_tickets?event_id=eq.${paid[0].id}&select=id`).then(r => r.json())
   ok('BUY-04 and no ticket was issued for it', freeTickets.length === 0, `${freeTickets.length} tickets`)
 
+  // ATT-2. Not even a pending hold. A self-written hold named its own expiry,
+  // so one request could sell an event out until 2099. Holds come only from
+  // stripe-checkout (20 minutes, BUY-06) and places from register_free().
   r = await as(guest1.token, 'event_registrations', {
     method: 'POST',
-    body: JSON.stringify({ event_id: paid[0].id, profile_id: guest1.id, status: 'pending' }),
+    body: JSON.stringify({ event_id: paid[0].id, profile_id: guest1.id, status: 'pending', hold_expires_at: '2099-01-01T00:00:00Z' }),
   })
-  ok('BUY-06 but a caller may still hold their own place', r.status === 201, `HTTP ${r.status}`)
+  ok('ATT-2 a caller cannot write their own hold on a place', r.status === 401 || r.status === 403, `HTTP ${r.status}`)
 
   console.log('\n— every automatic email has a producer (EML-01) —')
 
@@ -342,9 +345,36 @@ async function main() {
   r = await write(winner.token, 'event_feedback', { event_id: ev.id, author_id: winner.id, question_id: evQ[0].id, answer_scale: 9 })
   ok('FDB-08 an attendee can now submit event feedback', r.status >= 200 && r.status < 300, `HTTP ${r.status} ${(await r.text()).slice(0, 90)}`)
 
+  // ATT-1. The path the feedback screen actually uses. An upsert on these
+  // tables is checked against the admin-only select policy and always failed;
+  // the plain insert above passed, which is how that went unnoticed. Sent
+  // twice: a retry must overwrite, not fail and not duplicate (FDB-07).
+  // ATT-4: the RPC refuses until the event is over, so it is still shut here.
+  r = await as(winner.token, 'rpc/submit_event_feedback', {
+    method: 'POST', body: JSON.stringify({ p_event: ev.id, p_answers: [{ question_id: evQ[0].id, answer_scale: 8 }] }),
+  })
+  ok('ATT-4 feedback is refused before the event has ended', r.status === 403, `HTTP ${r.status}`)
+  await svc(`events?id=eq.${ev.id}`, { method: 'PATCH', body: JSON.stringify({ starts_at: new Date(Date.now() - 2 * 36e5).toISOString(), ends_at: new Date(Date.now() - 36e5).toISOString(), feedback_opens_after_minutes: 0 }) })
+  for (const attempt of ['first', 'retry']) {
+    r = await as(winner.token, 'rpc/submit_event_feedback', {
+      method: 'POST', body: JSON.stringify({ p_event: ev.id, p_answers: [{ question_id: evQ[0].id, answer_scale: 8 }] }),
+    })
+    ok(`ATT-1 the feedback screen's own write succeeds (${attempt})`, r.status >= 200 && r.status < 300, `HTTP ${r.status} ${(await r.text()).slice(0, 90)}`)
+  }
+
+  // ATT-5. A peer question is not an event question.
+  r = await as(winner.token, 'rpc/submit_event_feedback', {
+    method: 'POST', body: JSON.stringify({ p_event: ev.id, p_answers: [{ question_id: peerQ[0].id, answer_scale: 5 }] }),
+  })
+  ok('ATT-5 an event answer cannot attach to a peer question', r.status >= 400, `HTTP ${r.status}`)
+
   // self-review
   r = await write(winner.token, 'peer_feedback', { event_id: ev.id, author_id: winner.id, subject_id: winner.id, question_id: peerQ[0].id, answer_text: 'me' })
   ok('§11 participant cannot rate themselves', r.status >= 400, `HTTP ${r.status}`)
+  r = await as(winner.token, 'rpc/submit_peer_feedback', {
+    method: 'POST', body: JSON.stringify({ p_event: ev.id, p_subject: winner.id, p_answers: [{ question_id: peerQ[0].id, answer_text: 'me' }] }),
+  })
+  ok('§11 nor through the function the screen uses', r.status >= 400, `HTTP ${r.status}`)
 
   console.log('\n— feedback is admin-only (FDB-09/12/13) —')
 
@@ -362,6 +392,9 @@ async function main() {
 
   console.log('\n— cancellation frees the place (ORG-03A) —')
 
+  // An attendee can only cancel before the end, so put the event back ahead.
+  await svc(`events?id=eq.${ev.id}`, { method: 'PATCH', body: JSON.stringify({ starts_at: starts, ends_at: new Date(Date.now() + 9e7).toISOString() }) })
+
   const regId = confirmed[0].id
   r = await as(winner.token, 'rpc/cancel_registration', { method: 'POST', body: JSON.stringify({ p_registration: regId }) })
   ok('BUY-07 an attendee can cancel their own place', r.status >= 200 && r.status < 300, `HTTP ${r.status}`)
@@ -370,16 +403,16 @@ async function main() {
   const revoked = await svc(`event_tickets?event_id=eq.${ev.id}&select=revoked_at`).then(r => r.json())
   ok('BUY-11 the cancelled ticket stops admitting its holder', revoked.every(t => t.revoked_at !== null), JSON.stringify(revoked).slice(0, 80))
 
-  console.log('\n— QLT-08 a booking survives its event being unpublished —')
+  console.log('\n— ORG-22 a confirmed place keeps its event published —')
 
+  // ORG-22 replaced the QLT-08 draft round-trip. The trigger refuses even the
+  // service role, so the event can no longer be unpublished under a booking.
   await svc(`event_registrations?id=eq.${regId}`, { method: 'PATCH', body: JSON.stringify({ status: 'confirmed', cancelled_at: null }) })
-  await svc(`events?id=eq.${ev.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'draft' }) })
-  const stillReadable = await as(winner.token, `events?id=eq.${ev.id}&select=id,title`).then(r => r.json())
-  ok('QLT-08 an attendee still reads the event their booking is for',
-    Array.isArray(stillReadable) && stillReadable.length === 1, JSON.stringify(stillReadable).slice(0, 80))
-  const strangerSees = await as(guest1.id === winner.id ? eventOnly.token : guest1.token, `events?id=eq.${ev.id}&select=id`).then(r => r.json())
-  ok('ORG-02 someone with no booking still cannot see the draft',
-    Array.isArray(strangerSees) && strangerSees.length === 0, JSON.stringify(strangerSees).slice(0, 80))
+  r = await svc(`events?id=eq.${ev.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'draft' }) })
+  ok('ORG-22 an event with a confirmed place cannot go back to draft', r.status >= 400, `HTTP ${r.status}`)
+  const stillPublished = await as(winner.token, `events?id=eq.${ev.id}&select=status`).then(r => r.json())
+  ok('ORG-22 the attendee still sees it published',
+    stillPublished[0]?.status === 'published', JSON.stringify(stillPublished).slice(0, 80))
 
   console.log(`\n${pass} passed, ${fail} failed`)
   if (failures.length) { console.log('\nFailures:'); failures.forEach(f => console.log(`  - ${f}`)) }
