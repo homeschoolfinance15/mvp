@@ -106,6 +106,12 @@ export default function Members() {
       (m.current_profession ?? '').toLowerCase().includes(q)
     )
   })
+  // ADM-10. Somebody who signed up only to buy a ticket is not a member of
+  // the network, so they are listed apart rather than mixed in or hidden.
+  const networkMembers = members.filter((m) => m.network_member)
+  const eventAccounts = members.filter((m) => !m.network_member)
+  const shownMembers = filtered.filter((m) => m.network_member)
+  const shownEventAccounts = filtered.filter((m) => !m.network_member)
 
   async function applyStatus() {
     if (!pending) return
@@ -124,6 +130,51 @@ export default function Members() {
     await load()
   }
 
+  function renderList(list: Profile[], empty: string) {
+    if (list.length === 0) return <EmptyState>{empty}</EmptyState>
+    return (
+      <Panel className="divide-y divide-line">
+        {list.map((member) => (
+          <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap">
+            <Initials name={member.full_name} role={member.role} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-fg">{member.full_name}</div>
+              <div className="truncate text-xs text-dim">
+                {member.current_profession ?? 'Onboarding not finished'}
+              </div>
+            </div>
+            <div className="min-w-0 text-right text-xs text-muted">
+              <div className="truncate">
+                {member.network_member
+                  ? `via ${connectorByMember[member.id] ?? 'an unknown connector'}`
+                  : 'Event account'}
+              </div>
+              <div className="text-dim">{formatDate(member.created_at)}</div>
+            </div>
+            <div className="w-36 shrink-0">
+              <Select
+                aria-label={`Membership status for ${member.full_name}`}
+                value={member.profile_status}
+                onChange={(e) =>
+                  setPending({ member, status: e.target.value as ProfileStatus })
+                }
+              >
+                {PROFILE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button variant="danger" size="sm" onClick={() => setMemberToDelete(member)}>
+              Delete
+            </Button>
+          </div>
+        ))}
+      </Panel>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center py-16 text-dim">
@@ -140,20 +191,16 @@ export default function Members() {
         </div>
       )}
 
-      <SectionHeader
-        title="Members"
-        caption="Everyone who joined on a connector's invitation."
-        action={
-          <div className="w-56">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search members"
-              aria-label="Search members by name"
-            />
-          </div>
-        }
-      />
+      <div className="mb-4 flex justify-end">
+        <div className="w-56">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search members"
+            aria-label="Search members by name"
+          />
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4">
@@ -161,47 +208,20 @@ export default function Members() {
         </div>
       )}
 
-      {filtered.length === 0 ? (
-        <EmptyState>
-          {members.length === 0 ? 'Nobody has joined yet.' : 'No members match that search.'}
-        </EmptyState>
-      ) : (
-        <Panel className="divide-y divide-line">
-          {filtered.map((member) => (
-            <div key={member.id} className="flex flex-wrap items-center gap-4 px-5 py-4 sm:flex-nowrap">
-              <Initials name={member.full_name} role={member.role} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-fg">{member.full_name}</div>
-                <div className="truncate text-xs text-dim">
-                  {member.current_profession ?? 'Onboarding not finished'}
-                </div>
-              </div>
-              <div className="min-w-0 text-right text-xs text-muted">
-                <div className="truncate">via {connectorByMember[member.id] ?? 'an unknown connector'}</div>
-                <div className="text-dim">{formatDate(member.created_at)}</div>
-              </div>
-              <div className="w-36 shrink-0">
-                <Select
-                  aria-label={`Membership status for ${member.full_name}`}
-                  value={member.profile_status}
-                  onChange={(e) =>
-                    setPending({ member, status: e.target.value as ProfileStatus })
-                  }
-                >
-                  {PROFILE_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Button variant="danger" size="sm" onClick={() => setMemberToDelete(member)}>
-                Delete
-              </Button>
-            </div>
-          ))}
-        </Panel>
+      {renderList(
+        shownMembers,
+        networkMembers.length === 0 ? 'Nobody has joined yet.' : 'No members match that search.',
       )}
+
+      <div className="mt-12">
+        <SectionHeader title="Event accounts" />
+        {renderList(
+          shownEventAccounts,
+          eventAccounts.length === 0
+            ? 'No event-only accounts yet.'
+            : 'No event accounts match that search.',
+        )}
+      </div>
 
       <ConfirmModal
         open={Boolean(pending)}

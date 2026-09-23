@@ -24,6 +24,11 @@ jobs:
 
       - run: npm ci
 
+      # Reads src/ only. Here rather than with the other offline checks in
+      # deploy-database.yml, which runs only when scripts/ or supabase/ change.
+      - name: Signed in, the sidebar is the only navigation
+        run: node scripts/check-shell.mjs
+
       - name: Typecheck and build
         run: npm run build
         env:

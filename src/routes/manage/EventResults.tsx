@@ -16,10 +16,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   EmptyState,
-  Notice,
   Panel,
   SectionHeader,
   StatTile,
@@ -61,7 +60,6 @@ interface Figures {
   everRegistered: number
   confirmed: number
   cancelled: number
-  expired: number
   attended: number
   checkInRan: boolean
   orders: EventOrder[]
@@ -136,7 +134,6 @@ function Results({ data }: { data: ManagedEvent }) {
       everRegistered: registrations.length,
       confirmed: registrations.filter((r) => r.status === 'confirmed').length,
       cancelled: registrations.filter((r) => r.status === 'cancelled').length,
-      expired: registrations.filter((r) => r.status === 'expired').length,
       attended: attendance.length,
       checkInRan: attendance.length > 0,
       orders,
@@ -163,7 +160,7 @@ function Results({ data }: { data: ManagedEvent }) {
 
   if (loading) {
     return (
-      <ManageShell event={event} current="results">
+      <ManageShell event={event}>
         <EmptyState>Working out the figures…</EmptyState>
       </ManageShell>
     )
@@ -171,7 +168,7 @@ function Results({ data }: { data: ManagedEvent }) {
 
   if (failed || !figures) {
     return (
-      <ManageShell event={event} current="results">
+      <ManageShell event={event}>
         <EmptyState>
           We couldn't load the results just now.{' '}
           <button type="button" onClick={() => void load()} className="underline underline-offset-2">
@@ -183,32 +180,12 @@ function Results({ data }: { data: ManagedEvent }) {
   }
 
   const r = figures.receipts
-  const finished = new Date(event.ends_at ?? event.starts_at).getTime() < Date.now()
-  const pendingRefunds = figures.refunds.filter((f) => f.status !== 'completed')
 
   return (
-    <ManageShell event={event} current="results">
-      {!finished && (
-        <div className="mb-6">
-          <Notice tone="success">
-            This event has not finished yet, so these figures are where things stand right now
-            rather than a final account.
-          </Notice>
-        </div>
-      )}
-
-      {event.status === 'cancelled' && (
-        <div className="mb-6">
-          <Notice tone="error">
-            This event was cancelled. What people paid is still shown below, along with whatever has
-            been refunded so far — a cancelled event does not erase the money that changed hands.
-          </Notice>
-        </div>
-      )}
-
+    <ManageShell event={event}>
       {/* ORG-12. Four different questions, four different numbers. Registered
           is not attended, and neither of them is sold. */}
-      <SectionHeader title="People" caption="ORG-12. Registering, turning up and cancelling are three different things." />
+      <SectionHeader title="People" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Registered at some point" value={figures.everRegistered} />
         <StatTile label="Confirmed places" value={figures.confirmed} />
@@ -222,19 +199,8 @@ function Results({ data }: { data: ManagedEvent }) {
       {!figures.checkInRan && figures.confirmed > 0 && (
         <div className="mt-4">
           <Explainer>
-            ATT-04. Nobody was checked in at this event, so there is no attendance figure — that is
-            different from nobody turning up, and this screen will not turn one into the other.
-            Attendance can still be recorded by hand from the guest list.
-          </Explainer>
-        </div>
-      )}
-
-      {figures.expired > 0 && (
-        <div className="mt-4">
-          <Explainer>
-            {figures.expired} {figures.expired === 1 ? 'place was' : 'places were'} held during
-            checkout and released when the hold ran out. Those are not cancellations and nobody was
-            charged for them.
+            Nobody was checked in at this event, so there is no attendance figure. To record
+            attendance by hand, use Mark attended on the guest list.
           </Explainer>
         </div>
       )}
@@ -242,15 +208,10 @@ function Results({ data }: { data: ManagedEvent }) {
       {/* ------------------------------------------------------------------ */}
 
       <div className="mt-12">
-        <SectionHeader
-          title="Receipts"
-          caption="ORG-13. What was taken, what was deducted, and what came back. Read from the payment records, not from today's prices."
-        />
+        <SectionHeader title="Receipts" />
 
         {r.paidOrders === 0 ? (
-          <EmptyState>
-            Nothing was charged for this event. Every place on it was free.
-          </EmptyState>
+          <EmptyState>Nothing charged.</EmptyState>
         ) : (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -265,43 +226,17 @@ function Results({ data }: { data: ManagedEvent }) {
                 <span className="text-2xl font-light tracking-tight tabular-nums">
                   {money(r.netCents, r.currency)}
                 </span>
-                <span className="mt-2 block text-xs leading-relaxed text-muted">
-                  Gross, less Stripe's fees, less the money already returned. This is what the
-                  payment account received and kept — it is not profit. Nothing this event cost to
-                  put on is in this database.
-                </span>
               </Fact>
             </Panel>
           </>
         )}
       </div>
 
-      {/* BUY-14. The honest answer to "what did this event make, and for whom". */}
-      {r.paidOrders > 0 && (
-        <div className="mt-6">
-          <Panel className="border-dashed px-6 py-5">
-            <div className="eyebrow">Where the money went</div>
-            <p className="mt-2 text-sm leading-relaxed text-fg">
-              {figures.accountIsAmazing
-                ? 'These payments were taken on Amazing’s own Stripe account.'
-                : `These payments were taken on ${figures.accountName ?? 'the hosting community'}’s own Stripe account, not on Amazing’s. They received the money, they paid Stripe’s fees on it, and refunds come out of their balance.`}
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              Each order records the account that actually took it, so a refund always goes back
-              through the same account — even if this event's payment settings change later.
-            </p>
-          </Panel>
-        </div>
-      )}
-
       {/* ------------------------------------------------------------------ */}
 
       {figures.refunds.length > 0 && (
         <div className="mt-12">
-          <SectionHeader
-            title="Refunds"
-            caption="BUY-09. A requested refund is a promise. Only a completed one is money that has gone back."
-          />
+          <SectionHeader title="Refunds" />
           <Rows>
             {figures.refunds.map((f) => (
               <Row key={f.id}>
@@ -319,40 +254,22 @@ function Results({ data }: { data: ManagedEvent }) {
               </Row>
             ))}
           </Rows>
-          {pendingRefunds.length > 0 && (
-            <div className="mt-4">
-              <Explainer>
-                {pendingRefunds.length}{' '}
-                {pendingRefunds.length === 1 ? 'refund has' : 'refunds have'} not completed yet, so
-                that money is still counted as taken above. Net receipts will fall when they do.
-              </Explainer>
-            </div>
-          )}
         </div>
       )}
 
       {/* ------------------------------------------------------------------ */}
       {/* FDB-09. Not a summary, not an average, not a count. Nothing. */}
 
-      <div className="mt-12">
-        <SectionHeader title="Feedback" />
-        <Panel className="border-dashed px-6 py-5 text-sm leading-relaxed text-muted">
-          {isAdmin ? (
-            <>
-              Feedback about this event and between the people at it is administrator business and
-              is read on the administrator's own event page. It is deliberately not shown here,
-              because this screen is the one hosts open.
-            </>
-          ) : (
-            <>
-              What attendees said about this event, and what they said about each other, is not
-              shown to hosts — not as reviews, not as scores, and not as an average that would let
-              anybody work them out. People answer honestly because they know the person they are
-              describing will never read it, and that only stays true if it is never shown.
-            </>
-          )}
-        </Panel>
-      </div>
+      {isAdmin && (
+        <div className="mt-12">
+          <SectionHeader title="Feedback" />
+          <Panel className="border-dashed px-6 py-5 text-sm leading-relaxed text-muted">
+            <Link to={`/admin/events/${event.id}`} className="text-fg underline underline-offset-4">
+              Read this event's feedback
+            </Link>
+          </Panel>
+        </div>
+      )}
     </ManageShell>
   )
 }

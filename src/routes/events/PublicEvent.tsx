@@ -142,7 +142,7 @@ export default function PublicEvent() {
     let active = true
     void supabase
       .from('event_registrations')
-      .select('id, status, event_tickets(id)')
+      .select('id, status, hold_expires_at, event_tickets(id)')
       .eq('event_id', event.id)
       .eq('profile_id', profile.id)
       .in('status', ['pending', 'confirmed'])
@@ -156,10 +156,23 @@ export default function PublicEvent() {
           return
         }
         const row = data as
-          | { id: string; status: RegistrationStatus; event_tickets: { id: string }[] | null }
+          | {
+              id: string
+              status: RegistrationStatus
+              hold_expires_at: string | null
+              event_tickets: { id: string } | null
+            }
           | null
+        // ATT-6. A checkout hold that has lapsed is not a place, even before
+        // the sweep marks it expired — the capacity count already ignores it.
+        const lapsed =
+          row?.status === 'pending' &&
+          row.hold_expires_at !== null &&
+          Date.parse(row.hold_expires_at) <= Date.now()
         setMine(
-          row ? { id: row.id, status: row.status, ticket_id: row.event_tickets?.[0]?.id ?? null } : null,
+          row && !lapsed
+            ? { id: row.id, status: row.status, ticket_id: row.event_tickets?.id ?? null }
+            : null,
         )
       })
     return () => {
@@ -201,9 +214,11 @@ export default function PublicEvent() {
             The link may have been mistyped or cut short, or the event may never have been
             published. Whoever sent it to you can send it again.
           </p>
-          <Link to="/events" className="mt-8 inline-block">
-            <Button variant="primary">See what else is on</Button>
-          </Link>
+          {!(session && profile) && (
+            <Link to="/events" className="mt-8 inline-block">
+              <Button variant="primary">See what else is on</Button>
+            </Link>
+          )}
         </div>
       </EventShell>
     )
@@ -276,12 +291,8 @@ export default function PublicEvent() {
         {state === 'cancelled' && (
           <div className="mb-6">
             <Notice tone="error">
-              <strong>This event has been cancelled.</strong> It is not going ahead, and nobody
-              can register. If you had a place, any refund due to you is shown under{' '}
-              <Link to="/events/mine" className="underline underline-offset-2">
-                my events
-              </Link>
-              .
+              <strong>This event has been cancelled.</strong> If you had a place, any refund due to
+              you is handled by the host.
             </Notice>
           </div>
         )}
@@ -347,6 +358,9 @@ export default function PublicEvent() {
         {/* Taking part                                                        */}
         {/* ------------------------------------------------------------------ */}
 
+        {/* Nothing to offer and nothing booked (finished, cancelled): no empty
+            panel with a heading over nothing. */}
+        {(mine || open || state === 'sold_out' || state === 'closed') && (
         <section className="mt-8" aria-labelledby="register-heading">
           <Panel className="px-6 py-7 sm:px-9">
             <h2 id="register-heading" className="eyebrow">
@@ -366,16 +380,11 @@ export default function PublicEvent() {
                     ? 'You have a place at this event.'
                     : 'Your place is being held while your payment completes.'}
                 </p>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  {mine.ticket_id && (
-                    <Link to={`/events/tickets/${mine.ticket_id}`}>
-                      <Button variant="primary">See your ticket</Button>
-                    </Link>
-                  )}
-                  <Link to="/events/mine">
-                    <Button>Manage your booking</Button>
+                {mine.ticket_id && (
+                  <Link to={`/events/tickets/${mine.ticket_id}`} className="mt-5 inline-block">
+                    <Button variant="primary">See your ticket</Button>
                   </Link>
-                </div>
+                )}
               </div>
             ) : !open ? (
               /*
@@ -383,16 +392,16 @@ export default function PublicEvent() {
                 different sentences. "Sold out" and "registration closed" in
                 particular must never be collapsed into each other: one is the
                 event filling up and the other is a decision somebody made.
+                The badge already names the state, so only what it cannot say
+                is added; finished and cancelled have nothing more to say.
               */
-              <p className="mt-4 text-sm leading-relaxed text-muted">
-                {state === 'sold_out'
-                  ? 'Every place at this event has been taken. If somebody cancels, places can reopen — it is worth checking back.'
-                  : state === 'closed'
-                    ? 'The organisers have closed registration for this event. It is still going ahead, but no new places are being taken.'
-                    : state === 'finished'
-                      ? 'This event has already happened.'
-                      : 'This event has been cancelled and is not going ahead.'}
-              </p>
+              (state === 'sold_out' || state === 'closed') && (
+                <p className="mt-4 text-sm leading-relaxed text-muted">
+                  {state === 'sold_out'
+                    ? 'Places can reopen if somebody cancels, so check back.'
+                    : 'No new places are being taken.'}
+                </p>
+              )
             ) : (
               <>
                 {types.length > 0 ? (
@@ -425,7 +434,7 @@ export default function PublicEvent() {
                   )}
                   {!session && (
                     <span className="text-xs text-dim">
-                      You&rsquo;ll be asked to make an account — it takes a moment.
+                      You&rsquo;ll be asked to make an account.
                     </span>
                   )}
                 </div>
@@ -433,17 +442,21 @@ export default function PublicEvent() {
             )}
 
             {/* EVT-04 and BUY-15. What happens if they cannot come, said
-                before they commit rather than discovered afterwards. */}
+                before they commit rather than discovered afterwards — and only
+                while cancelling is still possible. */}
+            {state !== 'finished' && state !== 'cancelled' && (
             <div className="mt-8 border-t border-line pt-6">
               <h3 className="eyebrow">If you can&rsquo;t make it</h3>
               <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-muted">
                 {event.refund_terms ??
                   'The host has not set out cancellation terms for this event. You can cancel your ' +
-                    'place at any time from your events; anything owed back to you is handled by the host.'}
+                    'place from Coming up until the event ends; anything owed back to you is handled by the host.'}
               </p>
             </div>
+            )}
           </Panel>
         </section>
+        )}
 
         {session && !profile && (
           <div className="mt-8">

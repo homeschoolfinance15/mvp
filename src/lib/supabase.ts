@@ -45,8 +45,16 @@ export const supabase = createClient(url, key, {
 export function errorMessage(error: unknown): string {
   if (!error) return 'Something went wrong.'
   if (typeof error === 'string') return error
-  const e = error as { message?: string; error_description?: string }
+  const e = error as { message?: string; error_description?: string; code?: string }
+  // Constraint violations carry Postgres internals, not sentences (ORG-17).
+  if (e.code && e.code in CONSTRAINT_WORDS) return CONSTRAINT_WORDS[e.code]
   return e.message || e.error_description || 'Something went wrong.'
+}
+
+const CONSTRAINT_WORDS: Record<string, string> = {
+  '23505': 'That already exists, so it was not saved twice.',
+  '23514': 'One of those values is outside what is allowed. Check the numbers and lengths and try again.',
+  '22P02': 'One of those values is not in the right format. Check for a stray character, or a decimal where a whole number belongs.',
 }
 
 /**

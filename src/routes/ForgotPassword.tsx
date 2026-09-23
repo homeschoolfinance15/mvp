@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
+import { homePathFor, useAuth } from '../context/AuthProvider'
 import { supabase } from '../lib/supabase'
 
 /**
@@ -17,6 +18,7 @@ export default function ForgotPassword() {
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const { session, profile, loading } = useAuth()
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -39,6 +41,8 @@ export default function ForgotPassword() {
     setSent(true)
   }
 
+  if (!loading && session && profile) return <Navigate to={homePathFor(profile)} replace />
+
   if (sent) {
     return (
       <AuthLayout
@@ -55,8 +59,7 @@ export default function ForgotPassword() {
           way. It expires in an hour.
         </p>
         <p className="mt-4 text-xs leading-relaxed text-dim">
-          Nothing arrived? Check the spam folder, then try again. We do not say whether an
-          address is on the network.
+          Nothing arrived? Check the spam folder, then try again.
         </p>
       </AuthLayout>
     )

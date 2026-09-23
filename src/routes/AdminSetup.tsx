@@ -4,12 +4,14 @@ import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage } from '../lib/supabase'
 import { homePathFor, useAuth } from '../context/AuthProvider'
+import { MIN_PASSWORD_LENGTH, PASSWORD_RULE, passwordProblem } from '../lib/password'
 
 /**
  * Administrators have no invitation code, so they cannot come through /join.
  * This unlisted route creates the account; the `handle_new_user` trigger grants
  * the admin role only if the email is on `admin_allowlist`. Anyone else who
- * finds this page ends up with an unprovisioned account and no access.
+ * finds this page is signed straight back out and told so; the account is
+ * kept, and becomes an administrator if the email is allowlisted later.
  */
 export default function AdminSetup() {
   const { session, profile, loading, createAdminAccount } = useAuth()
@@ -26,6 +28,11 @@ export default function AdminSetup() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    const problem = passwordProblem(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
     try {
       await createAdminAccount({ fullName, email, password })
@@ -39,7 +46,7 @@ export default function AdminSetup() {
     <AuthLayout
       eyebrow="Administration"
       title="Create your admin account"
-      caption="Access is limited to approved administrator email addresses."
+      caption="Use your approved administrator email address."
       footer={
         <>
           Not an administrator?{' '}
@@ -69,11 +76,11 @@ export default function AdminSetup() {
           />
         </Field>
 
-        <Field label="Password" hint="At least 8 characters.">
+        <Field label="Password" hint={PASSWORD_RULE}>
           <Input
             required
             type="password"
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"

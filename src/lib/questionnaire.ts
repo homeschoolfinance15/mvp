@@ -16,10 +16,13 @@ import type { TagField, TagAnswer } from './types'
  */
 
 export const INTRO =
-  'Tell us a little about yourself so we can help find the right rooms for you. You can update your answers anytime.'
+  'Answer a few questions. You can change them later.'
+
+/** For people already in the network, where the waitlist no longer applies. */
+export const MEMBER_DISCLOSURE = 'Your answers are not shown to other members.'
 
 export const DISCLOSURE =
-  'Your answers help AMAZING and your community connector curate relevant gatherings. They are not shown to other members. If you join the waitlist, an assigned connector can view them once you are placed in a community.'
+  'Your answers are not shown to other members. If you join the waitlist, an assigned connector can view them once you are placed in a community.'
 
 /** Shown under the two preference questions, per the handoff. */
 export const PREFERENCE_CAVEAT =

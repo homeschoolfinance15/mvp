@@ -26,7 +26,14 @@ import {
 } from '../../lib/events'
 import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
-import { EventShell, NeedsSignIn, useLoader } from './shared'
+import {
+  BOOKING_PAGES,
+  EventShell,
+  NeedsSignIn,
+  bookingBucket,
+  useLoader,
+  type BookingBucket,
+} from './shared'
 
 /**
  * Everything somebody has booked. BUY-07, BUY-08, FDB-13.
@@ -46,7 +53,8 @@ import { EventShell, NeedsSignIn, useLoader } from './shared'
 interface Booking extends EventRegistration {
   events: EventRecord | null
   ticket_types: TicketType | null
-  event_tickets: { id: string; revoked_at: string | null }[] | null
+  /** One object, not a list: event_tickets.registration_id is unique. */
+  event_tickets: { id: string; revoked_at: string | null } | null
   event_orders: (EventOrder & { event_refunds: EventRefund[] | null })[] | null
 }
 
@@ -70,9 +78,12 @@ const PAYMENT_WORDS: Record<OrderStatus, string> = {
   cancelled: 'Payment cancelled',
 }
 
-type Bucket = 'upcoming' | 'past' | 'cancelled'
+/** An order that moved money, whatever has happened to it since. */
+const SETTLED: OrderStatus[] = ['paid', 'refunded', 'partially_refunded']
 
-export default function MyEvents() {
+type Bucket = BookingBucket
+
+export default function MyEvents({ bucket = 'upcoming' }: { bucket?: Bucket }) {
   const { session, profile, loading: authLoading } = useAuth()
   const profileId = profile?.id ?? null
 
@@ -101,7 +112,6 @@ export default function MyEvents() {
   }, [profileId])
 
   const { data, loading, failed, reload } = useLoader<Loaded>(load, [profileId])
-  const [tab, setTab] = useState<Bucket>('upcoming')
   const [notice, setNotice] = useState('')
 
   /*
@@ -111,7 +121,7 @@ export default function MyEvents() {
    * cancellation — BUY-14 makes the ticket keep working, so the only way this
    * page tells them the evening is off is the event row changing.
    *
-   * Quietly, and safe to fire at any moment: `tab` and `notice` are this
+   * Quietly, and safe to fire at any moment: `notice` is this
    * reader's own state and no reload writes them, and the cancel confirmation
    * keeps its own state inside the row it belongs to.
    */
@@ -134,29 +144,30 @@ export default function MyEvents() {
     return (
       <EventShell>
         <div className="py-12">
-          <NeedsSignIn what="what you have booked" to="/events/mine" />
+          <NeedsSignIn what="what you have booked" to={BOOKING_PAGES[bucket].path} />
         </div>
       </EventShell>
     )
   }
 
-  const bookings = data?.bookings ?? []
   const now = Date.now()
-
   /*
-   * Cancelled wins over time. A dinner that was called off last month belongs
-   * with the cancellations, not filed away under things that happened —
-   * because it did not happen, and there may still be money outstanding on it.
+   * ATT-6. A checkout somebody walked away from is not a booking. Its hold
+   * lapses after twenty minutes and the row is left 'expired' (or still
+   * 'pending' until the next sweep), one per attempt — so five tries at the
+   * card screen used to put five "Your place has expired" cards under Coming
+   * up. Like Eventbrite's and Luma's ticket lists, only what was actually
+   * booked is shown. Anything that took money stays, lapsed or not, so a late
+   * payment is never hidden.
    */
-  function bucketOf(b: Booking): Bucket {
-    if (b.status === 'cancelled' || b.events?.status === 'cancelled') return 'cancelled'
-    // QLT-08. An event we can no longer read has no date to file it under, and
-    // guessing one would bury an outstanding booking in the history tab. It
-    // counts as still to come, which is where an unresolved thing belongs.
-    if (!b.events) return 'upcoming'
-    const ends = new Date(b.events.ends_at ?? b.events.starts_at).getTime()
-    return ends < now ? 'past' : 'upcoming'
-  }
+  const bookings = (data?.bookings ?? []).filter((b) => {
+    const lapsed =
+      b.status === 'expired' ||
+      (b.status === 'pending' && b.hold_expires_at !== null && Date.parse(b.hold_expires_at) <= now)
+    return !lapsed || (b.event_orders ?? []).some((o) => SETTLED.includes(o.status))
+  })
+
+  const bucketOf = (b: Booking): Bucket => bookingBucket(b.events, b, now)
 
   const grouped: Record<Bucket, Booking[]> = {
     upcoming: bookings.filter((b) => bucketOf(b) === 'upcoming'),
@@ -169,42 +180,13 @@ export default function MyEvents() {
   grouped.past.sort((a, b) => startsAt(b) - startsAt(a))
   grouped.cancelled.sort((a, b) => startsAt(b) - startsAt(a))
 
-  const shown = grouped[tab]
-
-  const tabs: { id: Bucket; label: string }[] = [
-    { id: 'upcoming', label: 'Coming up' },
-    { id: 'past', label: 'Been to' },
-    { id: 'cancelled', label: 'Cancelled' },
-  ]
+  const shown = grouped[bucket]
 
   return (
     <EventShell>
       <header className="border-b border-line pt-2 pb-8">
-        <h1 className="display text-4xl">My events</h1>
-        <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted">
-          Everywhere you are expected, everywhere you have been, and what happened to anything you
-          paid.
-        </p>
+        <h1 className="display text-4xl">{BOOKING_PAGES[bucket].title}</h1>
       </header>
-
-      <nav className="-mb-px flex flex-wrap gap-x-7 border-b border-line" aria-label="My events">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            aria-current={t.id === tab ? 'page' : undefined}
-            className={`shrink-0 border-b py-3.5 text-xs tracking-[0.14em] uppercase transition-colors ${
-              t.id === tab ? 'border-fg text-fg' : 'border-transparent text-dim hover:text-muted'
-            }`}
-          >
-            {t.label}
-            <span className={`ml-2 tabular-nums ${t.id === tab ? 'text-fg' : 'text-dim'}`}>
-              {grouped[t.id].length}
-            </span>
-          </button>
-        ))}
-      </nav>
 
       {notice && (
         <div className="pt-6">
@@ -217,19 +199,11 @@ export default function MyEvents() {
           <LoadFailed what="your events" onRetry={() => void reload()} />
         ) : shown.length === 0 ? (
           <EmptyState>
-            {tab === 'upcoming' ? (
-              <>
-                You have nothing booked yet.{' '}
-                <Link to="/events" className="underline underline-offset-4">
-                  See what&rsquo;s coming up
-                </Link>
-                .
-              </>
-            ) : tab === 'past' ? (
-              'Nothing you have been to yet.'
-            ) : (
-              'Nothing of yours has been cancelled.'
-            )}
+            {bucket === 'upcoming'
+              ? 'Nothing booked yet. Pick an event under Browse.'
+              : bucket === 'past'
+                ? 'Nothing yet. Book an event under Browse and it moves here once it ends.'
+                : 'No cancelled bookings.'}
           </EmptyState>
         ) : (
           <ul className="space-y-5">
@@ -287,7 +261,7 @@ function BookingCard({
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   )
   const refund = refunds[0] ?? null
-  const ticket = booking.event_tickets?.[0] ?? null
+  const ticket = booking.event_tickets
 
   /*
    * A booking whose event we cannot read. It happens when an organiser pulls
@@ -353,7 +327,7 @@ function BookingCard({
     setConfirming(false)
     await onChanged(
       order && order.status === 'paid'
-        ? 'Your place is cancelled. Anything owed back to you is handled by the host and will show here when it happens.'
+        ? 'Your place is cancelled. Anything owed back to you is handled by the host.'
         : 'Your place is cancelled.',
     )
   }
@@ -423,7 +397,7 @@ function BookingCard({
         {!refund && order?.status === 'paid' && (booking.status === 'cancelled' || cancelled) && (
           <p className="mt-1.5 text-muted">
             No refund has been started yet. Anything owed back to you is the host&rsquo;s to make,
-            under the terms you agreed to when you booked. It will appear here when it happens.
+            under the terms you agreed to when you booked.
           </p>
         )}
 
@@ -460,7 +434,8 @@ function BookingCard({
         )}
 
         {/* You can only give up a place you still hold, at an event that has
-            not happened. */}
+            not happened. ATT-7: cancel_registration refuses it afterwards too,
+            so the button goes and the reason takes its place. */}
         {!finished && !cancelled && (booking.status === 'confirmed' || booking.status === 'pending') && (
           <button
             type="button"
@@ -469,6 +444,12 @@ function BookingCard({
           >
             Cancel my place
           </button>
+        )}
+        {finished && !cancelled && booking.status === 'confirmed' && (
+          <p className="ml-auto text-xs text-dim">
+            This event has ended, so your place can no longer be cancelled. Contact the host if
+            something needs changing.
+          </p>
         )}
       </div>
 

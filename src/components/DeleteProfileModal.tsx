@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { errorMessage, supabase } from '../lib/supabase'
+import { DeleteScopeChoice, removeMediaOf, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
 import { Button, Modal, Notice } from './ui'
 
 export function DeleteProfileModal({
@@ -19,20 +20,26 @@ export function DeleteProfileModal({
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [scope, setScope] = useState<DeleteScope>('account')
+  const [typed, setTyped] = useState('')
 
   function close() {
     if (busy) return
     setError('')
+    setScope('account')
+    setTyped('')
     onClose()
   }
 
   async function confirm() {
-    if (!profileId) return
+    if (!profileId || !scopeConfirmed(scope, typed)) return
 
     setBusy(true)
     setError('')
+    if (scope === 'everything') await removeMediaOf(profileId)
     const { error: deleteError } = await supabase.rpc('delete_managed_profile', {
       p_profile_id: profileId,
+      p_scope: scope,
     })
 
     if (deleteError) {
@@ -43,13 +50,26 @@ export function DeleteProfileModal({
 
     await onDeleted()
     setBusy(false)
+    setScope('account')
+    setTyped('')
     onClose()
   }
 
   return (
     <Modal open={open} title={`Delete ${name}?`} onClose={close}>
       <p className="text-sm leading-relaxed text-muted">{impact}</p>
-      <p className="mt-3 text-sm font-medium text-negative">This cannot be undone.</p>
+      <div className="mt-5">
+        <DeleteScopeChoice
+          value={scope}
+          onChange={(next, text) => {
+            setScope(next)
+            setTyped(text)
+          }}
+          subjectName={name}
+          self={false}
+        />
+      </div>
+      <p className="mt-4 text-sm font-medium text-negative">This cannot be undone.</p>
 
       {error && (
         <div className="mt-5">
@@ -61,7 +81,13 @@ export function DeleteProfileModal({
         <Button type="button" onClick={close} disabled={busy}>
           Cancel
         </Button>
-        <Button type="button" variant="danger" loading={busy} onClick={confirm}>
+        <Button
+          type="button"
+          variant="danger"
+          loading={busy}
+          disabled={!scopeConfirmed(scope, typed)}
+          onClick={confirm}
+        >
           Delete profile
         </Button>
       </div>

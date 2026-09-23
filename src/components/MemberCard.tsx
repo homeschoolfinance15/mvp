@@ -18,7 +18,7 @@ import { Button, Field, Initials, Modal, Notice, Select, Textarea } from './ui'
  * interests. No email, because a member holding another member's email is
  * exactly what the directory view exists to prevent. Raising a correction is
  * the sanctioned way to reach someone you don't have contact details for:
- * it goes to the connector who brought them in, and they make the call.
+ * it goes to every administrator and to the connector who brought them in.
  */
 export function MemberCard({
   member,
@@ -90,7 +90,7 @@ export function MemberCard({
 
           {isSelf && (
             <p className="mt-4 text-center text-xs text-dim">
-              This is how the network sees you. Edit it from your profile.
+              Edit this from your profile.
             </p>
           )}
         </div>
@@ -108,7 +108,7 @@ const ROLE_WORD: Record<string, string> = {
 
 const KIND_HINT: Record<ReportKind, string> = {
   correction: "Something in their profile doesn't match what you know.",
-  concern: 'Something about their conduct the connector should know.',
+  concern: 'Something about their conduct the people looking after the network should know.',
   endorsement: "Something good. You've worked with them, or you vouch for them.",
 }
 
@@ -163,8 +163,12 @@ function RaiseReport({
       <div className="text-center">
         <p className="eyebrow">Raised</p>
         <p className="mx-auto mt-4 max-w-sm text-sm leading-relaxed text-muted">
-          This went to the connector who brought {member.full_name.split(' ')[0]} into the
-          network. They'll reach out. {member.full_name.split(' ')[0]} isn't told who raised it.
+          {/* notify_report tells every admin, plus the subject's connector
+              when they have one (a connector or admin has none). */}
+          This went to the administrators
+          {member.role === 'user' &&
+            `, and to the connector who brought ${member.full_name.split(' ')[0]} into the network`}
+          . Someone will look into it. {member.full_name.split(' ')[0]} isn't told who raised it.
         </p>
         <Button variant="primary" className="mt-7 w-full" onClick={onClose}>
           Done
@@ -213,9 +217,9 @@ function RaiseReport({
       {error && <Notice tone="error">{error}</Notice>}
 
       <p className="text-xs leading-relaxed text-dim">
-        This goes to {member.full_name.split(' ')[0]}'s connector and to administrators, not
-        to {member.full_name.split(' ')[0]}. Your name is attached, so whoever acts on it can
-        weigh the source.
+        This goes to administrators
+        {member.role === 'user' && `, and to ${member.full_name.split(' ')[0]}'s connector`}, not
+        to {member.full_name.split(' ')[0]}. Your name is attached.
       </p>
 
       <div className="flex gap-3">

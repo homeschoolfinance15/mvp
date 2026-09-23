@@ -49,7 +49,9 @@ export default function Circle() {
     setFailed(false)
     const [circleRes, messagesRes, dirRes] = await Promise.all([
       supabase.rpc('my_circle_id'),
-      supabase.from('circle_messages').select('*').order('created_at', { ascending: true }),
+      // Newest first with a limit, reversed below: ascending with no limit
+      // gets cut at max_rows and would show the oldest 1000 instead.
+      supabase.from('circle_messages').select('*').order('created_at', { ascending: false }).limit(1000),
       supabase.from('member_directory').select('*'),
     ])
 
@@ -62,7 +64,7 @@ export default function Circle() {
     }
 
     setCircleId((circleRes.data as string | null) ?? null)
-    setMessages((messagesRes.data as CircleMessage[]) ?? [])
+    setMessages(((messagesRes.data as CircleMessage[]) ?? []).reverse())
     const directoryRows = (dirRes.data as DirectoryEntry[]) ?? []
     setDirectory(Object.fromEntries(directoryRows.map((d) => [d.id, d])))
 
@@ -77,8 +79,10 @@ export default function Circle() {
     void load()
   }, [load])
 
-  // Live inserts. The select policy already scopes what arrives, and the
-  // circleId check is belt and braces for a message that isn't ours.
+  // Live inserts and deletes. The select policy already scopes what arrives,
+  // and the circleId check is belt and braces for a message that isn't ours.
+  // A delete carries only the id (default replica identity), so it is
+  // dropped by id: an id that isn't on screen changes nothing.
   useEffect(() => {
     if (!circleId) return
 
@@ -93,6 +97,14 @@ export default function Circle() {
           setMessages((current) =>
             current.some((m) => m.id === message.id) ? current : [...current, message],
           )
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'circle_messages' },
+        (payload) => {
+          const gone = (payload.old as Partial<CircleMessage>).id
+          if (gone) setMessages((current) => current.filter((m) => m.id !== gone))
         },
       )
       .subscribe()
@@ -134,6 +146,11 @@ export default function Circle() {
     )
   }
 
+  // Authors remove their own words; the room's connector and admins can remove
+  // anything in it. circle_messages_delete holds the same rule. A connector
+  // only ever sees their own circle here, so the role is enough.
+  const moderates = profile?.role === 'connector' || profile?.role === 'admin'
+
   async function remove(id: string) {
     setConfirmingId(null)
     const { error: deleteError } = await supabase.from('circle_messages').delete().eq('id', id)
@@ -145,10 +162,7 @@ export default function Circle() {
   }
 
   return (
-    <DashboardShell
-      title="Your circle"
-      caption="Everyone your connector brought in, and the connector themselves."
-    >
+    <DashboardShell title="Your circle">
       {loading ? (
         <div className="flex justify-center py-16 text-dim">
           <Spinner />
@@ -163,8 +177,8 @@ export default function Circle() {
         <div className="mx-auto max-w-2xl">
           <EmptyState>
             {profile?.role === 'admin'
-              ? "Administrators aren't part of a circle. Nobody invited you in, so there's no room to join."
-              : "You aren't in a circle yet."}
+              ? "Administrators aren't part of a circle."
+              : 'Follow the step on your Dashboard to be linked to your connector. Your circle opens here once you are.'}
           </EmptyState>
         </div>
       ) : (
@@ -221,7 +235,7 @@ export default function Circle() {
                         </div>
                       </div>
 
-                      {mine && (
+                      {(mine || moderates) && (
                         <button
                           type="button"
                           onClick={() => setConfirmingId(message.id)}

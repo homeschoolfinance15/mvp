@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { DashboardShell, type Tab } from '../../components/DashboardShell'
-import { FlagsPanel } from '../../components/FlagsPanel'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { DashboardShell } from '../../components/DashboardShell'
 import { DeleteProfileModal } from '../../components/DeleteProfileModal'
 import {
   Button,
@@ -20,29 +19,32 @@ import {
   Textarea,
 } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
+import { useLive } from '../../lib/live'
 import { SendInvite } from '../../components/SendInvite'
 import { useAuth } from '../../context/AuthProvider'
 import type { ConnectorNote, InviteCode, Profile } from '../../lib/types'
-import { PaymentsPanel } from './PaymentSetup'
 import type { ConnectorPayments } from './payouts'
 
-interface Person {
+/**
+ * What the connector's People, Invitations and Raised pages share: one loader
+ * and its live updates, so the three pages cannot drift apart.
+ */
+
+export interface Person {
   linkId: string
   joinedAt: string
   codeUsed: string | null
   profile: Profile
 }
 
-export default function ConnectorDashboard() {
+export function useConnectorData() {
   const { profile } = useAuth()
-  const [tab, setTab] = useState('people')
   // `select('*')` already returns the Stripe columns; ConnectorPayments is the
   // type that says so until they land on `Connector` in src/lib/types.ts.
   const [connector, setConnector] = useState<ConnectorPayments | null>(null)
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [notes, setNotes] = useState<ConnectorNote[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -57,7 +59,7 @@ export default function ConnectorDashboard() {
       .maybeSingle()
 
     if (connectorError || !connectorRow) {
-      setError(errorMessage(connectorError) || 'No connector record found for this account.')
+      setError(errorMessage(connectorError) || 'No connector record found for this account. Ask an administrator to check your connector account.')
       setLoading(false)
       return
     }
@@ -108,30 +110,34 @@ export default function ConnectorDashboard() {
     void load()
   }, [load])
 
-  // Capacity is spent when someone actually joins, not when a code is issued,
-  // so this mirrors public.connector_available_capacity exactly.
-  const liveCodes = useMemo(() => codes.filter((c) => c.status === 'active').length, [codes])
-  const capacity = connector?.invite_capacity ?? 0
-  const remaining = Math.max(0, capacity - people.length)
+  // A reload never unmounts the note form, so a half-written note survives it.
+  useLive(['invite_codes', 'connector_user_links', 'connector_notes'], () => void load(), {
+    enabled: Boolean(connector),
+    filter: `connector_id=eq.${connector?.id}`,
+  })
+  // An administrator pausing invitations or changing capacity.
+  useLive(['connectors'], () => void load(), {
+    enabled: Boolean(profile),
+    filter: `profile_id=eq.${profile?.id}`,
+  })
 
-  const tabs: Tab[] = [
-    { id: 'people', label: 'Your people', count: people.length },
-    { id: 'codes', label: 'Invitations', count: codes.length },
-    // BUY-14. Their own Stripe account, and what it lets their events do.
-    { id: 'payments', label: 'Payments' },
-    { id: 'flags', label: 'Raised' },
-  ]
+  return { connector, codes, people, notes, loading, error, load }
+}
 
-  const selected = people.find((p) => p.profile.id === selectedId) ?? null
-
+/** The page chrome, with the loader's spinner and error handled once. */
+export function ConnectorShell({
+  title,
+  loading,
+  error,
+  children,
+}: {
+  title: string
+  loading: boolean
+  error: string
+  children: ReactNode
+}) {
   return (
-    <DashboardShell
-      title="Your corner of the network"
-      caption="The people you've brought in, the context you hold on them, and the invitations you have left."
-      tabs={tabs}
-      activeTab={tab}
-      onTabChange={setTab}
-    >
+    <DashboardShell title={title}>
       {loading ? (
         <div className="flex justify-center py-16 text-dim">
           <Spinner />
@@ -139,114 +145,7 @@ export default function ConnectorDashboard() {
       ) : error ? (
         <Notice tone="error">{error}</Notice>
       ) : (
-        <>
-          <CapacityBar
-            status={connector?.invite_status ?? 'active'}
-            joined={people.length}
-            capacity={capacity}
-            liveCodes={liveCodes}
-          />
-
-          {tab === 'people' && (
-            <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-              <section>
-                <SectionHeader
-                  title="People you invited"
-                  caption={
-                    people.length
-                      ? 'Select someone to read and add private context.'
-                      : undefined
-                  }
-                />
-                {people.length === 0 ? (
-                  <EmptyState>
-                    Nobody has joined on your codes yet. Share one from the Invitations tab.
-                  </EmptyState>
-                ) : (
-                  <Panel className="divide-y divide-line">
-                    {people.map((person) => {
-                      const noteCount = notes.filter(
-                        (n) => n.user_profile_id === person.profile.id,
-                      ).length
-                      const active = person.profile.id === selectedId
-                      return (
-                        <button
-                          key={person.linkId}
-                          type="button"
-                          onClick={() => {
-                            setSelectedId(person.profile.id)
-                            // Below lg the context panel is under the list,
-                            // off the bottom of the screen.
-                            if (window.innerWidth < 1024) {
-                              requestAnimationFrame(() =>
-                                document
-                                  .getElementById('person-detail')
-                                  ?.scrollIntoView({ behavior: 'smooth' }),
-                              )
-                            }
-                          }}
-                          className={`flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors ${
-                            active ? 'bg-raised' : 'hover:bg-raised/60'
-                          }`}
-                        >
-                          <Initials name={person.profile.full_name} role={person.profile.role} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium text-fg">
-                              {person.profile.full_name}
-                            </span>
-                            <span className="block truncate text-xs text-dim">
-                              {person.profile.current_profession ?? 'Onboarding not finished'}
-                            </span>
-                          </span>
-                          {noteCount > 0 && (
-                            <span className="text-xs tabular-nums text-dim">
-                              {noteCount} note{noteCount === 1 ? '' : 's'}
-                            </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </Panel>
-                )}
-              </section>
-
-              <section id="person-detail" className="scroll-mt-20">
-                {selected && connector ? (
-                  <PersonDetail
-                    person={selected}
-                    connectorId={connector.id}
-                    notes={notes.filter((n) => n.user_profile_id === selected.profile.id)}
-                    onChanged={load}
-                  />
-                ) : (
-                  <div className="hidden lg:block">
-                    <SectionHeader title="Context" />
-                    <EmptyState>Select someone to see their details and your notes.</EmptyState>
-                  </div>
-                )}
-              </section>
-            </div>
-          )}
-
-          {tab === 'codes' && (
-            <InviteCodes
-              codes={codes}
-              remaining={remaining}
-              canInvite={connector?.invite_status === 'active'}
-              onChanged={load}
-            />
-          )}
-
-          {tab === 'payments' && connector && (
-            <PaymentsPanel connector={connector} onChanged={load} />
-          )}
-
-          {tab === 'flags' && (
-            <div className="mt-10">
-              <FlagsPanel />
-            </div>
-          )}
-        </>
+        children
       )}
     </DashboardShell>
   )
@@ -254,7 +153,7 @@ export default function ConnectorDashboard() {
 
 /* -------------------------------------------------------------------------- */
 
-function CapacityBar({
+export function CapacityBar({
   status,
   joined,
   capacity,
@@ -299,7 +198,7 @@ function CapacityBar({
 
 /* -------------------------------------------------------------------------- */
 
-function PersonDetail({
+export function PersonDetail({
   person,
   connectorId,
   notes,
@@ -311,7 +210,9 @@ function PersonDetail({
   onChanged: () => Promise<void>
 }) {
   const [text, setText] = useState('')
-  const [shareWithAdmin, setShareWithAdmin] = useState(true)
+  // Private unless the connector chooses to share (NET-13); the column
+  // default agrees.
+  const [shareWithAdmin, setShareWithAdmin] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -407,6 +308,7 @@ function PersonDetail({
           <form onSubmit={addNote} className="space-y-4">
             <Textarea
               rows={3}
+              maxLength={2000}
               value={text}
               onChange={(e) => setText(e.target.value)}
               aria-label={`Private note about ${person.profile.full_name}`}
@@ -481,7 +383,7 @@ function PersonDetail({
 
 /* -------------------------------------------------------------------------- */
 
-function InviteCodes({
+export function InviteCodes({
   codes,
   remaining,
   canInvite,
@@ -539,20 +441,17 @@ function InviteCodes({
 
   return (
     <div className="mt-10">
-      <SectionHeader
-        title="Invitation codes"
-        caption="Share a code with someone you'd like to bring into the network."
-        action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setOpen(true)}
-            disabled={!canInvite || remaining <= 0}
-          >
-            New code
-          </Button>
-        }
-      />
+      {/* The page title is the heading; this row is only the control. */}
+      <div className="mb-4 flex justify-end">
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setOpen(true)}
+          disabled={!canInvite || remaining <= 0}
+        >
+          New code
+        </Button>
+      </div>
 
       {!canInvite && (
         <div className="mb-4">
@@ -568,7 +467,11 @@ function InviteCodes({
       )}
 
       {codes.length === 0 ? (
-        <EmptyState>You have no invitation codes yet.</EmptyState>
+        <EmptyState>
+          {canInvite && remaining > 0
+            ? 'No invitation codes yet. Press New code to create one.'
+            : 'No invitation codes yet.'}
+        </EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
           {codes.map((code) => {

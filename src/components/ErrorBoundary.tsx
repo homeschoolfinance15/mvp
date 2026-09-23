@@ -59,8 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Something went wrong on this page
           </h1>
           <p style={{ marginTop: '0.875rem', lineHeight: 1.65, color: '#49635c' }}>
-            The page failed to load rather than loading empty. Reloading often clears it. If it
-            keeps happening, the message below is the useful part to pass on.
+            Reload the page. If it keeps happening, pass on the message below.
           </p>
           <pre
             style={{

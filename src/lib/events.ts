@@ -317,8 +317,36 @@ export interface CapacityInfo {
   state: CapacityState
 }
 
+/**
+ * ATT-11. The columns `event_public` carries: what a page displays, and no
+ * profile, payment-recipient or audit ids. A screen that needs one of those
+ * reads `events` under its own policy, not this view.
+ */
+export type PublicEventRow = Pick<
+  EventRecord,
+  | 'id'
+  | 'title'
+  | 'description'
+  | 'location'
+  | 'starts_at'
+  | 'ends_at'
+  | 'cover_path'
+  | 'status'
+  | 'slug'
+  | 'timezone'
+  | 'venue_name'
+  | 'address'
+  | 'attendee_instructions'
+  | 'refund_terms'
+  | 'capacity'
+  | 'registration_closed'
+  | 'currency'
+  | 'cancelled_at'
+  | 'feedback_opens_after_minutes'
+>
+
 /** The anon-readable view: an event plus the host names, and no email addresses. */
-export interface PublicEvent extends EventRecord {
+export interface PublicEvent extends PublicEventRow {
   host_names: string[]
   capacity_state: CapacityState
   remaining: number | null
@@ -421,7 +449,9 @@ export function eventWhen(event: Pick<EventRecord, 'starts_at' | 'ends_at' | 'ti
 }
 
 /** Where the event is. New events fill venue/address; old ones only have location. */
-export function eventWhere(event: EventRecord): string | null {
+export function eventWhere(
+  event: Pick<EventRecord, 'venue_name' | 'address' | 'location'>,
+): string | null {
   const parts = [event.venue_name, event.address].filter(Boolean)
   return parts.length ? parts.join(', ') : event.location
 }

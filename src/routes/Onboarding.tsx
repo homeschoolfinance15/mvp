@@ -46,6 +46,12 @@ export default function Onboarding() {
     e.preventDefault()
     if (!profile) return
     setError('')
+    // An empty profession is what marks onboarding outstanding, so saving one
+    // made of spaces would send them straight back here with nothing said.
+    if (!profession.trim()) {
+      setError('Please enter your current profession.')
+      return
+    }
     setBusy(true)
 
     const { error: updateError } = await supabase
@@ -107,13 +113,9 @@ export default function Onboarding() {
 
   return (
     <AuthLayout
-      eyebrow={isConnector ? 'Connector setup' : 'Welcome to AMAZING'}
+      eyebrow={isConnector ? 'Connector setup' : undefined}
       title={`Tell us about you, ${profile?.full_name.split(' ')[0] ?? 'friend'}`}
-      caption={
-        isConnector
-          ? 'This is what the people you invite will see when they land on their dashboard.'
-          : 'More than a title. This is how the network comes to understand what you bring.'
-      }
+      caption={isConnector ? 'The people you invite will see this.' : undefined}
     >
       {firstCode && (
         <div className="mb-7 rounded-sm border border-gold/25 bg-gold-wash px-4 py-4">
@@ -140,7 +142,7 @@ export default function Onboarding() {
 
         <Field
           label="Interests"
-          hint="A few words each. These are what the network matches you on."
+          hint="A few words each."
         >
           <Input
             value={interests}
@@ -174,7 +176,7 @@ export default function Onboarding() {
         {error && <Notice tone="error">{error}</Notice>}
 
         <Button type="submit" variant="primary" loading={busy} className="w-full">
-          Enter the network
+          {profile?.network_member ? 'Enter the network' : 'Continue'}
         </Button>
       </form>
     </AuthLayout>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useAuth } from '../context/AuthProvider'
+import { isNetworkMember, useAuth } from '../context/AuthProvider'
 import { formatInterests, INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { forgetSigned, removeMedia, signMedia, uploadMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
@@ -110,6 +110,10 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
     if (!profile) return
     setError('')
     setSaved(false)
+    if (!fullName.trim() || !profession.trim()) {
+      setError('Your name and current profession cannot be left blank.')
+      return
+    }
     setBusy(true)
 
     const { error: updateError } = await supabase
@@ -137,35 +141,36 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
 
   return (
     <section>
-      <SectionHeader
-        title="How you're described"
-        caption="This is the context the network reads you by. Keep it current. Other members can raise a correction if it drifts."
-      />
+      <SectionHeader title="How you're described" caption="Keep this current." />
       <Panel className="px-6 py-6">
-        <div className="mb-6 flex items-center gap-4 border-b border-line pb-6">
-          <Initials
-            name={profile?.full_name ?? '?'}
-            url={avatarUrl ?? undefined}
-            role={profile?.role}
-            size="lg"
-          />
-          <div className="min-w-0">
-            <label className="cursor-pointer text-xs tracking-[0.1em] text-gold uppercase transition-colors hover:text-fg">
-              {uploading ? 'Uploading…' : avatarUrl ? 'Change picture' : 'Add a picture'}
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                disabled={uploading}
-                onChange={(e) => chooseAvatar(e.target.files?.[0])}
-              />
-            </label>
-            <p className="mt-1.5 text-xs text-dim">
-              A photograph of you. Saves as soon as you choose it.
-            </p>
+        {/* ACC-14. A picture is how the network recognises you; somebody who
+            holds an account only to attend events has no network to show it to. */}
+        {isNetworkMember(profile) && (
+          <div className="mb-6 flex items-center gap-4 border-b border-line pb-6">
+            <Initials
+              name={profile?.full_name ?? '?'}
+              url={avatarUrl ?? undefined}
+              role={profile?.role}
+              size="lg"
+            />
+            <div className="min-w-0">
+              <label className="cursor-pointer text-xs tracking-[0.1em] text-gold uppercase transition-colors hover:text-fg">
+                {uploading ? 'Uploading…' : avatarUrl ? 'Change picture' : 'Add a picture'}
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => chooseAvatar(e.target.files?.[0])}
+                />
+              </label>
+              <p className="mt-1.5 text-xs text-dim">
+                Use a photo of yourself. It saves as soon as you choose it.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <form onSubmit={submit} className="space-y-5">
           <Field label="Full name">
@@ -184,7 +189,11 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
             />
           </Field>
 
-          <Field label="LinkedIn" hint="Optional. Seen by your connector and administrators, not by other members.">
+          <Field label="LinkedIn" hint={
+            isNetworkMember(profile)
+              ? 'Optional. Seen by your connector and administrators, not by other members.'
+              : 'Optional. Seen by administrators, not by other members.'
+          }>
             <Input
               inputMode="url"
               value={linkedin}

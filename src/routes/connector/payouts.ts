@@ -70,7 +70,7 @@ export function payoutState(
     return {
       headline: 'No Stripe account',
       outstanding:
-        'No Stripe account is connected, so paid tickets cannot go on sale. Free events are unaffected.',
+        'Connect Stripe to sell paid tickets. Free events are unaffected.',
       canSellPaid: false,
       fix: 'connect',
     }
@@ -83,7 +83,7 @@ export function payoutState(
     return {
       headline: 'Disconnected',
       outstanding:
-        'This Stripe account is no longer connected. New paid sales are stopped. Bookings already made, the tickets issued for them, check-in and refunds all carry on working.',
+        'Reconnect Stripe to sell paid tickets again. Bookings already made, the tickets issued for them, check-in and refunds all carry on working.',
       canSellPaid: false,
       fix: 'connect',
     }
@@ -93,7 +93,7 @@ export function payoutState(
     return {
       headline: 'Restricted by Stripe',
       outstanding:
-        'Stripe has restricted this account and will not accept new charges through it. Stripe says what it needs — usually identity or business details — in the account dashboard. New paid sales stay shut until it is resolved; existing bookings and refunds are unaffected.',
+        'Give Stripe what its dashboard asks for. New paid sales stay shut until then; existing bookings and refunds are unaffected.',
       canSellPaid: false,
       fix: 'stripe',
     }
@@ -103,7 +103,7 @@ export function payoutState(
     return {
       headline: 'Onboarding unfinished',
       outstanding:
-        'Stripe has the account but has not finished setting it up. Continue on Stripe and answer what it still asks for. Until then, free events only.',
+        'Continue on Stripe and answer what it still asks for. Until then, free events only.',
       canSellPaid: false,
       fix: 'continue',
     }
@@ -113,7 +113,7 @@ export function payoutState(
     return {
       headline: 'Charges not enabled',
       outstanding:
-        'Stripe has not switched charges on for this account yet. That is usually a verification step still in progress on Stripe’s side. Free events can go ahead in the meantime.',
+        'Finish verification on Stripe to sell paid tickets. Free events can go ahead in the meantime.',
       canSellPaid: false,
       fix: 'stripe',
     }
@@ -123,7 +123,7 @@ export function payoutState(
     headline: 'Ready',
     outstanding: connector.stripe_payouts_enabled
       ? null
-      : 'Payments will be taken normally, but Stripe has not released payouts to a bank account yet. The money is safe in the Stripe balance, and paid tickets may go on sale today.',
+      : 'Add a bank account on Stripe to receive payouts. Until then, ticket money waits in the Stripe balance.',
     canSellPaid: true,
     fix: connector.stripe_payouts_enabled ? null : 'stripe',
   }

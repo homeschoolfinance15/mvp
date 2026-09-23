@@ -18,14 +18,19 @@ import { homePathFor, useAuth } from '../context/AuthProvider'
  * Only same-origin paths are honoured. `next` arrives from the address bar, so
  * it is attacker-controlled: without the check, `/signin?next=https://…` would
  * turn our own sign-in screen into an open redirect that sends a freshly
- * authenticated person somewhere else entirely. A leading `//` or `/\` is how
- * that is smuggled past a naive `startsWith('/')`, because browsers read both
- * as protocol-relative.
+ * authenticated person somewhere else entirely. `//`, `/\` and `/<tab>/` all
+ * slip past prefix checks because browsers read them as protocol-relative, so
+ * the URL parser decides instead: `next` must resolve to this origin.
  */
 function safeNext(next: string | null): string | null {
   if (!next || !next.startsWith('/')) return null
-  if (next.startsWith('//') || next.startsWith('/\\')) return null
-  return next
+  try {
+    const url = new URL(next, window.location.origin)
+    if (url.origin !== window.location.origin) return null
+    return url.pathname + url.search + url.hash
+  } catch {
+    return null
+  }
 }
 
 export default function SignIn() {

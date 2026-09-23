@@ -4,7 +4,6 @@ import {
   formatDate,
   Notice,
   Panel,
-  SectionHeader,
   Spinner,
 } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
@@ -74,13 +73,8 @@ export default function Log() {
         </div>
       )}
 
-      <SectionHeader
-        title="Activity"
-        caption="An append-only record of every change. Nothing writes here but the database itself."
-      />
-
       {entries.length === 0 ? (
-        <EmptyState>Nothing recorded yet.</EmptyState>
+        !loadError && <EmptyState>Nothing logged.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
           {entries.map((entry) => {

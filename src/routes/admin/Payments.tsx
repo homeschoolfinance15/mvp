@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, CopyCode, EmptyState, Notice, Panel, SectionHeader, Spinner } from '../../components/ui'
+import { Button, CopyCode, EmptyState, Notice, Panel, Spinner } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
 
 /**
@@ -53,15 +53,15 @@ interface Status {
   connected_accounts_checkable: boolean
 }
 
-/** What each secret is for, in the order somebody sets them up. */
-const WHAT_FOR: { key: keyof Status['secrets']; label: string; needed: string }[] = [
-  { key: 'STRIPE_SECRET_KEY', label: 'Secret key', needed: 'Every paid event. Nothing charges without it.' },
-  { key: 'STRIPE_WEBHOOK_SECRET', label: 'Webhook secret', needed: 'Confirming payments. Without it no purchase is ever confirmed.' },
-  { key: 'STRIPE_CONNECT_CLIENT_ID', label: 'Connect client id', needed: "Connectors hosting their own paid events." },
-  { key: 'STRIPE_CONNECT_STATE_SECRET', label: 'Connect state secret', needed: 'Optional. Falls back to the service-role key.' },
+/** The secrets, in the order somebody sets them up. */
+const WHAT_FOR: { key: keyof Status['secrets']; label: string; needed?: string }[] = [
+  { key: 'STRIPE_SECRET_KEY', label: 'Secret key' },
+  { key: 'STRIPE_WEBHOOK_SECRET', label: 'Webhook secret' },
+  { key: 'STRIPE_CONNECT_CLIENT_ID', label: 'Connect client id' },
+  { key: 'STRIPE_CONNECT_STATE_SECRET', label: 'Connect state secret', needed: 'Optional.' },
 ]
 
-function Row({ ok, label, detail }: { ok: boolean | null; label: string; detail: string }) {
+function Row({ ok, label, detail }: { ok: boolean | null; label: string; detail?: string }) {
   // QLT-04: the word carries the state, never the colour on its own.
   const word = ok === null ? 'Unknown' : ok ? 'Set' : 'Missing'
   const tone = ok === null ? 'text-dim' : ok ? 'text-positive' : 'text-negative'
@@ -69,7 +69,7 @@ function Row({ ok, label, detail }: { ok: boolean | null; label: string; detail:
     <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-5 py-4">
       <div className="min-w-0">
         <div className="text-sm font-medium text-fg">{label}</div>
-        <div className="text-xs leading-relaxed text-dim">{detail}</div>
+        {detail && <div className="text-xs leading-relaxed text-dim">{detail}</div>}
       </div>
       <div className={`shrink-0 text-xs font-semibold ${tone}`}>{word}</div>
     </div>
@@ -110,15 +110,11 @@ export default function Payments() {
 
   return (
     <>
-      <SectionHeader
-        title="Payments"
-        caption="Whether Amazing can take money for its own events, and what to run if it cannot. Keys are held in Supabase and are never shown here."
-        action={
-          <Button size="sm" onClick={() => void load()}>
-            Re-check
-          </Button>
-        }
-      />
+      <div className="mb-4 flex justify-end">
+        <Button size="sm" onClick={() => void load()}>
+          Re-check
+        </Button>
+      </div>
 
       {loadError && (
         <div className="mb-6">
@@ -128,12 +124,12 @@ export default function Payments() {
 
       {!status ? (
         <EmptyState>
-          Could not read the payment configuration. That is a problem with this check, not
-          necessarily with Stripe — existing tickets and bookings are unaffected either way.
+          Could not read the payment configuration. Existing tickets and bookings are
+          unaffected. Press Re-check to try again.
         </EmptyState>
       ) : (
         <div className="space-y-8">
-          {/* The headline. Everything below explains it. */}
+          {/* Only a problem earns a headline; test mode has its own below. */}
           {!s?.STRIPE_SECRET_KEY.set ? (
             <Notice tone="error">
               Stripe is not configured, so no paid event can sell a ticket. Free events are
@@ -144,12 +140,7 @@ export default function Payments() {
               A secret key is set but Stripe refused it, so no paid event can sell a ticket.
               {status.account.error ? ` Stripe said: ${status.account.error}` : ''}
             </Notice>
-          ) : status.account.charges_enabled ? (
-            <Notice tone="success">
-              Amazing&rsquo;s own Stripe account is connected and can take payments
-              {liveMode ? ' in live mode.' : ' in test mode — real cards will not be charged.'}
-            </Notice>
-          ) : (
+          ) : status.account.charges_enabled ? null : (
             <Notice tone="warning">
               Stripe accepted the key, but this account cannot currently take charges. Check
               for outstanding verification in the Stripe dashboard.
@@ -182,8 +173,8 @@ export default function Payments() {
               label="Site address"
               detail={
                 s?.SITE_URL
-                  ? `${s.SITE_URL} — Stripe returns connectors here after connecting. It must match the redirect URI registered in Stripe, character for character.`
-                  : 'Not set. Defaults to https://goamazing.ai.'
+                  ? `${s.SITE_URL}. It must match the redirect URI registered in Stripe, character for character.`
+                  : 'Defaults to https://goamazing.ai.'
               }
             />
             <Row
@@ -191,8 +182,8 @@ export default function Payments() {
               label="Booking fee"
               detail={
                 s?.PLATFORM_FEE_BPS
-                  ? `${s.PLATFORM_FEE_BPS} basis points added to each ticket and shown to the attendee.`
-                  : 'None. Attendees pay the ticket price and nothing else.'
+                  ? `${s.PLATFORM_FEE_BPS} basis points`
+                  : 'None'
               }
             />
           </Panel>
@@ -208,11 +199,11 @@ export default function Payments() {
                 label="Webhook endpoint"
                 detail={
                   !status.webhook.checked
-                    ? 'Not checked — no secret key to ask Stripe with.'
+                    ? 'Set the secret key, then press Re-check.'
                     : status.webhook.error
                       ? `Could not ask Stripe: ${status.webhook.error}`
                       : status.webhook.found
-                        ? `Registered and ${status.webhook.status}. This is what turns a payment into a ticket.`
+                        ? undefined
                         : 'No endpoint pointing at stripe-webhook. Payments would be taken and never confirmed.'
                 }
               />
@@ -222,7 +213,7 @@ export default function Payments() {
                   label="Subscribed events"
                   detail={
                     status.webhook.missing_events.length === 0
-                      ? 'All eight deliveries this platform acts on are subscribed.'
+                      ? undefined
                       : `Not subscribed to: ${status.webhook.missing_events.join(', ')}. Each one is a case that will silently not happen.`
                   }
                 />
@@ -231,11 +222,9 @@ export default function Payments() {
                 <div className="px-5 py-4">
                   <div className="text-sm font-medium text-fg">Events on connected accounts</div>
                   <div className="mt-1 text-xs leading-relaxed text-dim">
-                    Stripe does not report this over the API, so it cannot be checked from
-                    here — confirm it by eye in the dashboard, on the webhook endpoint, as
-                    &ldquo;Listen to events on connected accounts&rdquo;. It is worth the trip:
-                    with it off, every connector&rsquo;s sale is delivered nowhere, the buyer is
-                    charged, and the place goes back on sale when the hold lapses.
+                    Cannot be checked from here. In the Stripe dashboard, turn on &ldquo;Listen
+                    to events on connected accounts&rdquo; on the webhook endpoint. With it off,
+                    buyers of connector events are charged but never get their place.
                   </div>
                 </div>
               )}
@@ -245,10 +234,8 @@ export default function Payments() {
           <div>
             <h2 className="eyebrow mb-3">Setting or changing a key</h2>
             <p className="mb-4 max-w-2xl text-sm leading-relaxed text-muted">
-              Keys are never entered here. They live in Supabase, encrypted at rest, and are
-              handed to the payment functions at run time — a browser is the wrong place for
-              them, so this page has nowhere to type one. Run these with the Supabase CLI,
-              then press Re-check.
+              Run these with the Supabase CLI, then press Re-check. Never paste a key into
+              this site.
             </p>
             <CopyCode
               code={`supabase secrets set STRIPE_SECRET_KEY=sk_test_...
@@ -257,10 +244,8 @@ supabase secrets set STRIPE_CONNECT_CLIENT_ID=ca_...
 supabase secrets set SITE_URL=https://goamazing.ai`}
             />
             <p className="mt-4 max-w-2xl text-xs leading-relaxed text-dim">
-              Where each value comes from, with the exact click-path, is in
-              docs/event-platform/PAYMENTS.md §2. Test and live mode have separate keys,
-              separate client ids and separate webhook endpoints, so everything above has to
-              be done twice — once per mode.
+              Where to find each value: docs/event-platform/PAYMENTS.md §2. Test and live mode
+              have separate keys, client ids and webhook endpoints, so do this once per mode.
             </p>
           </div>
         </div>

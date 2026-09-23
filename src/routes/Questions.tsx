@@ -20,7 +20,7 @@ export default function Questions() {
 
   return (
     <div className="brand-experience signup-questionnaire">
-      <DashboardShell title="Let's find your people" caption={INTRO}>
+      <DashboardShell title="Your answers" caption={INTRO}>
         <div className="mx-auto max-w-2xl">
           <QuestionnaireForm
             profileId={profile.id}

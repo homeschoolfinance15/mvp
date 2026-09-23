@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthProvider'
 import { signMedia } from '../lib/media'
 import { supabase } from '../lib/supabase'
 import { FEATURES } from '../lib/features'
-import type { DirectoryEntry, Notification, NotificationKind } from '../lib/types'
+import type { AppRole, DirectoryEntry, Notification, NotificationKind } from '../lib/types'
 import { formatDate, Initials } from './ui'
 
 /**
@@ -38,7 +38,7 @@ function sentence(kind: NotificationKind, who: string): string {
     case 'member_joined':
       return `${who} joined on your invitation`
     case 'report_raised':
-      return `${who} raised something about one of your members`
+      return `${who} raised something about a member`
     case 'report_resolved':
       return 'What you raised has been dealt with'
     case 'recommendations':
@@ -70,7 +70,7 @@ function sentence(kind: NotificationKind, who: string): string {
 }
 
 /** Where pressing it should take you. */
-function destination(notification: Notification): string {
+function destination(notification: Notification, role?: AppRole): string {
   switch (notification.kind) {
     // A switched-off feature has no page to open, so pressing the row just
     // marks it read rather than bouncing through a redirect.
@@ -96,12 +96,15 @@ function destination(notification: Notification): string {
         : FEATURES.events
           ? '/events'
           : ''
-    // These two keep /events/mine: the person does hold a registration, and
-    // what they need is their place and their ticket, not the public page.
+    // These two keep My events: the person does hold a registration, and
+    // what they need is their place and their ticket, not the public page. A
+    // cancelled event has moved to the Cancelled page, so that is where it is.
     case 'event_updated':
     case 'event_cancelled':
       return FEATURES.events && notification.event_id
-        ? `/events/mine`
+        ? notification.kind === 'event_cancelled'
+          ? '/events/mine/cancelled'
+          : '/events/mine'
         : FEATURES.events
           ? '/events'
           : ''
@@ -115,7 +118,8 @@ function destination(notification: Notification): string {
           : ''
     // FDB-03: the destination has to survive the sign-in that may follow it.
     case 'feedback_open':
-      return FEATURES.events ? '/events/mine' : ''
+      // Feedback opens once the event has ended, so the event is on Been to.
+      return FEATURES.events ? '/events/mine/past' : ''
     // BUY-14. Stripe tells the account holder they have been restricted; what
     // it cannot tell them is which of their events just stopped selling. That
     // is the whole value of this one, so it opens that event rather than a
@@ -129,12 +133,15 @@ function destination(notification: Notification): string {
       return '/circle'
     case 'waitlist_joined':
       // Vetting happens on the admin screen, where Assign lives.
-      return '/admin'
+      return '/admin/waitlist'
+    // A raised report reaches every admin and the subject's connector; each
+    // deals with it on their own Raised list.
+    case 'report_raised':
+      return role === 'admin' ? '/admin/raised' : role === 'connector' ? '/connector/raised' : ''
     // Dealt with on your own dashboard, so pressing the row just marks it
     // read. Listed rather than defaulted, so that adding a kind is a compile
     // error and not a silent nowhere.
     case 'member_joined':
-    case 'report_raised':
     case 'report_resolved':
       return ''
   }
@@ -265,7 +272,7 @@ export function NotificationBell() {
         .eq('id', notification.id)
     }
 
-    const to = destination(notification)
+    const to = destination(notification, profile?.role)
     if (to) navigate(to)
 
     if (notification.post_id) {

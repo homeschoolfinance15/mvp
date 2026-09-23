@@ -146,10 +146,7 @@ export default function Waitlist() {
         </div>
       )}
 
-      <SectionHeader
-        title="Waitlist"
-        caption="People who asked to be let in from the public page. Vet them, then hand them to a connector."
-      />
+      <p className="mb-4 text-sm text-muted">Review each person, then assign them to a connector.</p>
 
       {declineError && (
         <div className="mb-6">
@@ -227,10 +224,7 @@ export default function Waitlist() {
 
       {declined.length > 0 && (
         <div className="mt-12">
-          <SectionHeader
-            title="Declined"
-            caption="Turned down, and kept so the decision is not made twice. Their answers are still here."
-          />
+          <SectionHeader title="Declined" />
           <Panel className="divide-y divide-line">
             {declined.map((entry) => (
               <div
@@ -383,8 +377,7 @@ function WaitlistEntryModal({
 
         {answers.length === 0 ? (
           <p className="text-sm leading-relaxed text-dim">
-            They answered nothing past their name and email. Everything after that is
-            optional, so this is a complete application.
+            No answers beyond name and email.
           </p>
         ) : (
           answers.map((row) => (
@@ -502,8 +495,8 @@ function AssignWaitlistModal({
           </Field>
 
           <p className="text-sm leading-relaxed text-muted">
-            This mints a single-use invitation code out of that connector's remaining capacity.
-            {' '}{firstName} joins as their member once they redeem it.
+            This uses one of that connector's invitation places. {firstName} joins as their
+            member once they redeem the code.
           </p>
 
           {error && <Notice tone="error">{error}</Notice>}

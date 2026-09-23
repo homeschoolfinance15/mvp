@@ -167,12 +167,13 @@ export function QuestionnaireForm({
     return null
   }
 
-  async function save(advance: boolean) {
+  /** True only when the answers are stored, so nobody is moved on after a failure. */
+  async function save(advance: boolean): Promise<boolean> {
     setError('')
     const found = problem()
     if (found) {
       setError(found)
-      return
+      return false
     }
 
     setBusy(true)
@@ -187,7 +188,7 @@ export function QuestionnaireForm({
     if (saveError) {
       setError(`We could not save that. ${errorMessage(saveError)}`)
       setSaveFailed(true)
-      return
+      return false
     }
 
     setSaveFailed(false)
@@ -197,11 +198,12 @@ export function QuestionnaireForm({
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
     if (mode === 'edit') await onComplete?.()
+    return true
   }
 
   async function finish() {
-    await save(false)
-    if (!problem()) await onComplete?.()
+    // save() already ran onComplete in edit mode.
+    if ((await save(false)) && mode !== 'edit') await onComplete?.()
   }
 
   if (loading) {
@@ -266,7 +268,10 @@ export function QuestionnaireForm({
     const value = (draft[textQuestion.field] ?? '') as string
     return (
       <Panel key={field} className="px-5 py-5 sm:px-6">
-        <Field label={textQuestion.prompt} hint={textQuestion.helper}>
+        <Field
+          label={textQuestion.prompt}
+          hint={textQuestion.required ? `Required. ${textQuestion.helper}` : textQuestion.helper}
+        >
           <Textarea
             rows={3}
             value={value}
@@ -332,7 +337,7 @@ export function QuestionnaireForm({
             <div>
               <h2 className="display text-2xl">Tell us more</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted">
-                All optional, and you can come back to it whenever you like.
+                All optional.
               </p>
             </div>
           )}

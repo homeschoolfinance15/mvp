@@ -24,6 +24,12 @@ import {
   type ConnectorStatus,
   type Profile,
 } from '../../lib/types'
+import {
+  DeleteScopeChoice,
+  removeMediaOf,
+  scopeConfirmed,
+  type DeleteScope,
+} from '../../components/DeleteScopeChoice'
 import { ConnectorEventPermission } from './ConnectorEventPermission'
 import { byId, loadConnectors, loadLinks, loadProfiles, type ConnectorRow, type LinkRow } from './shared'
 
@@ -33,32 +39,37 @@ import { byId, loadConnectors, loadLinks, loadProfiles, type ConnectorRow, type 
  * Worth knowing before writing these: every gate in the schema asks
  * `invite_status <> 'active'`, so limited, paused and removed are the same
  * behaviour under three names. The copy says so instead of implying a
- * gradient the database does not have.
+ * gradient the database does not have. That includes redeem_code and
+ * lookup_code: a code already handed out is refused while the connector is
+ * anything but active (ADM-5, ACC-15).
  */
 const CONNECTOR_STATUS_EFFECT: Record<ConnectorStatus, string> = {
   active:
-    'They can mint invitation codes again, and can be handed people from the waitlist.',
+    'They can mint invitation codes again, can be handed people from the waitlist, and codes they already handed out work again.',
   limited:
-    'They stop being able to bring anyone new in. Their existing members, and any code already handed out, keep working. Identical to paused and removed in what it permits.',
+    'They stop being able to bring anyone new in, and codes they already handed out stop working until they are set back to active. Their existing members are unaffected. Identical to paused and removed in what it permits.',
   paused:
-    'They stop being able to bring anyone new in. Their existing members, and any code already handed out, keep working. Identical to limited and removed in what it permits.',
+    'They stop being able to bring anyone new in, and codes they already handed out stop working until they are set back to active. Their existing members are unaffected. Identical to limited and removed in what it permits.',
   removed:
-    'They stop being able to bring anyone new in. Nothing is deleted: their account, their members and any code already handed out are untouched. Identical to limited and paused in what it permits.',
+    'They stop being able to bring anyone new in, and codes they already handed out stop working. Nothing is deleted: their account and their members are untouched. Identical to limited and paused in what it permits.',
 }
+
+/** The row as stored since 20260923000201: claim codes lapse and can be revoked. */
+type Invitation = ConnectorInvitation & { expires_at: string; revoked_at: string | null }
 
 export default function Connectors() {
   const [connectors, setConnectors] = useState<ConnectorRow[]>([])
-  const [invitations, setInvitations] = useState<ConnectorInvitation[]>([])
+  const [invitations, setInvitations] = useState<Invitation[]>([])
   const [links, setLinks] = useState<LinkRow[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
-  /** Outstanding invitation codes. Null until counted, and on a failed count. */
-  const [liveCodes, setLiveCodes] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
   const [open, setOpen] = useState(false)
   const [error, setError] = useState('')
   const [connectorToDelete, setConnectorToDelete] = useState<ConnectorRow | null>(null)
+  const [capacityFor, setCapacityFor] = useState<ConnectorRow | null>(null)
+  const [invitationToRevoke, setInvitationToRevoke] = useState<Invitation | null>(null)
   // Nothing is written until this is confirmed, so the select keeps showing
   // what is actually stored.
   const [pending, setPending] = useState<{
@@ -69,7 +80,7 @@ export default function Connectors() {
 
   const load = useCallback(async () => {
     setLoadError('')
-    const [connectorsRes, invitationsRes, linksRes, profilesRes, codesRes] = await Promise.all([
+    const [connectorsRes, invitationsRes, linksRes, profilesRes] = await Promise.all([
       loadConnectors(),
       supabase
         .from('connector_invitations')
@@ -77,8 +88,6 @@ export default function Connectors() {
         .order('created_at', { ascending: false }),
       loadLinks(),
       loadProfiles(),
-      // `head: true` — the number, not the codes. Nobody reads a code here.
-      supabase.from('invite_codes').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     ])
 
     const firstError = [
@@ -90,12 +99,9 @@ export default function Connectors() {
     if (firstError) setLoadError(errorMessage(firstError))
 
     setConnectors((connectorsRes.data as unknown as ConnectorRow[]) ?? [])
-    setInvitations((invitationsRes.data as ConnectorInvitation[]) ?? [])
+    setInvitations((invitationsRes.data as Invitation[]) ?? [])
     setLinks((linksRes.data as unknown as LinkRow[]) ?? [])
     setProfilesById(byId((profilesRes.data as Profile[]) ?? []))
-    // Left null on a failed count rather than shown as zero: "0 codes are
-    // live" and "we could not count" are different claims.
-    setLiveCodes(codesRes.error ? null : codesRes.count)
     setLoading(false)
   }, [])
 
@@ -105,7 +111,7 @@ export default function Connectors() {
 
   /*
    * The connector list stops being a photograph. Somebody accepting an
-   * invitation, a member joining a community, a code being spent — all of it
+   * invitation, a member joining a community — all of it
    * shows up here without a refresh, and the sidebar count beside it agrees.
    *
    * Off while anything is open. The add form holds a name, an email and a
@@ -114,8 +120,8 @@ export default function Connectors() {
    * about a row that was swapped underneath the dialog is exactly the kind of
    * thing a confirmation exists to prevent.
    */
-  useLive(['connectors', 'connector_user_links', 'invite_codes', 'profiles'], () => void load(), {
-    enabled: !open && !connectorToDelete && !pending && !busy,
+  useLive(['connectors', 'connector_user_links', 'profiles'], () => void load(), {
+    enabled: !open && !connectorToDelete && !capacityFor && !invitationToRevoke && !pending && !busy,
   })
 
   const invitedCount = useMemo(() => {
@@ -126,7 +132,50 @@ export default function Connectors() {
     return counts
   }, [links])
 
-  const pendingInvitations = invitations.filter((i) => !i.claimed_at)
+  // Only the newest invitation per email (the list is newest first): an older
+  // lapsed code beside its replacement is noise. Revoked ones are finished
+  // with; lapsed ones stay listed so they can be re-issued.
+  const pendingInvitations = invitations.filter(
+    (i, index) =>
+      !i.claimed_at &&
+      !i.revoked_at &&
+      invitations.findIndex((other) => other.email === i.email) === index,
+  )
+  const isExpired = (invitation: Invitation) => new Date(invitation.expires_at) <= new Date()
+
+  async function revokeInvitation() {
+    if (!invitationToRevoke) return
+    setError('')
+    setBusy(true)
+    const { error: rpcError } = await supabase.rpc('revoke_connector_invitation', {
+      p_invitation_id: invitationToRevoke.id,
+    })
+    setBusy(false)
+    if (rpcError) {
+      setError(errorMessage(rpcError))
+      return
+    }
+    setInvitationToRevoke(null)
+    await load()
+  }
+
+  // Re-issuing is creating again: a new code and a fresh 30 days. The
+  // database refuses it while another invitation for the email is still live.
+  async function reissue(invitation: Invitation) {
+    setError('')
+    setBusy(true)
+    const { error: rpcError } = await supabase.rpc('create_connector_invitation', {
+      p_full_name: invitation.full_name,
+      p_email: invitation.email,
+      p_capacity: invitation.invite_capacity,
+    })
+    setBusy(false)
+    if (rpcError) {
+      setError(errorMessage(rpcError))
+      return
+    }
+    await load()
+  }
 
   async function applyStatus() {
     if (!pending) return
@@ -161,26 +210,11 @@ export default function Connectors() {
         </div>
       )}
 
-      <SectionHeader
-        title="Connectors"
-        caption={
-          // The live-code figure used to sit in a row of four tiles repeated
-          // above every admin section. Three of those numbers are in the
-          // sidebar beside the section they count; this one had nowhere else
-          // to go, and this is the page where codes are minted and where
-          // knowing how many are outstanding changes what you do next.
-          liveCodes === null
-            ? 'Connectors are the only people who can bring new members in.'
-            : `Connectors are the only people who can bring new members in. ${liveCodes} invitation ${
-                liveCodes === 1 ? 'code is' : 'codes are'
-              } live.`
-        }
-        action={
-          <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-            Create connector
-          </Button>
-        }
-      />
+      <div className="mb-4 flex justify-end">
+        <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
+          Create connector
+        </Button>
+      </div>
 
       {error && (
         <div className="mb-4">
@@ -189,7 +223,7 @@ export default function Connectors() {
       )}
 
       {connectors.length === 0 ? (
-        <EmptyState>No connectors yet. Create the first one to open the network.</EmptyState>
+        <EmptyState>No connectors yet. Create the first one.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
           {connectors.map((connector) => (
@@ -207,9 +241,14 @@ export default function Connectors() {
                     : ''}
                 </div>
               </div>
-              <div className="text-right text-xs whitespace-nowrap text-muted tabular-nums">
+              <button
+                type="button"
+                onClick={() => setCapacityFor(connector)}
+                title="Change capacity"
+                className="text-right text-xs whitespace-nowrap text-muted tabular-nums underline-offset-4 hover:text-fg hover:underline"
+              >
                 {invitedCount[connector.id] ?? 0} of {connector.invite_capacity} invited
-              </div>
+              </button>
               <div className="w-32 shrink-0">
                 <Select
                   aria-label={`Invitation status for ${connector.profiles?.full_name ?? 'this connector'}`}
@@ -258,10 +297,7 @@ export default function Connectors() {
 
       {pendingInvitations.length > 0 && (
         <div className="mt-10">
-          <SectionHeader
-            title="Awaiting claim"
-            caption="These people have a claim code but haven't set up their account yet."
-          />
+          <SectionHeader title="Awaiting claim" />
           <Panel className="divide-y divide-line">
             {pendingInvitations.map((invitation) => (
               <div
@@ -274,15 +310,35 @@ export default function Connectors() {
                   </div>
                   <div className="truncate text-xs text-dim">
                     {invitation.email} · {invitation.invite_capacity} invitations · created{' '}
-                    {formatDate(invitation.created_at)}
+                    {formatDate(invitation.created_at)} ·{' '}
+                    {isExpired(invitation) ? (
+                      <span className="text-negative">
+                        expired {formatDate(invitation.expires_at)}
+                      </span>
+                    ) : (
+                      <>expires {formatDate(invitation.expires_at)}</>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <CopyCode code={invitation.claim_code} size="sm" />
-                  <div className="w-64">
-                    <SendInvite code={invitation.claim_code} defaultEmail={invitation.email} />
+                {isExpired(invitation) ? (
+                  <Button size="sm" loading={busy} onClick={() => void reissue(invitation)}>
+                    Re-issue code
+                  </Button>
+                ) : (
+                  <div className="flex flex-col items-end gap-2">
+                    <CopyCode code={invitation.claim_code} size="sm" />
+                    <div className="w-64">
+                      <SendInvite code={invitation.claim_code} defaultEmail={invitation.email} />
+                    </div>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setInvitationToRevoke(invitation)}
+                    >
+                      Revoke
+                    </Button>
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </Panel>
@@ -304,6 +360,26 @@ export default function Connectors() {
         onClose={() => setPending(null)}
       />
 
+      <ConfirmModal
+        open={Boolean(invitationToRevoke)}
+        title={invitationToRevoke ? `Revoke ${invitationToRevoke.full_name}'s claim code?` : ''}
+        body="The code stops working straight away; anyone who tries it is told it was withdrawn. You can create a new invitation for the same email afterwards."
+        confirmLabel="Revoke code"
+        tone="danger"
+        busy={busy}
+        onConfirm={() => void revokeInvitation()}
+        onClose={() => setInvitationToRevoke(null)}
+      />
+
+      {capacityFor && (
+        <CapacityModal
+          connector={capacityFor}
+          joined={invitedCount[capacityFor.id] ?? 0}
+          onClose={() => setCapacityFor(null)}
+          onChanged={load}
+        />
+      )}
+
       <CreateConnectorModal open={open} onClose={() => setOpen(false)} onCreated={load} />
       {connectorToDelete && (
         <RemoveConnectorModal
@@ -318,6 +394,78 @@ export default function Connectors() {
         />
       )}
     </>
+  )
+}
+
+/**
+ * ADM-11. The modal is the confirmation: it shows the current figure and the
+ * new one, and nothing is written until the button. The floor is the
+ * database's (set_connector_capacity); the min here only saves a round trip.
+ */
+function CapacityModal({
+  connector,
+  joined,
+  onClose,
+  onChanged,
+}: {
+  connector: ConnectorRow
+  joined: number
+  onClose: () => void
+  onChanged: () => Promise<void>
+}) {
+  const [capacity, setCapacity] = useState(connector.invite_capacity)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const name = connector.profiles?.full_name ?? 'this connector'
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setError('')
+    setBusy(true)
+    const { error: rpcError } = await supabase.rpc('set_connector_capacity', {
+      p_connector_id: connector.id,
+      p_capacity: capacity,
+    })
+    setBusy(false)
+    if (rpcError) return setError(errorMessage(rpcError))
+    await onChanged()
+    onClose()
+  }
+
+  return (
+    <Modal open title={`Change ${name}'s capacity?`} onClose={busy ? () => {} : onClose}>
+      <form onSubmit={save} className="space-y-5">
+        <p className="text-sm leading-relaxed text-muted">
+          {joined} of {connector.invite_capacity} places are used. Capacity cannot go below the
+          number of people who have already joined.
+        </p>
+        <Field label="Invitation capacity" hint="How many people they may bring in.">
+          <Input
+            type="number"
+            required
+            min={Math.max(joined, 1)}
+            value={capacity}
+            onChange={(e) => setCapacity(Number(e.target.value))}
+          />
+        </Field>
+
+        {error && <Notice tone="error">{error}</Notice>}
+
+        <div className="flex flex-wrap justify-between gap-3">
+          <Button type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={busy}
+            disabled={capacity === connector.invite_capacity}
+          >
+            Set capacity to {capacity}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -376,7 +524,7 @@ function CreateConnectorModal({
           </div>
           <p className="mx-auto mt-5 max-w-sm text-sm leading-relaxed text-muted">
             Send this to {fullName.split(' ')[0] || 'them'}. They'll enter it at the join page to
-            claim their connector account and set a password.
+            claim their connector account and set a password. It works for 30 days.
           </p>
           <Button variant="primary" className="mt-7 w-full" onClick={close}>
             Done
@@ -451,6 +599,8 @@ function RemoveConnectorModal({
 
   const [selected, setSelected] = useState<string[]>(() => members.map((m) => m.id))
   const [destination, setDestination] = useState(destinations[0]?.id ?? '')
+  const [scope, setScope] = useState<DeleteScope>('account')
+  const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -482,8 +632,10 @@ function RemoveConnectorModal({
   async function remove() {
     setError('')
     setBusy(true)
+    if (scope === 'everything') await removeMediaOf(connector.profile_id)
     const { error: rpcError } = await supabase.rpc('delete_managed_profile', {
       p_profile_id: connector.profile_id,
+      p_scope: scope,
     })
     setBusy(false)
     if (rpcError) return setError(errorMessage(rpcError))
@@ -590,6 +742,17 @@ function RemoveConnectorModal({
             Nobody is under {name} any more. Removing them deletes the connector account
             and its invitation codes. No member profile is touched.
           </p>
+          <div className="mt-5">
+            <DeleteScopeChoice
+              value={scope}
+              onChange={(nextScope, nextTyped) => {
+                setScope(nextScope)
+                setTyped(nextTyped)
+              }}
+              subjectName={name}
+              self={false}
+            />
+          </div>
           <p className="mt-3 text-sm font-medium text-negative">This cannot be undone.</p>
 
           {error && (
@@ -602,7 +765,12 @@ function RemoveConnectorModal({
             <Button type="button" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
-            <Button variant="danger" loading={busy} onClick={() => void remove()}>
+            <Button
+              variant="danger"
+              loading={busy}
+              disabled={!scopeConfirmed(scope, typed)}
+              onClick={() => void remove()}
+            >
               Delete connector
             </Button>
           </div>

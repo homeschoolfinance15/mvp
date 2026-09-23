@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthProvider'
+import { isNetworkMember, useAuth } from '../context/AuthProvider'
 import { errorMessage, supabase } from '../lib/supabase'
-import { Button, ConfirmModal, Notice, Panel, SectionHeader } from './ui'
+import { DeleteScopeChoice, removeMediaOf, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
+import { Button, Modal, Notice, Panel, SectionHeader } from './ui'
 
 /**
  * Take it with you, or leave.
@@ -23,6 +24,8 @@ export function YourData() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirming, setConfirming] = useState(false)
+  const [scope, setScope] = useState<DeleteScope>('account')
+  const [typed, setTyped] = useState('')
 
   async function exportData() {
     setBusy(true)
@@ -43,13 +46,23 @@ export function YourData() {
     URL.revokeObjectURL(url)
   }
 
+  function openConfirm() {
+    setScope('account')
+    setTyped('')
+    setConfirming(true)
+  }
+
   async function deleteAccount() {
-    setConfirming(false)
+    if (!profile || !scopeConfirmed(scope, typed)) return
     setBusy(true)
     setError('')
-    const { error: rpcError } = await supabase.rpc('delete_my_account')
+    // Files first: once the account is gone the bucket no longer lets anybody
+    // but an administrator remove them.
+    if (scope === 'everything') await removeMediaOf(profile.id)
+    const { error: rpcError } = await supabase.rpc('delete_my_account', { p_scope: scope })
     if (rpcError) {
       setBusy(false)
+      setConfirming(false)
       setError(errorMessage(rpcError))
       return
     }
@@ -59,19 +72,14 @@ export function YourData() {
 
   return (
     <section className="mt-12">
-      <SectionHeader
-        title="Your data"
-        caption="What the network holds about you, and how to leave."
-      />
+      <SectionHeader title="Your data" />
 
       <Panel className="divide-y divide-line">
         <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div className="min-w-0">
             <div className="text-sm text-fg">Download everything</div>
             <p className="mt-1 max-w-md text-xs leading-relaxed text-dim">
-              Your profile, posts, comments, messages, RSVPs and your own
-              activity, as one file. What others have raised about you isn't
-              included, because it would name who raised it.
+              Download a copy of your data. Reports others filed about you are not included.
             </p>
           </div>
           <Button size="sm" disabled={busy} onClick={exportData}>
@@ -83,11 +91,12 @@ export function YourData() {
           <div className="min-w-0">
             <div className="text-sm text-fg">Close your account</div>
             <p className="mt-1 max-w-md text-xs leading-relaxed text-dim">
-              Removes your profile and everything attached to it. The record
-              that an account was closed is kept, without your name on it.
+              Delete just the account, or the account and everything you
+              added. Payment records are kept without your name, as the law
+              requires.
             </p>
           </div>
-          <Button variant="danger" size="sm" disabled={busy} onClick={() => setConfirming(true)}>
+          <Button variant="danger" size="sm" disabled={busy} onClick={openConfirm}>
             Close account
           </Button>
         </div>
@@ -99,15 +108,41 @@ export function YourData() {
         </div>
       )}
 
-      <ConfirmModal
+      <Modal
         open={confirming}
         title="Close your account?"
-        body="Your profile, posts, comments, likes, messages and RSVPs are deleted. Your connector keeps no notes on you. This cannot be undone, and an invitation cannot be reissued to you automatically."
-        confirmLabel="Close my account"
-        busy={busy}
-        onConfirm={deleteAccount}
-        onClose={() => setConfirming(false)}
-      />
+        onClose={() => {
+          if (!busy) setConfirming(false)
+        }}
+      >
+        <DeleteScopeChoice
+          value={scope}
+          onChange={(next, text) => {
+            setScope(next)
+            setTyped(text)
+          }}
+          subjectName={profile?.full_name ?? ''}
+          self
+        />
+        <p className="mt-4 text-sm font-medium text-negative">
+          This cannot be undone{isNetworkMember(profile) ? ', and an invitation cannot be reissued to you automatically' : ''}.
+        </p>
+
+        <div className="mt-7 flex gap-3">
+          <Button className="flex-1" onClick={() => setConfirming(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            loading={busy}
+            disabled={!scopeConfirmed(scope, typed)}
+            onClick={() => void deleteAccount()}
+          >
+            Close my account
+          </Button>
+        </div>
+      </Modal>
     </section>
   )
 }

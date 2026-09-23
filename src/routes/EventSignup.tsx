@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice, Spinner } from '../components/ui'
 import { errorMessage, supabase } from '../lib/supabase'
-import { needsOnboarding, useAuth } from '../context/AuthProvider'
+import { homePathFor, useAuth } from '../context/AuthProvider'
 import {
   CAPACITY_WORDS,
   eventLink,
@@ -16,6 +16,7 @@ import {
 } from '../lib/events'
 import { loadPublicEvent } from './events/shared'
 import { rememberSignupResume } from '../lib/signupResume'
+import { MIN_PASSWORD_LENGTH, PASSWORD_RULE, passwordProblem } from '../lib/password'
 
 /**
  * The second door into AMAZING.
@@ -174,28 +175,14 @@ export default function EventSignup() {
     navigate(to, { replace: true })
   }
 
-  /** ACC-03. Already one of us: no second account, no questions asked twice. */
-  async function continueAsExisting() {
-    setError('')
-    setBusy(true)
-    // Composed, not a bare view read — see loadEvent. A re-read that failed is
-    // not drift, so it reports none rather than inventing a change.
-    const after = slug ? await loadPublicEvent(slug).catch(() => null) : null
-    const moved = event ? driftAgainst(event, after) : []
-    setBusy(false)
-
-    if (moved.length > 0) {
-      setDrift(moved)
-      setNext(profile && needsOnboarding(profile) ? '/onboarding' : resumePath)
-      if (after) setEvent(after)
-      return
-    }
-    handOver(profile && needsOnboarding(profile) ? '/onboarding' : resumePath, after)
-  }
-
   async function createAccount(e: FormEvent) {
     e.preventDefault()
     setError('')
+    const problem = passwordProblem(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
 
     // ponytail: signUp is called here rather than through AuthProvider, which
@@ -259,10 +246,18 @@ export default function EventSignup() {
     handOver('/onboarding', after)
   }
 
+  /* ---------------------------------------------------------- ACC-03 path */
+  // Already signed in: no second account, and no auth page inside the app.
+  // Not while this screen's own signup is mid-flight (busy) or showing drift —
+  // the profile appears under it and handOver decides where it goes.
+  if (!authLoading && session && profile && !busy && !(drift && next)) {
+    return <Navigate to={slug ? eventLink(slug) : homePathFor(profile)} replace />
+  }
+
   /* ------------------------------------------------------------- loading */
   if (authLoading || loadingEvent) {
     return (
-      <AuthLayout eyebrow="Your account" title="One moment" caption="Fetching the details.">
+      <AuthLayout eyebrow="Your account" title="One moment">
         <div className="flex justify-center py-6 text-dim">
           <Spinner />
         </div>
@@ -276,7 +271,7 @@ export default function EventSignup() {
       <AuthLayout
         eyebrow="Before you go on"
         title="Something moved while you were signing up"
-        caption="Your account is ready. This is what changed in the meantime."
+        caption="Your account is ready. This changed in the meantime:"
       >
         <ul className="space-y-2.5">
           {drift.map((line) => (
@@ -296,42 +291,6 @@ export default function EventSignup() {
     )
   }
 
-  /* ---------------------------------------------------------- ACC-03 path */
-  if (session && profile) {
-    return (
-      <AuthLayout
-        eyebrow="Already with us"
-        title={`Welcome back, ${profile.full_name.split(' ')[0]}`}
-        caption={
-          needsOnboarding(profile)
-            ? 'Your account exists. There are a couple of questions still to finish, and then you go straight back to the event.'
-            : 'You already have an account and a finished profile, so there is nothing to fill in again.'
-        }
-      >
-        {event && <EventSummary event={event} ticket={ticket} />}
-
-        {error && (
-          <div className="mt-5">
-            <Notice tone="error">{error}</Notice>
-          </div>
-        )}
-
-        <Button
-          variant="primary"
-          loading={busy}
-          className="mt-7 w-full"
-          onClick={() => void continueAsExisting()}
-        >
-          {needsOnboarding(profile)
-            ? 'Finish your profile'
-            : event
-              ? 'Continue to the event'
-              : 'Continue'}
-        </Button>
-      </AuthLayout>
-    )
-  }
-
   /* --------------------------------------------------------- missing event */
   if (slug && eventMissing) {
     return (
@@ -340,7 +299,10 @@ export default function EventSignup() {
         title="We couldn't find that event"
         caption="The link may be out of date, or the event may not be published yet. You can still create an account and look for it."
         footer={
-          <Link to="/signin" className="text-fg underline-offset-4 hover:underline">
+          <Link
+            to={`/signin?next=${encodeURIComponent(resumePath)}`}
+            className="text-fg underline-offset-4 hover:underline"
+          >
             Sign in instead
           </Link>
         }
@@ -365,15 +327,14 @@ export default function EventSignup() {
     <AuthLayout
       eyebrow={event ? 'Attending an event' : 'Your account'}
       title="Create your account"
-      caption={
-        event
-          ? 'No invitation code needed. An account lets you register, pay, hold your ticket and give feedback afterwards.'
-          : 'No invitation code needed. An account lets you browse events, register, pay and hold your tickets.'
-      }
+      caption="No invitation code needed."
       footer={
         <>
           Already have an account?{' '}
-          <Link to="/signin" className="text-fg underline-offset-4 hover:underline">
+          <Link
+            to={`/signin?next=${encodeURIComponent(resumePath)}`}
+            className="text-fg underline-offset-4 hover:underline"
+          >
             Sign in
           </Link>
           {' · '}
@@ -483,11 +444,11 @@ function SignupForm({
         />
       </Field>
 
-      <Field label="Password" hint="At least 8 characters.">
+      <Field label="Password" hint={PASSWORD_RULE}>
         <Input
           required
           type="password"
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
           value={password}
           onChange={(e) => onPassword(e.target.value)}
           autoComplete="new-password"

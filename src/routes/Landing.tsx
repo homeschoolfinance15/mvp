@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { homePathFor, useAuth } from '../context/AuthProvider'
 import { supabase, errorMessage } from '../lib/supabase'
 import { toLink } from '../lib/url'
 import { Button, Field, Input, Modal, Notice, Textarea, Wordmark } from '../components/ui'
@@ -87,7 +88,11 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
       setError(
         insertError.code === '23505'
           ? "You're already on the list. We'll be in touch."
-          : insertError.message,
+          : insertError.code === '23514'
+            ? insertError.message.includes('waitlist_phone_present')
+              ? 'Please enter a phone number.'
+              : 'Some of your answers could not be saved. Please check them and try again.'
+            : insertError.message,
       )
       return
     }
@@ -221,7 +226,14 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
     <form
       onSubmit={(e: FormEvent) => {
         e.preventDefault()
-        // Native validation has already passed for whatever this page holds.
+        // Native validation has already passed for whatever this page holds,
+        // but `required` accepts a phone number of only spaces, which the
+        // database then refuses in its own words.
+        if (stepKey === 'who' && !phone.trim()) {
+          setError('Please enter a phone number.')
+          return
+        }
+        setError('')
         if (page < last) {
           setPage(page + 1)
           return
@@ -287,7 +299,8 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const [code, setCode] = useState('')
+  const { session, profile, loading: authLoading } = useAuth()
+  const [code,setCode] = useState('')
   const [codeBusy, setCodeBusy] = useState(false)
   const [codeError, setCodeError] = useState('')
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -315,6 +328,9 @@ export default function Landing() {
 
     navigate('/join', { state: { code: normalizedCode, lookup } })
   }
+
+  // Signed in: the marketing page is not somewhere to land. Straight to the app.
+  if (!authLoading && session && profile) return <Navigate to={homePathFor(profile)} replace />
 
   return (
     <div className="brand-experience landing-page">

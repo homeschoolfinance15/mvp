@@ -128,15 +128,12 @@ export function ConnectorEventPermission({
           pending ? (
             <>
               <p>
-                {name} will be able to build event drafts and publish them directly. There is
-                no approval step afterwards &mdash; this is the approval.
+                {name} will be able to create and publish events with no further approval.
               </p>
               <p className="mt-3">
                 <span className="font-medium text-fg">
                   Nothing is published by turning this on.
-                </span>{' '}
-                No draft goes live, no event is announced, and nobody is emailed. It only
-                grants the ability.
+                </span>
               </p>
               {/*
                 ACC-04, last sentence: hosting an event must not grant permission
@@ -145,14 +142,12 @@ export function ConnectorEventPermission({
                 "they can do more now" generally.
               */}
               <p className="mt-3">
-                It changes nothing about the network. Their invitation capacity, who they
-                may invite and what they can see of other connectors&rsquo; communities are
-                all exactly as they were.
+                Their invitation capacity and network access do not change.
               </p>
               <p className="mt-3">
                 {payout.canSellPaid
-                  ? 'Their Stripe account is connected and ready, so they can charge for tickets as well as run free events. The money goes to them, not to Amazing.'
-                  : `They can run free events straight away. Paid tickets stay shut until their own Stripe account is connected and ready — ${payout.headline.toLowerCase()} at the moment.`}
+                  ? 'Their Stripe account is ready, so they can sell paid tickets. The money goes to them, not to Amazing.'
+                  : `Free events only until their Stripe account is ready — ${payout.headline.toLowerCase()} at the moment.`}
               </p>
             </>
           ) : (
@@ -163,19 +158,14 @@ export function ConnectorEventPermission({
               </p>
               <p className="mt-3">
                 <span className="font-medium text-fg">Nothing is deleted or cancelled.</span>{' '}
-                Every event they already host stays theirs to run in full: editing the
-                details, the guest list, invitations, check-in on the door, emails to
-                attendees, cancelling and refunding, and the results afterwards.
+                They can still run every event they already host.
               </p>
               <p className="mt-3">
-                Events already on sale carry on selling, and anybody holding a ticket is
-                unaffected. Their unpublished drafts are kept &mdash; they simply cannot be
-                published while this is off. Every event, ticket, payment and feedback
-                record stays exactly as it is.
+                Tickets on sale keep selling. Drafts are kept but cannot be published while
+                this is off.
               </p>
               <p className="mt-3">
-                Their invitations and their network are untouched by this. You can switch it
-                back on at any time.
+                Their network is untouched. You can switch this back on at any time.
               </p>
             </>
           )

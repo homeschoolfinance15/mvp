@@ -3,7 +3,6 @@ import {
   EmptyState,
   formatDate,
   Notice,
-  SectionHeader,
   Spinner,
 } from '../../components/ui'
 import { useLive } from '../../lib/live'
@@ -65,13 +64,8 @@ export default function Notes() {
         </div>
       )}
 
-      <SectionHeader
-        title="Connector notes"
-        caption="Context connectors chose to make searchable. Notes marked private are never shown here."
-      />
-
       {notes.length === 0 ? (
-        <EmptyState>No shared notes yet.</EmptyState>
+        !loadError && <EmptyState>No shared notes.</EmptyState>
       ) : (
         <ul className="space-y-3">
           {notes.map((note) => (

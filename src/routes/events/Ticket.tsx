@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { Button, CopyCode, LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
+import { useSidebarCurrent } from '../../components/AppShell'
+import { CopyCode, LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import {
   eventLink,
@@ -10,7 +11,7 @@ import {
   type RegistrationStatus,
 } from '../../lib/events'
 import { loadFailed, supabase } from '../../lib/supabase'
-import { EventShell, NeedsSignIn, WhenWhere, useLoader } from './shared'
+import { BOOKING_PAGES, EventShell, NeedsSignIn, WhenWhere, bookingPage, useLoader } from './shared'
 
 /**
  * The thing you hold at the door. BUY-10, BUY-11, BUY-12.
@@ -63,6 +64,9 @@ export default function Ticket() {
     id,
     profileId,
   ])
+  useSidebarCurrent(
+    ticket?.events ? bookingPage(ticket.events, ticket.event_registrations).path : null,
+  )
 
   if (authLoading || loading) {
     return (
@@ -88,7 +92,7 @@ export default function Ticket() {
 
   if (failed) {
     return (
-      <EventShell back={{ to: '/events/mine', label: 'My events' }}>
+      <EventShell back={{ to: BOOKING_PAGES.upcoming.path, label: BOOKING_PAGES.upcoming.title }}>
         <div className="py-12">
           <LoadFailed what="your ticket" onRetry={() => void reload()} />
         </div>
@@ -103,16 +107,12 @@ export default function Ticket() {
    */
   if (!ticket || !ticket.events) {
     return (
-      <EventShell back={{ to: '/events/mine', label: 'My events' }}>
+      <EventShell back={{ to: BOOKING_PAGES.upcoming.path, label: BOOKING_PAGES.upcoming.title }}>
         <div className="mx-auto max-w-md py-20 text-center">
           <h1 className="display text-3xl">We can&rsquo;t find that ticket</h1>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            The link may have been cut short, or this ticket may belong to a different account. Any
-            ticket of your own will be listed under my events.
+            Check you are signed in to the account that booked it.
           </p>
-          <Link to="/events/mine" className="mt-8 inline-block">
-            <Button variant="primary">My events</Button>
-          </Link>
         </div>
       </EventShell>
     )
@@ -128,9 +128,10 @@ export default function Ticket() {
   const cancelledPlace = registration?.status === 'cancelled' || registration?.status === 'expired'
   const cancelledEvent = event.status === 'cancelled'
   const usable = !revoked && !cancelledPlace && !cancelledEvent
+  const page = bookingPage(event, registration)
 
   return (
-    <EventShell back={{ to: '/events/mine', label: 'My events' }}>
+    <EventShell back={{ to: page.path, label: page.title }}>
       <div className="mx-auto max-w-md space-y-6">
         {!usable && (
           <Notice tone="error">
@@ -144,11 +145,11 @@ export default function Ticket() {
                     : 'This ticket has been cancelled.'}
             </strong>{' '}
             {cancelledEvent
-              ? 'It is not going ahead, so there is nothing to scan. Anything owed back to you shows under my events.'
+              ? `It is not going ahead, so there is nothing to scan. Anything owed back to you shows under ${page.title}.`
               : cancelledPlace
                 ? 'It will not get you in. If that is not what you meant to happen, the host can put you back on the list.'
                 : ticket.replaced_by
-                  ? 'A newer ticket was issued in its place — that is the one to bring. It is listed under my events.'
+                  ? `A newer ticket was issued in its place — that is the one to bring. It is listed under ${page.title}.`
                   : 'It will not get you in. Speak to the host if you were expecting to come.'}
           </Notice>
         )}
@@ -165,13 +166,9 @@ export default function Ticket() {
                 <CopyCode code={ticket.code} size="sm" />
               </div>
             </>
-          ) : (
-            <div className="rounded-[6px] border border-dashed border-line-strong px-6 py-14 text-sm text-dim">
-              There is no code to show for this ticket.
-            </div>
-          )}
+          ) : null}
 
-          <div className="mt-8 border-t border-line pt-6 text-left">
+          <div className={`text-left ${usable ? 'mt-8 border-t border-line pt-6' : ''}`}>
             {/* BUY-10. Whose ticket, which event, which option — the three
                 things a host on the door is checking against a list. */}
             <h1 className="text-lg leading-snug font-medium text-fg">{profile.full_name}</h1>

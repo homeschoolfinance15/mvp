@@ -123,6 +123,32 @@ assert.equal(
   `${offences.length} ambiguous PostgREST embed(s) — each one empties its screen at runtime`,
 )
 
+/**
+ * Embeds PostgREST returns as ONE object, because the child's foreign key is
+ * unique. Typed or indexed as a list, `row.child?.[0]` is always undefined:
+ * every attendee's "Show your ticket" button disappeared that way, on three
+ * screens at once, with tsc satisfied because the type said array too.
+ */
+const ONE_TO_ONE = [
+  { child: 'event_tickets', why: 'event_tickets.registration_id is unique' },
+]
+const listShaped = (child) =>
+  new RegExp(`\\b${child}\\s*(\\?\\.)?\\[0\\]|\\b${child}\\??\\s*:\\s*\\{[^{}]*\\}\\s*\\[\\]`)
+
+const listOffences = []
+for (const { child, why } of ONE_TO_ONE) {
+  for (const file of files) {
+    readFileSync(file, 'utf8').split('\n').forEach((text, i) => {
+      if (listShaped(child).test(text)) listOffences.push(`${file}:${i + 1}: ${child} read as a list — ${why}`)
+    })
+  }
+}
+for (const offence of listOffences) console.error(`  FAIL  ${offence}`)
+assert.equal(listOffences.length, 0, `${listOffences.length} one-to-one embed(s) read as a list`)
+assert.ok(listShaped('event_tickets').test('row.event_tickets?.[0]?.id'), 'the list check no longer recognises `?.[0]`')
+assert.ok(listShaped('event_tickets').test('event_tickets: { id: string }[] | null'), 'the list check no longer recognises a list type')
+assert.ok(!listShaped('event_tickets').test('event_tickets: { id: string } | null'), 'the list check rejects the object type')
+
 // The guard is only worth having if it can fail, and a regex that matches
 // nothing passes quietly forever. This proves it still recognises the shape
 // that actually shipped.

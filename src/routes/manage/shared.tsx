@@ -13,9 +13,8 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { DashboardShell, type Tab } from '../../components/DashboardShell'
-import { LoadFailed, Notice, PageLoader, Panel } from '../../components/ui'
+import { DashboardShell } from '../../components/DashboardShell'
+import { LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { loadFailed, supabase } from '../../lib/supabase'
 import type { CapacityInfo, EventRecord, EventStatus, TicketType } from '../../lib/events'
@@ -114,52 +113,47 @@ const SUB_TABS: Array<{ id: string; label: string; path: (id: string) => string 
 ]
 
 /**
- * `DashboardShell` with the event's own sub-navigation. The tabs are routes
- * rather than local state so the address bar is always the truth about where
- * you are — a guest list you can send to a co-host is worth more than a tab.
+ * `DashboardShell` with the event's own pages as the first sidebar section.
+ * They are routes rather than local state so the address bar is always the
+ * truth about where you are — a guest list you can send to a co-host is worth
+ * more than a tab.
  */
 export function ManageShell({
   event,
-  current,
   caption,
   children,
 }: {
   event: EventRecord
-  current: string
   caption?: string
   children: ReactNode
 }) {
-  const navigate = useNavigate()
-  const tabs: Tab[] = SUB_TABS.map((t) => ({ id: t.id, label: t.label }))
-
+  // No "All events" link: the sidebar's Hosting / Events group already is one.
   return (
     <DashboardShell
       title={event.title}
-      caption={caption ?? statusSentence(event)}
-      tabs={tabs}
-      activeTab={current}
-      onTabChange={(id) => {
-        const tab = SUB_TABS.find((t) => t.id === id)
-        if (tab) navigate(tab.path(event.id))
+      caption={caption}
+      sideContext={{
+        label: event.title,
+        links: SUB_TABS.map((t) => ({ to: t.path(event.id), label: t.label })),
       }}
     >
-      <div className="mb-8">
-        <button
-          type="button"
-          onClick={() => navigate('/manage/events')}
-          className="text-xs tracking-[0.12em] text-dim uppercase transition-colors hover:text-fg"
-        >
-          &#8592; All events
-        </button>
-      </div>
       {children}
     </DashboardShell>
   )
 }
 
+/** The reader's own events list: where "back" goes from any organiser screen. */
+export function eventsListPath(profile: ReturnType<typeof useAuth>['profile']): string {
+  if (profile?.role === 'admin') return '/admin/events'
+  if (profile?.role === 'connector') return '/manage/events'
+  return '/events/mine'
+}
+
 /**
  * The four screens all begin the same way: wait, explain, refuse, or render.
- * QLT-01 — none of these states is a blank page.
+ * QLT-01 — none of these states is a blank page, and none is a dead end: each
+ * sits in the dashboard frame, whose sidebar is the way back — the door scanner
+ * included, whose focused layout is for scanning, not for being refused.
  */
 export function ManagedEventGate({
   result,
@@ -170,37 +164,31 @@ export function ManagedEventGate({
   reload: () => void | Promise<void>
   children: (data: ManagedEvent) => ReactNode
 }) {
-  if (result.state === 'loading') return <PageLoader />
-  if (result.state === 'failed') {
-    return (
-      <div className="mx-auto max-w-2xl px-5 py-20">
-        <LoadFailed what="this event" onRetry={() => void reload()} />
+  if (result.state === 'ready') return <>{children(result.data)}</>
+
+  const body =
+    result.state === 'loading' ? (
+      <div className="flex justify-center py-24 text-dim">
+        <Spinner />
       </div>
+    ) : (
+      <>
+        {result.state === 'failed' ? (
+          <LoadFailed what="this event" onRetry={() => void reload()} />
+        ) : (
+          <Notice tone="error">
+            This event belongs to somebody else. You can only open events you host.
+          </Notice>
+        )}
+      </>
     )
-  }
-  if (result.state === 'denied') {
-    return (
-      <div className="mx-auto max-w-2xl px-5 py-20">
-        <Notice tone="error">
-          This event belongs to somebody else. You can only open events you host.
-        </Notice>
-      </div>
-    )
-  }
-  return <>{children(result.data)}</>
+
+  return <DashboardShell title="Event">{body}</DashboardShell>
 }
 
 /* -------------------------------------------------------------------------- */
 /* Words for states                                                            */
 /* -------------------------------------------------------------------------- */
-
-/** QLT-02. Status in a sentence, not a colour and not a bare enum value. */
-export function statusSentence(event: EventRecord): string {
-  if (event.status === 'cancelled') return 'Cancelled. Attendees have been told and entry is void.'
-  if (event.status === 'draft') return 'Draft. Nobody can find this event until you publish it.'
-  const finished = new Date(event.ends_at ?? event.starts_at).getTime() < Date.now()
-  return finished ? 'Published, and now finished.' : 'Published and visible to attendees.'
-}
 
 const STATUS_TONE: Record<EventStatus, string> = {
   draft: 'text-dim border-line bg-raised',

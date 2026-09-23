@@ -46,12 +46,7 @@ export default function Browse() {
   return (
     <EventShell>
       <header className="max-w-2xl border-b border-line pt-2 pb-8">
-        <p className="brand-kicker text-[#1f5c56]">Where the network meets</p>
-        <h1 className="display mt-4 text-4xl">What&rsquo;s coming up</h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted">
-          Dinners, gatherings and rooms worth being in. Anyone can come to these &mdash; you do not
-          need to be a member to take a place.
-        </p>
+        <h1 className="display text-4xl">Browse</h1>
       </header>
 
       {loading ? (
@@ -65,8 +60,7 @@ export default function Browse() {
       ) : (events?.length ?? 0) === 0 ? (
         <div className="pt-10">
           <EmptyState>
-            Nothing is on the calendar just now. New gatherings are added often &mdash; it is worth
-            looking again in a week.
+            Nothing is on the calendar just now. Check back later.
           </EmptyState>
         </div>
       ) : (

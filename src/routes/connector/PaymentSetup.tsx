@@ -88,8 +88,7 @@ async function connect(
 /* -------------------------------------------------------------------------- */
 
 /**
- * The body of the screen, without the page chrome, so the connector dashboard
- * can show the same thing inside its Payments tab without a second copy of it.
+ * The body of the screen, without the page chrome.
  */
 export function PaymentsPanel({
   connector,
@@ -153,51 +152,20 @@ export function PaymentsPanel({
   return (
     <div className="mt-10 space-y-8">
       {/*
-        §7.1, in the words the connector needs rather than the words Stripe
-        uses. Revenue, fees, refunds and disputes are theirs. Saying so here
-        is not decoration: it is the difference between them understanding
-        that a chargeback comes out of their balance and being surprised by it.
-      */}
-      <Panel className="px-6 py-6">
-        <p className="eyebrow">Your events, your Stripe account, your money</p>
-        <div className="mt-4 space-y-3 text-sm leading-relaxed text-muted">
-          <p>
-            When you host a paid event, the ticket money is charged on{' '}
-            <span className="font-medium text-fg">your own Stripe account</span> and lands in
-            your balance. Stripe&rsquo;s processing fees come out of it, refunds come out of
-            it, and any dispute a guest raises is yours to answer. Amazing takes no
-            commission on your events.
-          </p>
-          <p>
-            Connecting is an authorisation, not a handover.{' '}
-            <span className="font-medium text-fg">
-              We never see or store your Stripe secret key.
-            </span>{' '}
-            We hold your account id so a ticket sale can be charged to it, and nothing else.
-            You can disconnect at any time.
-          </p>
-        </div>
-      </Panel>
-
-      {/*
         ORG-01A. If an administrator has not switched event creation on, Stripe
         is not what stands in their way, and a Connect button presented as the
         blocker would send them chasing the wrong thing.
       */}
       {!connector.can_create_events && (
         <Notice tone="error">
-          <strong>Your account is not set up to create events yet.</strong> An administrator
-          switches that on, and it is the first of the two things needed &mdash; Stripe is
-          the second. Connecting a Stripe account is not what is standing in your way, and
-          it would be refused until the permission exists, so there is nothing useful to do
-          on this page yet. Ask an administrator, and come back.
+          <strong>Your account cannot create events yet.</strong> Ask an administrator to
+          switch event creation on, then come back here to connect Stripe.
         </Notice>
       )}
 
       <div>
         <SectionHeader
           title="Payment account"
-          caption="Where the money for your paid events is charged and held."
           action={
             connected ? (
               <Button
@@ -218,29 +186,20 @@ export function PaymentsPanel({
         )}
 
         <Panel className="px-6 py-5">
+          {/* The status is said once, by the badge. */}
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-fg">{state.headline}</div>
-              <div className="mt-1 truncate text-xs text-dim">
-                {connector.stripe_account_id
-                  ? `Stripe account ${connector.stripe_account_id}`
-                  : 'No Stripe account connected'}
-              </div>
-            </div>
             <PayoutBadge state={state} />
+            {connector.stripe_account_id && (
+              <div className="min-w-0 truncate text-xs text-dim">
+                Stripe account {connector.stripe_account_id}
+              </div>
+            )}
           </div>
 
           {/* §7.3. When it is not ready, say what is outstanding — not that
               "something went wrong". A person can act on the first. */}
           {state.outstanding && (
             <p className="mt-5 text-sm leading-relaxed text-muted">{state.outstanding}</p>
-          )}
-
-          {state.canSellPaid && !state.outstanding && (
-            <p className="mt-5 text-sm leading-relaxed text-muted">
-              Paid tickets can go on sale. Charges are taken on this account and paid out to
-              the bank details you gave Stripe.
-            </p>
           )}
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -276,6 +235,15 @@ export function PaymentsPanel({
             )}
           </div>
 
+          {/* §7.1, where they act on it: fees, refunds and disputes are theirs,
+              so a chargeback out of their balance is not a surprise. */}
+          {!connected && (
+            <p className="mt-4 text-xs leading-relaxed text-dim">
+              Stripe&rsquo;s fees and any refunds come out of your own Stripe balance, and any
+              dispute a guest raises is yours to answer.
+            </p>
+          )}
+
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-1 text-xs text-dim">
             {connector.stripe_connected_at && (
               <span>Connected {formatDateTime(connector.stripe_connected_at)}</span>
@@ -283,38 +251,7 @@ export function PaymentsPanel({
             {connector.stripe_checked_at && (
               <span>Last checked with Stripe {formatDateTime(connector.stripe_checked_at)}</span>
             )}
-            <span>
-              Payouts to your bank{' '}
-              {connector.stripe_payouts_enabled ? 'enabled' : 'not enabled yet'}
-            </span>
           </div>
-        </Panel>
-
-        {/*
-          §7.3, rows two and three. Both gates in one sentence each, so it is
-          obvious which one is missing and what it costs them today.
-        */}
-        <Panel className="mt-4 border-dashed px-5 py-4 text-xs leading-relaxed text-muted">
-          {connector.can_create_events && !state.canSellPaid && (
-            <>
-              You can create and publish <span className="font-medium text-fg">free</span>{' '}
-              events today. Paid events open the moment this account is connected and Stripe
-              is happy with it &mdash; nothing else is needed from an administrator.
-            </>
-          )}
-          {connector.can_create_events && state.canSellPaid && (
-            <>
-              Both gates are open: you may create events, and you may charge for them. The
-              price and the currency are set per ticket type when you build the event.
-            </>
-          )}
-          {!connector.can_create_events && (
-            <>
-              Two separate things have to be true before you can sell a ticket: an
-              administrator switches on event creation for your account, and this Stripe
-              account is connected and ready. Neither grants the other.
-            </>
-          )}
         </Panel>
       </div>
 
@@ -429,10 +366,7 @@ export default function PaymentSetup() {
   }, [returning, params, load, navigate])
 
   return (
-    <DashboardShell
-      title="Payments"
-      caption="Your Stripe account, and what it lets your events do. Amazing never holds your keys or your money."
-    >
+    <DashboardShell title="Payments">
       {loading || finishing ? (
         <div className="flex justify-center py-16 text-dim">
           <Spinner />

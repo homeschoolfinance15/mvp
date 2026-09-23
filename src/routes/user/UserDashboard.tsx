@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { DashboardShell } from '../../components/DashboardShell'
-import { ProfileEditor } from '../../components/ProfileEditor'
 import {
-  CopyCode,
   EmptyState,
-  formatDate,
   Initials,
+  LoadFailed,
   Panel,
   SectionHeader,
   Spinner,
-  StatusBadge,
 } from '../../components/ui'
-import { supabase } from '../../lib/supabase'
+import { loadFailed, supabase } from '../../lib/supabase'
 import { useAuth } from '../../context/AuthProvider'
 
 interface Membership {
@@ -29,12 +26,14 @@ interface Membership {
 }
 
 export default function UserDashboard() {
-  const { profile, refreshProfile } = useAuth()
+  const { profile } = useAuth()
   const [membership, setMembership] = useState<Membership | null>(null)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
 
   const load = useCallback(async () => {
     if (!profile) return
+    setFailed(false)
     const { data, error } = await supabase
       .from('connector_user_links')
       .select(
@@ -43,7 +42,13 @@ export default function UserDashboard() {
       .eq('user_profile_id', profile.id)
       .maybeSingle()
 
-    if (error) console.error('Failed to load membership', error)
+    // A failed query is not "nobody invited you"; say which it was.
+    if (error) {
+      loadFailed(error, 'your membership')
+      setFailed(true)
+      setLoading(false)
+      return
+    }
     setMembership((data as unknown as Membership) ?? null)
     setLoading(false)
   }, [profile])
@@ -55,14 +60,13 @@ export default function UserDashboard() {
   const connectorProfile = membership?.connectors?.profiles ?? null
 
   return (
-    <DashboardShell
-      title={`Hello, ${profile?.full_name.split(' ')[0] ?? ''}`}
-      caption="Your place in the network: who brought you in, and how you're described to others."
-    >
+    <DashboardShell title={`Hello, ${profile?.full_name.split(' ')[0] ?? ''}`}>
       {loading ? (
         <div className="flex justify-center py-16 text-dim">
           <Spinner />
         </div>
+      ) : failed ? (
+        <LoadFailed what="your membership" onRetry={load} />
       ) : (
         <div className="grid gap-10 lg:grid-cols-[1.15fr_1fr]">
           <div className="space-y-10">
@@ -92,59 +96,30 @@ export default function UserDashboard() {
                 </Panel>
               ) : (
                 <EmptyState>
-                  We couldn't find the connector who invited you.
+                  Ask the connector who invited you to link your account to them.
                 </EmptyState>
               )}
             </section>
-
-            {/* Your profile ------------------------------------------------ */}
-            <ProfileEditor onSaved={refreshProfile} />
           </div>
 
-          {/* Membership sidebar --------------------------------------------- */}
-          <aside className="space-y-6">
-            <Panel className="px-6 py-6">
-              <div className="eyebrow">Your invitation code</div>
-              {membership?.invite_codes?.code ? (
-                <>
-                  <div className="mt-4">
-                    <CopyCode code={membership.invite_codes.code} size="lg" />
-                  </div>
-                  <p className="mt-4 text-xs leading-relaxed text-dim">
-                    This is the code you joined with. Invitations are issued by connectors, so
-                    it isn't yours to pass on.
-                  </p>
-                </>
-              ) : (
-                <p className="mt-3 text-sm text-dim">No code recorded.</p>
-              )}
-            </Panel>
-
-            <Panel className="divide-y divide-line">
-              <Row label="Membership">
-                <StatusBadge status={profile?.profile_status ?? 'active'} />
-              </Row>
-              <Row label="Joined">
-                <span className="text-sm text-muted">
-                  {membership ? formatDate(membership.created_at) : 'Not recorded'}
-                </span>
-              </Row>
-              <Row label="Email">
-                <span className="truncate text-sm text-muted">{profile?.email ?? 'Not set'}</span>
-              </Row>
-            </Panel>
-          </aside>
+          {/* Membership sidebar. The profile editor and the membership facts
+              live on Profile alone; here they were a second copy of each. */}
+          {membership?.invite_codes?.code && (
+            <aside>
+              <Panel className="px-6 py-6">
+                <div className="eyebrow">Your invitation code</div>
+                {/* Plain text, no Copy: it isn't theirs to pass on (NET-12). */}
+                <div className="mt-4 text-lg font-medium tracking-wide text-fg">
+                  {membership.invite_codes.code}
+                </div>
+                <p className="mt-4 text-xs leading-relaxed text-dim">
+                  Please don't pass this code on.
+                </p>
+              </Panel>
+            </aside>
+          )}
         </div>
       )}
     </DashboardShell>
-  )
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4 px-6 py-4">
-      <span className="eyebrow">{label}</span>
-      {children}
-    </div>
   )
 }

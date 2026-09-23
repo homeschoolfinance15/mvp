@@ -142,7 +142,7 @@ check(
 
 const usableBranch = TICKET.indexOf('{usable ? (')
 const qr = TICKET.indexOf('<QrCode')
-const elseBranch = TICKET.indexOf(') : (', usableBranch)
+const elseBranch = TICKET.indexOf(') : ', usableBranch)
 
 check(
   'BUY-11  the QR is drawn only inside the branch that checked the ticket',

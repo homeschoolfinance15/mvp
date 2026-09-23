@@ -1,10 +1,8 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type RefObject,
 } from 'react'
@@ -32,10 +30,14 @@ import type { Profile } from '../lib/types'
  * public brand layout. What changes between them is nothing a reader can see
  * up here.
  *
- * Anonymous visitors still get the public variant — browse and sign in, no
- * member links, no bell, no name — because /e/:slug, /events and checkout have
- * to work for somebody with no account at all (EVT-01). That is the only
- * branch in this file that matters.
+ * Signed in, the bar carries no links at all, whatever `nav` says: the
+ * wordmark, the bell, who you are and Sign out. Where to go lives in
+ * AppShell's left sidebar, built from navLinks() below, for every role.
+ *
+ * Anonymous visitors still get the public variant — browse and sign in, with
+ * its drawer below lg, no bell, no name — because /e/:slug, /events and
+ * checkout have to work for somebody with no account at all (EVT-01). That is
+ * the only branch in this file that matters.
  */
 
 const ROLE_LABEL: Record<string, string> = {
@@ -44,44 +46,42 @@ const ROLE_LABEL: Record<string, string> = {
   user: 'Member',
 }
 
+/** What the top bar calls the reader: an event-only account is a Guest. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function roleLabel(profile: Profile | null): string {
+  if (profile?.role === 'user' && !isNetworkMember(profile)) return 'Guest'
+  return ROLE_LABEL[profile?.role ?? ''] ?? ''
+}
+
 /* -------------------------------------------------------------------------- */
 /* What is in the nav                                                          */
 /* -------------------------------------------------------------------------- */
 
-interface NavLeaf {
+export interface NavLeaf {
   to: string
   label: string
 }
 
-/** One button that opens onto several addresses. Only Events is one today. */
-interface NavGroup {
+/** One heading over several addresses: My events, Events, Hosting. */
+export interface NavGroup {
   label: string
   items: NavLeaf[]
 }
 
-type NavEntry = NavLeaf | NavGroup
+export type NavEntry = NavLeaf | NavGroup
 
-function isGroup(entry: NavEntry): entry is NavGroup {
+// eslint-disable-next-line react-refresh/only-export-components
+export function isGroup(entry: NavEntry): entry is NavGroup {
   return 'items' in entry
 }
 
-/** Active for the address itself and everything underneath it. */
-function matches(pathname: string, to: string): boolean {
-  return pathname === to || pathname.startsWith(`${to}/`)
-}
-
 /**
- * Feed, events and the circle are shared by all three roles, so the nav lives
- * here rather than being rebuilt per dashboard.
- *
- * Inline above 1024px, a drawer below it. The line is lg rather than md
- * because an iPad in portrait is 820px wide: at md it would get the desktop
- * bar and the name would crowd the links. Phones and tablets get the menu.
- *
- * A menu, not a sideways scroll — a link you have to scroll to is a link most
- * people never find, and nothing on screen says it is there.
+ * Feed, events and the circle are shared by all three roles, so the list lives
+ * here rather than being rebuilt per dashboard. AppShell draws it as the
+ * sidebar; this header no longer draws it at all.
  */
-function navLinks(profile: Profile | null): NavEntry[] {
+// eslint-disable-next-line react-refresh/only-export-components
+export function navLinks(profile: Profile | null): NavEntry[] {
   // ORG-01, ORG-01C. `/events` is the attendee's page — what is on, and what
   // they can book. It is not a way in to hosting, and until this link existed
   // there was none: every route into /manage/events came from inside
@@ -117,31 +117,60 @@ function navLinks(profile: Profile | null): NavEntry[] {
   const member = isNetworkMember(profile)
 
   // /events/mine is where a ticket is found, and BUY-12 means that has to be
-  // reachable from anywhere rather than only from the confirmation email.
-  // Omitted for an event-only account, whose Dashboard link is already this
-  // exact address (homePathFor) — one nav should not offer the same page twice.
+  // reachable from anywhere rather than only from the confirmation email. It
+  // is three pages, one per bucket, each its own address in the sidebar.
   const home = homePathFor(profile)
-
-  // Three addresses, one word. Browsing what is on, looking at your own
-  // tickets and running an event you host are all "events" to the person
-  // reading the bar, and three sibling links spent a third of it saying so.
-  // The group is only built when there is more than browsing in it — a menu
-  // holding one item is a link wearing a costume.
-  const eventItems: NavLeaf[] = FEATURES.events
+  const mine: NavLeaf[] = FEATURES.events
     ? [
-        { to: '/events', label: 'Browse' },
-        ...(home !== '/events/mine' ? [{ to: '/events/mine', label: 'My events' }] : []),
-        ...(hosts ? [{ to: '/manage/events', label: 'Hosting' }] : []),
+        { to: '/events/mine', label: 'Coming up' },
+        { to: '/events/mine/past', label: 'Been to' },
+        { to: '/events/mine/cancelled', label: 'Cancelled' },
       ]
     : []
+  const browse: NavLeaf[] = FEATURES.events ? [{ to: '/events', label: 'Browse' }] : []
+
+  // An event-only account's home IS /events/mine, so its sidebar is its
+  // tickets, what is on, and its profile — no separate home link. Decided on
+  // the account rather than on homePathFor, which answers /onboarding until
+  // onboarding is done and would hand them a member's sidebar meanwhile.
+  if (profile?.role === 'user' && profile.network_member === false) {
+    return [
+      ...(mine.length ? [{ label: 'My events', items: mine }] : []),
+      ...browse,
+      { to: '/profile', label: 'Profile' },
+    ]
+  }
+
+  const hosting: NavLeaf[] =
+    FEATURES.events && hosts
+      ? [
+          { to: '/manage/events', label: 'Upcoming' },
+          { to: '/manage/events/drafts', label: 'Drafts' },
+          { to: '/manage/events/past', label: 'Past' },
+          { to: '/manage/events/cancelled', label: 'Cancelled' },
+        ]
+      : []
+
+  // A connector's home is three pages rather than one with tabs; /connector
+  // itself only redirects to the first, so it gets no link of its own.
+  const homeLinks: NavLeaf[] =
+    profile?.role === 'connector'
+      ? [
+          { to: '/connector/people', label: 'People' },
+          { to: '/connector/invitations', label: 'Invitations' },
+          { to: '/connector/raised', label: 'Raised' },
+        ]
+      : [{ to: home, label: 'Dashboard' }]
 
   return [
-    { to: home, label: 'Dashboard' },
+    ...homeLinks,
     // Held back until the client signs them off. See src/lib/features.ts.
     ...(FEATURES.feed && member ? [{ to: '/feed', label: 'Feed' }] : []),
-    ...(eventItems.length > 1
-      ? [{ label: 'Events', items: eventItems }]
-      : eventItems.map((item) => ({ ...item, label: 'Events' }))),
+    ...(FEATURES.events
+      ? // An administrator's Platform section already has an "Events".
+        [{ label: profile?.role === 'admin' ? 'Attending' : 'Events', items: [...browse, ...mine] }]
+      : []),
+    ...(hosting.length ? [{ label: 'Hosting', items: hosting }] : []),
     // BUY-14. A connector's own Stripe setup was reachable from exactly one
     // place: the "this event cannot sell" banner on an event they had already
     // created and tried to put paid tickets on. So the only route to connecting
@@ -151,13 +180,14 @@ function navLinks(profile: Profile | null): NavEntry[] {
     ...(FEATURES.events && profile?.role === 'connector'
       ? [{ to: '/connector/payments', label: 'Payments' }]
       : []),
-    ...(member ? [{ to: '/circle', label: 'Circle' }] : []),
+    // An administrator is in no circle, so the page would only be empty.
+    ...(member && profile?.role !== 'admin' ? [{ to: '/circle', label: 'Circle' }] : []),
     { to: '/profile', label: 'Profile' },
   ]
 }
 
 /** EVT-01. What a visitor with no account is offered, and all they are offered. */
-function publicLinks(): NavEntry[] {
+function publicLinks(): NavLeaf[] {
   return FEATURES.events ? [{ to: '/events', label: 'Browse events' }] : []
 }
 
@@ -168,8 +198,8 @@ function publicLinks(): NavEntry[] {
 /**
  * Escape, or a press anywhere outside, closes it.
  *
- * The drawer and the Events menu are the same problem twice, so they are the
- * same six lines once. pointerdown rather than click: a menu that survives
+ * Every drawer has this problem, so it is the same six lines once.
+ * pointerdown rather than click: a menu that survives
  * until the mouse comes back up flickers, and a press that begins outside was
  * never meant for what is open.
  */
@@ -200,7 +230,7 @@ function useDismiss<T extends HTMLElement>(
  *
  * Escape and an outside press close it; following a link closes it; the page
  * behind does not scroll while it is open; opening it moves focus inside.
- * The header's own menu uses it, and so does the admin sidebar's — which is
+ * The header's public menu uses it, and so does AppShell's sidebar — which is
  * the reason it is exported rather than inlined where it is used.
  *
  * Put `panelRef` on the panel itself, not on the backdrop: "outside" means
@@ -251,152 +281,16 @@ function NavItem({ to, children }: { to: string; children: ReactNode }) {
   )
 }
 
-/**
- * The Events menu.
- *
- * A menu button rather than a hover flyout: hover cannot be pressed on a
- * phone, cannot be reached from a keyboard and opens itself when somebody is
- * only passing through on the way to Circle. Click opens, Escape closes and
- * hands focus back to the button, a press outside closes, arrows walk the
- * items and Tab leaves. Focus rings come from the global :focus-visible rule
- * in index.css, so there is nothing to style here.
- */
-function NavGroupMenu({ group }: { group: NavGroup }) {
-  const { pathname } = useLocation()
-  const [open, setOpen] = useState(false)
-  const boxRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const menuId = useId()
-  // Set when the menu is opened from the keyboard, so focus lands on an item
-  // rather than staying behind on the button that opened it.
-  const wanted = useRef<'first' | 'last' | null>(null)
-
-  const close = useCallback(() => {
-    setOpen(false)
-    // Only take focus back if it is in here to take. On an outside press it
-    // belongs to whatever was pressed, and stealing it would be a bug.
-    if (boxRef.current?.contains(document.activeElement)) triggerRef.current?.focus()
-  }, [])
-  useDismiss(open, close, boxRef)
-
-  function itemEls(): HTMLAnchorElement[] {
-    return Array.from(
-      boxRef.current?.querySelectorAll<HTMLAnchorElement>('[role="menuitem"]') ?? [],
-    )
-  }
-
-  useEffect(() => {
-    const want = wanted.current
-    if (!open || !want) return
-    wanted.current = null
-    const all = itemEls()
-    ;(want === 'first' ? all[0] : all[all.length - 1])?.focus()
-  }, [open])
-
-  // Choosing an item is a press *inside* the menu, so the outside-press rule
-  // never fires and the menu would still be hanging open over the page it
-  // just opened. Closed on arrival instead — and without the focus hand-back,
-  // which belongs to the Escape key, not to leaving the page.
-  useEffect(() => {
-    setOpen(false)
-  }, [pathname])
-
-  function onTriggerKey(e: ReactKeyboardEvent) {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
-    e.preventDefault()
-    wanted.current = e.key === 'ArrowDown' ? 'first' : 'last'
-    setOpen(true)
-  }
-
-  function onMenuKey(e: ReactKeyboardEvent) {
-    const all = itemEls()
-    if (all.length === 0) return
-    const at = all.indexOf(document.activeElement as HTMLAnchorElement)
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      const step = e.key === 'ArrowDown' ? 1 : -1
-      all[(at + step + all.length) % all.length]?.focus()
-    } else if (e.key === 'Home') {
-      e.preventDefault()
-      all[0]?.focus()
-    } else if (e.key === 'End') {
-      e.preventDefault()
-      all[all.length - 1]?.focus()
-    } else if (e.key === 'Tab') {
-      // Tabbing out of a menu means leaving it, not cycling inside it.
-      setOpen(false)
-    }
-  }
-
-  const active = group.items.some((item) => matches(pathname, item.to))
-
-  return (
-    <div ref={boxRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={onTriggerKey}
-        className={`${ITEM} flex items-center gap-1.5 ${
-          active || open ? 'text-gold' : 'text-dim hover:text-fg'
-        }`}
-      >
-        {group.label}
-        <span aria-hidden className="text-[0.5rem] leading-none">
-          &#9660;
-        </span>
-      </button>
-
-      {open && (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label={group.label}
-          onKeyDown={onMenuKey}
-          className="absolute top-full left-0 z-40 mt-2 min-w-44 border border-line bg-ink py-1 shadow-[0_18px_40px_rgba(16,46,40,0.18)]"
-        >
-          {group.items.map((item) => (
-            <NavLink
-              key={item.label}
-              role="menuitem"
-              to={item.to}
-              end
-              className={({ isActive }) =>
-                `block px-4 py-2.5 text-xs tracking-[0.1em] whitespace-nowrap uppercase transition-colors ${
-                  isActive ? 'bg-gold-wash text-gold' : 'text-dim hover:text-fg'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** One row of the drawer. Group members are indented under their heading. */
-function DrawerLink({
-  to,
-  indent,
-  children,
-}: {
-  to: string
-  indent?: boolean
-  children: ReactNode
-}) {
+/** One row of the drawer. */
+function DrawerLink({ to, children }: { to: string; children: ReactNode }) {
   return (
     <NavLink
       to={to}
       end
       className={({ isActive }) =>
-        `block py-3 text-xs tracking-[0.12em] uppercase transition-colors ${
-          indent ? 'pr-5 pl-8' : 'px-5'
-        } ${isActive ? 'bg-gold-wash text-gold' : 'text-dim hover:text-fg'}`
+        `block px-5 py-3 text-xs tracking-[0.12em] uppercase transition-colors ${
+          isActive ? 'bg-gold-wash text-gold' : 'text-dim hover:text-fg'
+        }`
       }
     >
       {children}
@@ -419,12 +313,12 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
     navigate('/')
   }
 
-  // `nav={false}` is for a page that carries its own navigation somewhere else
-  // — the admin area puts its sections in a left sidebar. The header keeps the
-  // wordmark, the bell and who you are, and stops claiming to be the way
-  // around the site. No links means no drawer either: there is nothing in it.
-  const entries = !nav ? [] : signedIn ? navLinks(profile) : publicLinks()
-  const roleLabel = ROLE_LABEL[profile?.role ?? ''] ?? ''
+  // Only an anonymous visitor is ever offered links up here. Signed in, the
+  // way around the site is AppShell's sidebar, so the header keeps the
+  // wordmark, the bell and who you are, and has no drawer: there is nothing to
+  // put in it. `nav={false}` does the same for an anonymous page.
+  const publicNav = nav && !signedIn
+  const entries = publicNav ? publicLinks() : []
 
   return (
     <>
@@ -440,15 +334,11 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
                   in, which is what `nav={false}` would otherwise leave. */}
               {entries.length > 0 && (
                 <nav aria-label="Main" className="hidden items-center gap-5 lg:flex">
-                  {entries.map((entry) =>
-                    isGroup(entry) ? (
-                      <NavGroupMenu key={entry.label} group={entry} />
-                    ) : (
-                      <NavItem key={entry.label} to={entry.to}>
-                        {entry.label}
-                      </NavItem>
-                    ),
-                  )}
+                  {entries.map((entry) => (
+                    <NavItem key={entry.label} to={entry.to}>
+                      {entry.label}
+                    </NavItem>
+                  ))}
                 </nav>
               )}
             </div>
@@ -464,15 +354,17 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
             <div className="flex shrink-0 items-center gap-3 sm:gap-4">
               {signedIn && <NotificationBell />}
 
-              {/* With a nav, this is the drawer's job below lg. Without one,
-                  there is no drawer, so it stays in the bar at every width and
-                  only the name steps aside on the narrowest screens. */}
-              <div className={`shrink-0 items-center gap-4 ${nav ? 'hidden lg:flex' : 'flex'}`}>
+              {/* For an anonymous visitor this is the drawer's job below lg.
+                  Otherwise there is no drawer, so it stays in the bar at every
+                  width and only the name steps aside on the narrowest screens. */}
+              <div
+                className={`shrink-0 items-center gap-4 ${publicNav ? 'hidden lg:flex' : 'flex'}`}
+              >
                 {signedIn ? (
                   <>
-                    <div className={nav ? 'text-right' : 'hidden text-right sm:block'}>
+                    <div className="hidden text-right sm:block">
                       <div className="text-xs font-medium text-fg">{profile?.full_name}</div>
-                      <div className="text-[0.6875rem] tracking-wide text-dim">{roleLabel}</div>
+                      <div className="text-[0.6875rem] tracking-wide text-dim">{roleLabel(profile)}</div>
                     </div>
                     <button
                       type="button"
@@ -489,9 +381,8 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
                 )}
               </div>
 
-              {/* Narrow: everything above lives in a drawer, including the
-                  name and role, which used to disappear entirely below 640px. */}
-              {nav && (
+              {/* Narrow and anonymous: browse and sign in live in a drawer. */}
+              {publicNav && (
                 <button
                   type="button"
                   onClick={() => setMenuOpen(true)}
@@ -517,7 +408,7 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
       {/* `inert` as well as aria-hidden: the panel is always mounted so it can
           slide, and a closed drawer parked off-screen still held tabbable
           links on a phone, where nothing above it is display:none. */}
-      {nav && (
+      {publicNav && (
         <div
           className={`fixed inset-0 z-50 lg:hidden ${menuOpen ? '' : 'pointer-events-none'}`}
           aria-hidden={!menuOpen}
@@ -540,16 +431,7 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
             }`}
           >
             <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
-              <div className="min-w-0">
-                {signedIn ? (
-                  <>
-                    <div className="truncate text-sm font-medium text-fg">{profile?.full_name}</div>
-                    <div className="text-[0.6875rem] tracking-wide text-dim">{roleLabel}</div>
-                  </>
-                ) : (
-                  <div className="text-sm font-medium text-fg">Menu</div>
-                )}
-              </div>
+              <div className="min-w-0 text-sm font-medium text-fg">Menu</div>
               <button
                 type="button"
                 onClick={() => setMenuOpen(false)}
@@ -560,44 +442,20 @@ export function SiteHeader({ nav = true }: { nav?: boolean }) {
               </button>
             </div>
 
-            {/* No dropdown in here. A floating menu inside a drawer is two
-              layers of hiding for three links, so the group is a heading with
-              its items under it and everything is visible at once. */}
             <nav aria-label="Main" className="flex-1 overflow-y-auto py-2">
-              {entries.map((entry) =>
-                isGroup(entry) ? (
-                  <div key={entry.label} className="py-1">
-                    <div className="eyebrow px-5 pt-3 pb-1">{entry.label}</div>
-                    {entry.items.map((item) => (
-                      <DrawerLink key={item.label} to={item.to} indent>
-                        {item.label}
-                      </DrawerLink>
-                    ))}
-                  </div>
-                ) : (
-                  <DrawerLink key={entry.label} to={entry.to}>
-                    {entry.label}
-                  </DrawerLink>
-                ),
-              )}
+              {entries.map((entry) => (
+                <DrawerLink key={entry.label} to={entry.to}>
+                  {entry.label}
+                </DrawerLink>
+              ))}
             </nav>
 
-            {signedIn ? (
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="border-t border-line px-5 py-4 text-left text-xs tracking-[0.12em] text-dim uppercase transition-colors hover:text-fg"
-              >
-                Sign out
-              </button>
-            ) : (
-              <Link
-                to="/signin"
-                className="border-t border-line px-5 py-4 text-xs tracking-[0.12em] text-dim uppercase transition-colors hover:text-fg"
-              >
-                Sign in
-              </Link>
-            )}
+            <Link
+              to="/signin"
+              className="border-t border-line px-5 py-4 text-xs tracking-[0.12em] text-dim uppercase transition-colors hover:text-fg"
+            >
+              Sign in
+            </Link>
           </div>
         </div>
       )}

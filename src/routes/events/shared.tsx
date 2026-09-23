@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { AppShell } from '../../components/AppShell'
 import { SiteHeader } from '../../components/SiteHeader'
-import { Button } from '../../components/ui'
+import { Button, PageLoader } from '../../components/ui'
+import { useAuth } from '../../context/AuthProvider'
 import {
   CAPACITY_WORDS,
   eventWhen,
   eventWhere,
   type CapacityState,
-  type EventRecord,
   type PublicEvent,
+  type PublicEventRow,
   type TicketType,
 } from '../../lib/events'
 import { signMedia } from '../../lib/media'
@@ -37,7 +39,9 @@ import { loadFailed, supabase } from '../../lib/supabase'
 /* -------------------------------------------------------------------------- */
 
 /**
- * The frame every attendee screen sits in, signed in or not.
+ * The frame every attendee screen sits in, signed in or not. Signed in, it
+ * sits inside AppShell, so a member never loses the sidebar on the way to a
+ * ticket; anonymous, it keeps the public header.
  *
  * `brand-experience` carries the public layout — rounder controls, the wider
  * `brand-container` measure, the softer focus ring — which the shared
@@ -53,29 +57,80 @@ export function EventShell({
   /** Where the back link goes, when this screen is somewhere you came from. */
   back?: { to: string; label: string }
 }) {
+  const { session, profile, loading } = useAuth()
+  const signedIn = Boolean(session && profile)
+
+  // Nothing of the page until auth settles, so its children mount once, in
+  // the frame they belong to, rather than again when the sidebar arrives.
+  if (loading) return <PageLoader />
+
+  const main = (
+    <main id="event-main" className="brand-container flex-1 pb-24">
+      {back && (
+        <Link to={back.to} className="brand-text-link mb-6 inline-flex py-2">
+          <span aria-hidden="true">&larr;</span> {back.label}
+        </Link>
+      )}
+      {children}
+    </main>
+  )
+
+  // Signed in, AppShell carries the skip link and the only navigation.
+  if (signedIn) {
+    return (
+      <AppShell>
+        <div className="brand-experience flex flex-col">{main}</div>
+      </AppShell>
+    )
+  }
   return (
     <div className="brand-experience flex min-h-screen flex-col">
       <a className="brand-skip-link" href="#event-main">
         Skip to content
       </a>
-
       <SiteHeader />
-
-      <main id="event-main" className="brand-container flex-1 pb-24">
-        {back && (
-          <Link to={back.to} className="brand-text-link mb-6 inline-flex py-2">
-            <span aria-hidden="true">&larr;</span> {back.label}
-          </Link>
-        )}
-        {children}
-      </main>
-
+      {main}
       <footer className="brand-container flex items-center justify-between gap-4 border-t border-line py-7 text-xs text-dim">
         <span>People, not profiles.</span>
         <span>amazing &copy; {new Date().getFullYear()}</span>
       </footer>
     </div>
   )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Which of my events pages a booking lives on                                 */
+/* -------------------------------------------------------------------------- */
+
+export type BookingBucket = 'upcoming' | 'past' | 'cancelled'
+
+/** The three My events pages, each its own sidebar link. */
+export const BOOKING_PAGES: Record<BookingBucket, { title: string; path: string }> = {
+  upcoming: { title: 'Coming up', path: '/events/mine' },
+  past: { title: 'Been to', path: '/events/mine/past' },
+  cancelled: { title: 'Cancelled', path: '/events/mine/cancelled' },
+}
+
+/**
+ * Where a booking is filed, so every link to it names and opens that page.
+ * Cancelled wins over time: a dinner called off last month did not happen, and
+ * there may still be money outstanding on it. An event we cannot read counts
+ * as still to come, which is where an unresolved thing belongs.
+ */
+export function bookingBucket(
+  event: { status: string; starts_at: string; ends_at: string | null } | null,
+  registration?: { status: string } | null,
+  now = Date.now(),
+): BookingBucket {
+  if (registration?.status === 'cancelled' || event?.status === 'cancelled') return 'cancelled'
+  if (!event) return 'upcoming'
+  return new Date(event.ends_at ?? event.starts_at).getTime() < now ? 'past' : 'upcoming'
+}
+
+export function bookingPage(
+  ...args: Parameters<typeof bookingBucket>
+): { title: string; path: string } {
+  return BOOKING_PAGES[bookingBucket(...args)]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -137,7 +192,7 @@ export function remainingWords(
  * where somebody is expected. eventWhen() names the timezone, because an
  * event happens in its own, not in the reader's.
  */
-export function WhenWhere({ event }: { event: EventRecord }) {
+export function WhenWhere({ event }: { event: PublicEventRow }) {
   const where = eventWhere(event)
   return (
     <dl className="space-y-3 text-sm">
@@ -169,7 +224,7 @@ export function WhenWhere({ event }: { event: EventRecord }) {
  * requirements — an event changes rarely, availability changes while somebody
  * is looking at it.
  */
-async function attachAvailability(rows: EventRecord[]): Promise<PublicEvent[]> {
+async function attachAvailability(rows: PublicEventRow[]): Promise<PublicEvent[]> {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
 
@@ -231,24 +286,35 @@ export async function loadPublicEvent(slug: string): Promise<PublicEvent | null>
     .maybeSingle()
   if (error) throw error
   if (!data) return null
-  const [composed] = await attachAvailability([data as EventRecord])
+  const [composed] = await attachAvailability([data as PublicEventRow])
   return composed ?? null
 }
 
 /**
- * EVT-05. What is still to come, soonest first. Anything that has already
- * ended is not somewhere you can go, so it is not on the list — browse is for
- * deciding where to be, not for reading history.
+ * EVT-05, ATT-10. What is still to come, soonest first, plus anything already
+ * under way that is still taking registrations — a weekend festival or an
+ * evening with late entry does not vanish from the list at its first minute,
+ * the way Eventbrite and Luma keep a running event listed while it sells.
+ * Anything that has ended is not somewhere you can go, so it is not on the
+ * list — browse is for deciding where to be, not for reading history.
+ *
+ * "Ended" is the end time, or the start time when the host left the end
+ * open, which is the same line event_capacity_state draws for `finished`.
  */
 export async function loadUpcomingEvents(): Promise<PublicEvent[]> {
+  const now = new Date().toISOString()
   const { data, error } = await supabase
     .from('event_public')
     .select('*')
     .eq('status', 'published')
-    .gte('starts_at', new Date().toISOString())
+    .or(`ends_at.gte.${now},and(ends_at.is.null,starts_at.gte.${now})`)
     .order('starts_at', { ascending: true })
   if (error) throw error
-  return attachAvailability((data as EventRecord[] | null) ?? [])
+  const events = await attachAvailability((data as PublicEventRow[] | null) ?? [])
+  // Started and not open (sold out, closed) is not somewhere you can still go.
+  return events.filter(
+    (e) => new Date(e.starts_at).getTime() >= Date.parse(now) || e.capacity_state === 'open',
+  )
 }
 
 /* -------------------------------------------------------------------------- */
@@ -428,7 +494,7 @@ export function NeedsSignIn({ what, to }: { what: string; to: string }) {
     <div className="mx-auto max-w-md rounded-[6px] border border-dashed border-line-strong px-6 py-12 text-center">
       <p className="text-sm text-muted">Sign in to see {what}.</p>
       <p className="mt-2 text-xs text-dim">
-        You may have been signed out. Nothing has been lost &mdash; it is waiting for you.
+        You may have been signed out. Nothing has been lost.
       </p>
       <Button
         variant="primary"

@@ -54,6 +54,7 @@ import {
   MONEY_STATE_WORDS,
   attendanceLabel,
   awaitsRefundDecision,
+  mayBeMarkedAttended,
   mayMarkAttended,
   moneyState,
   type MoneyState,
@@ -407,7 +408,7 @@ function Guests({ data }: { data: ManagedEvent }) {
   }
 
   return (
-    <ManageShell event={event} current="guests">
+    <ManageShell event={event}>
       {outcome && (
         <div className="mb-6">
           <Notice tone="success">{outcome}</Notice>
@@ -439,7 +440,7 @@ function Guests({ data }: { data: ManagedEvent }) {
         <div className="mb-10">
           <SectionHeader
             title="Waiting on a decision from you"
-            caption="These people cancelled a place they had paid for. Their money has not moved, and nothing has told them what happens next."
+            caption="These people cancelled a paid place. Refund each one or decide not to — nobody has told them what happens next."
           />
           <Rows>
             {awaiting.map((g) => (
@@ -465,21 +466,11 @@ function Guests({ data }: { data: ManagedEvent }) {
               </Row>
             ))}
           </Rows>
-          <div className="mt-4">
-            <Explainer>
-              Refunding and cancelling are separate acts, and this is the second one. Their place is
-              already gone and giving the money back does not bring it back; equally, deciding not
-              to refund under your terms is a legitimate answer and leaves their cancellation
-              exactly as it is. Whichever you choose, the refund terms they agreed to when they
-              bought are kept with their order.
-            </Explainer>
-          </div>
         </div>
       )}
 
       <SectionHeader
         title="Guest list"
-        caption="Everybody who has a place, or had one. Search by name or email address."
         action={
           <Button variant="primary" size="sm" onClick={() => setInviting(true)}>
             Invite people
@@ -520,9 +511,8 @@ function Guests({ data }: { data: ManagedEvent }) {
       {!checkInRan && guests.length > 0 && (
         <div className="mb-4">
           <Explainer>
-            ATT-04. Nobody has been checked in for this event, so a blank check-in here does not
-            mean somebody stayed away — it means the door was never run. Marking somebody as having
-            attended below records it as a correction by you, with the reason.
+            Nobody has been checked in at the door for this event. To record somebody who came, use
+            Mark attended — it is kept as your correction, with your reason.
           </Explainer>
         </div>
       )}
@@ -539,8 +529,8 @@ function Guests({ data }: { data: ManagedEvent }) {
       ) : shown.length === 0 ? (
         <EmptyState>
           {guests.length === 0
-            ? 'Nobody has registered yet. Invitations you send appear below, and anybody who registers lands here.'
-            : 'Nobody on the guest list matches that.'}
+            ? 'No guests yet. Use Invite people.'
+            : 'No guests match.'}
         </EmptyState>
       ) : (
         <Rows>
@@ -595,7 +585,12 @@ function Guests({ data }: { data: ManagedEvent }) {
                   host recording their own presence is the FDB-06 case and is
                   meant to work.
                 */}
-                {g.attendedAt === null && mayMarkAttended(true) && (
+                {g.attendedAt === null &&
+                  mayMarkAttended(true) &&
+                  mayBeMarkedAttended(
+                    g.status,
+                    invites.some((i) => i.profileId === g.profileId),
+                  ) && (
                   <button
                     type="button"
                     onClick={() => setMarking(g)}
@@ -622,13 +617,10 @@ function Guests({ data }: { data: ManagedEvent }) {
       {/* ---------------------------------------------------------------- */}
 
       <div className="mt-12">
-        <SectionHeader
-          title="Invitations"
-          caption="ORG-08B. An invitation is an ask. It holds no place and confirms nothing until the person registers."
-        />
+        <SectionHeader title="Invitations" />
 
         {invites.length === 0 ? (
-          <EmptyState>Nobody has been invited to this event yet.</EmptyState>
+          <EmptyState>Nobody invited yet.</EmptyState>
         ) : (
           <Rows>
             {invites.map((i) => (
@@ -670,9 +662,7 @@ function Guests({ data }: { data: ManagedEvent }) {
 
         <div className="mt-4">
           <Explainer>
-            EML-05A. Each invitation is its own email — the people you invite never see each other's
-            names or addresses. Pressing invite twice for the same person does not send two copies;
-            a resend is a deliberate, separate act and is labelled as one here.
+            Inviting somebody twice does not send a second copy; use Send again for that.
           </Explainer>
         </div>
       </div>
@@ -818,7 +808,7 @@ function RefundModal({
       ? money(reply.amount_cents, order.currency)
       : full
     await onDone(
-      `${amount} is on its way back to ${guest!.name}. It is not counted as returned until the money actually lands, and the Results tab follows it. Their registration is unchanged.`,
+      `${amount} is on its way back to ${guest!.name}. It is not counted as returned until the money actually lands, and the Results page follows it. Their registration is unchanged.`,
       false,
     )
   }
@@ -859,8 +849,7 @@ function RefundModal({
       {settled ? (
         <>
           <p className="mt-5 text-sm leading-relaxed text-muted">
-            A refund is already open against this order, so there is nothing more to start here —
-            the same money is never sent back twice. Its status follows Stripe and updates itself.
+            A refund is already open for this order. Its status updates from Stripe.
           </p>
           <div className="mt-7">
             <Button className="w-full" onClick={onClose}>
@@ -871,10 +860,8 @@ function RefundModal({
       ) : (
         <>
           <p className="mt-5 text-sm leading-relaxed text-muted">
-            Refunding returns {full} through the account that took it. It does not change their
-            registration — their place is already gone and this will not bring it back. Deciding
-            not to refund under your event's terms is also an answer; close this and nothing
-            happens.
+            Refunding returns {full} through the account that took it. It does not give them their
+            place back. To not refund, close this and nothing happens.
           </p>
 
           <div className="mt-5">
@@ -944,7 +931,7 @@ function MarkAttendedModal({
         they are added to it; nobody who has already received it gets a second copy.
       </p>
       <div className="mt-5">
-        <Field label="Why" hint="Optional, but it is what makes the record make sense later.">
+        <Field label="Why" hint="Optional.">
           <Textarea
             rows={3}
             value={reason}
@@ -1165,13 +1152,7 @@ function InviteModal({
 
   return (
     <Modal open={open} title="Invite people to this event" onClose={busy ? () => {} : onClose}>
-      <p className="text-sm leading-relaxed text-muted">
-        {profile?.role === 'admin'
-          ? 'Everybody in a connector community on the platform.'
-          : 'The people in your own community. Another connector’s members are not yours to invite.'}
-      </p>
-
-      <div className="mt-5">
+      <div>
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}

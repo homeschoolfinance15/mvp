@@ -10,6 +10,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { Button, Field, Input, Notice } from '../components/ui'
 import { errorMessage, supabase } from '../lib/supabase'
 import { homePathFor, useAuth } from '../context/AuthProvider'
+import { MIN_PASSWORD_LENGTH, PASSWORD_RULE, passwordProblem } from '../lib/password'
 import type { CodeLookup } from '../lib/types'
 
 /**
@@ -33,7 +34,7 @@ export default function Join() {
   const [lookup, setLookup] = useState<CodeLookup | null>(
     initialState?.lookup?.valid ? initialState.lookup : null,
   )
-  const [fullName, setFullName] = useState('')
+  const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,7 +50,10 @@ export default function Join() {
     void check(emailedCode)
   })
 
-  if (!loading && session && profile) {
+  // Only somebody already in a network is sent home. A signed-in account
+  // with no profile (a redemption that failed after signup) or an event-only
+  // profile is exactly who this page is for now (ACC-06).
+  if (!loading && session && profile?.network_member) {
     return <Navigate to={homePathFor(profile)} replace />
   }
 
@@ -76,7 +80,9 @@ export default function Join() {
       setError(result.reason)
       return
     }
-    if (result.kind === 'connector_claim') {
+    // A signed-in account keeps the name it already has; the invitation's is
+    // only a starting point for somebody new.
+    if (result.kind === 'connector_claim' && !session) {
       setFullName(result.full_name)
       setEmail(result.email)
     }
@@ -90,6 +96,16 @@ export default function Join() {
   async function createAccount(e: FormEvent) {
     e.preventDefault()
     setError('')
+    if (!fullName.trim()) {
+      setError('Please enter your name.')
+      return
+    }
+    // A signed-in account redeems as itself; the password is not asked for.
+    const problem = session ? null : passwordProblem(password)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
     try {
       const result = await joinWithCode({ code, fullName, email, password })
@@ -109,14 +125,15 @@ export default function Join() {
       <AuthLayout
         eyebrow="By invitation"
         title="Enter your invitation code"
-        caption="Use the code you received to continue."
         footer={
-          <>
-            Already joined?{' '}
-            <Link to="/signin" className="text-fg underline-offset-4 hover:underline">
-              Sign in
-            </Link>
-          </>
+          !session && (
+            <>
+              Already joined?{' '}
+              <Link to="/signin" className="text-fg underline-offset-4 hover:underline">
+                Sign in
+              </Link>
+            </>
+          )
         }
       >
         <form onSubmit={checkCode} className="space-y-5">
@@ -144,22 +161,35 @@ export default function Join() {
 
   /* ---------------------------------------------------------------- step 2 */
   const isConnector = accepted.kind === 'connector_claim'
+  // ACC-11. An event-only account claiming a connector invitation is upgraded
+  // in place by redeem_code: same account, tickets kept.
+  const upgrading = Boolean(session && profile)
 
   return (
     <AuthLayout
       eyebrow={isConnector ? 'Connector access' : 'Your invitation'}
-      title={isConnector ? 'Create your connector account' : 'Create your account'}
+      title={
+        isConnector
+          ? upgrading
+            ? 'Become a connector'
+            : 'Create your connector account'
+          : upgrading
+            ? 'Join'
+            : 'Create your account'
+      }
       caption={
         isConnector ? (
           <>
             You can welcome up to{' '}
-            <span className="font-medium text-fg">{accepted.invite_capacity} people</span>. Add
-            your details to get started.
+            <span className="font-medium text-fg">{accepted.invite_capacity} people</span>.{' '}
+            {upgrading
+              ? 'Your account and your tickets stay as they are.'
+              : 'Add your details to get started.'}
           </>
         ) : (
           <>
             <span className="font-medium text-fg">{accepted.connector_name}</span> invited you.
-            Add your details to join.
+            {upgrading ? 'Add your details to join the network.' : 'Add your details to join.'}
           </>
         )
       }
@@ -188,35 +218,50 @@ export default function Join() {
           />
         </Field>
 
-        <Field
-          label="Email address"
-          hint={isConnector ? 'Pre-filled from your invitation. You can change it.' : undefined}
-        >
-          <Input
-            required
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="jane@company.com"
-            autoComplete="email"
-          />
-        </Field>
+        {session ? (
+          <p className="text-sm text-muted">
+            Using your account{' '}
+            <span className="font-medium text-fg">{session.user.email}</span>.
+          </p>
+        ) : (
+          <>
+            <Field
+              label="Email address"
+              hint={isConnector ? 'Pre-filled from your invitation. You can change it.' : undefined}
+            >
+              <Input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="jane@company.com"
+                autoComplete="email"
+              />
+            </Field>
 
-        <Field label="Password" hint="At least 8 characters.">
-          <Input
-            required
-            type="password"
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-        </Field>
+            <Field label="Password" hint={PASSWORD_RULE}>
+              <Input
+                required
+                type="password"
+                minLength={MIN_PASSWORD_LENGTH}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </Field>
+          </>
+        )}
 
         {error && <Notice tone="error">{error}</Notice>}
 
         <Button type="submit" variant="primary" loading={busy} className="w-full">
-          {isConnector ? 'Create connector account' : 'Create account'}
+          {isConnector
+            ? upgrading
+              ? 'Become a connector'
+              : 'Create connector account'
+            : upgrading
+              ? 'Join'
+              : 'Create account'}
         </Button>
       </form>
     </AuthLayout>

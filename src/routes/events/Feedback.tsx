@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useSidebarCurrent } from '../../components/AppShell'
 import {
   EmptyState,
   Initials,
@@ -22,7 +23,7 @@ import {
   type Answer,
   type Draft,
 } from './feedback/FeedbackForms'
-import { EventShell } from './shared'
+import { BOOKING_PAGES, EventShell, bookingPage } from './shared'
 
 /**
  * Feedback, after an event.
@@ -277,6 +278,8 @@ export default function Feedback() {
     void load()
   }, [authLoading, load])
 
+  useSidebarCurrent(event ? bookingPage(event).path : null)
+
   const peerQuestions = useMemo(
     () => questions.filter((q) => q.scope === 'peer'),
     [questions],
@@ -360,10 +363,14 @@ export default function Feedback() {
    * answering at all.
    */
   async function writeOutcome(subjectId: string, outcome: FeedbackOutcome) {
-    const { error: outcomeError } = await supabase.from('feedback_subjects').upsert(
-      { event_id: event!.id, author_id: me!, subject_id: subjectId, outcome },
-      { onConflict: 'event_id,author_id,subject_id' },
-    )
+    // ATT-1. A function, not an upsert: ON CONFLICT is checked against the
+    // admin-only select policy (FDB-12), so an attendee's upsert always
+    // failed. The function re-checks attendance and upserts on the server.
+    const { error: outcomeError } = await supabase.rpc('set_feedback_outcome', {
+      p_event: event!.id,
+      p_subject: subjectId,
+      p_outcome: outcome,
+    })
     if (outcomeError) throw outcomeError
   }
 
@@ -374,7 +381,6 @@ export default function Feedback() {
 
     const draft = peerDrafts[subjectId] ?? {}
     const answered = anyAnswered(draft, peerQuestions)
-    const now = new Date().toISOString()
 
     try {
       const rows = peerQuestions
@@ -385,23 +391,21 @@ export default function Feedback() {
         .map((q) => {
           const answer = answerOf(draft, q.id)
           return {
-            event_id: event.id,
-            author_id: me,
-            subject_id: subjectId,
             question_id: q.id,
             answer_text: answer.text.trim() || null,
             answer_choice: answer.choice,
-            submitted_at: now,
           }
         })
 
-      // Answers first, then the outcome. Upserted on the natural key, so a
-      // double tap or a retry after a timeout overwrites rather than adding
-      // a second review of the same person (FDB-07).
+      // Answers first, then the outcome. The function upserts on the natural
+      // key, so a double tap or a retry after a timeout overwrites rather than
+      // adding a second review of the same person (FDB-07).
       if (rows.length) {
-        const { error: writeError } = await supabase
-          .from('peer_feedback')
-          .upsert(rows, { onConflict: 'event_id,author_id,subject_id,question_id' })
+        const { error: writeError } = await supabase.rpc('submit_peer_feedback', {
+          p_event: event.id,
+          p_subject: subjectId,
+          p_answers: rows,
+        })
         if (writeError) throw writeError
       }
 
@@ -444,7 +448,6 @@ export default function Feedback() {
     if (!event || !me) return
     setBusy(true)
     setError('')
-    const now = new Date().toISOString()
 
     try {
       const rows = eventQuestions
@@ -455,18 +458,16 @@ export default function Feedback() {
         .map((q) => {
           const answer = answerOf(eventDraft, q.id)
           return {
-            event_id: event.id,
-            author_id: me,
             question_id: q.id,
             answer_scale: answer.scale,
             answer_text: answer.text.trim() || null,
-            submitted_at: now,
           }
         })
 
-      const { error: writeError } = await supabase
-        .from('event_feedback')
-        .upsert(rows, { onConflict: 'event_id,author_id,question_id' })
+      const { error: writeError } = await supabase.rpc('submit_event_feedback', {
+        p_event: event.id,
+        p_answers: rows,
+      })
       if (writeError) throw writeError
 
       await loadProgress(event.id)
@@ -482,9 +483,11 @@ export default function Feedback() {
 
   if (authLoading || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-dim">
-        <Spinner />
-      </div>
+      <Shell>
+        <div className="flex justify-center py-24 text-dim">
+          <Spinner />
+        </div>
+      </Shell>
     )
   }
 
@@ -501,9 +504,6 @@ export default function Feedback() {
       <Shell>
         <Panel className="px-6 py-10 text-center">
           <h1 className="display text-2xl">We can't find that event</h1>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            The link may be old, or the event may have been removed.
-          </p>
         </Panel>
       </Shell>
     )
@@ -522,8 +522,8 @@ export default function Feedback() {
         <Panel className="px-6 py-10">
           <h1 className="display text-2xl">Sign in to leave your feedback</h1>
           <p className="mt-3 text-sm leading-relaxed text-muted">
-            Your feedback on <strong className="text-fg">{event.title}</strong> is tied to
-            your account, so we need to know it is you. We will bring you straight back here.
+            Sign in to leave feedback on <strong className="text-fg">{event.title}</strong>. You
+            will come straight back here.
           </p>
           <div className="mt-6">
             {/* FDB-03. "Straight back here" is a promise the address has to
@@ -550,7 +550,7 @@ export default function Feedback() {
       <Shell>
         <Ineligible
           title="This event was cancelled"
-          body="There is no feedback to give, and nobody is expecting any from you."
+          body="There is no feedback to give."
         />
       </Shell>
     )
@@ -585,10 +585,8 @@ export default function Feedback() {
         <Ineligible
           title="Feedback is for people who came"
           body={
-            'We have no record of you being checked in at this event, so this form stays ' +
-            'closed. Holding a ticket, being invited or saying you were coming is not the ' +
-            'same thing. If you were there and were never scanned at the door, ask one of ' +
-            'the hosts to add you — they can, and the form opens as soon as they do.'
+            'You were not checked in at this event. If you were there, ask a host to check ' +
+            'you in and this form opens.'
           }
         />
       </Shell>
@@ -631,12 +629,9 @@ export default function Feedback() {
               url={avatars[selectedPeer.subject_id]}
               size="lg"
             />
-            <div className="min-w-0">
-              <h2 className="text-lg text-fg">
-                {selectedPeer.subject_name ?? 'Someone who was there'}
-              </h2>
-              <p className="text-xs text-dim">Three questions, all optional.</p>
-            </div>
+            <h2 className="min-w-0 text-lg text-fg">
+              {selectedPeer.subject_name ?? 'Someone who was there'}
+            </h2>
           </div>
 
           {/*
@@ -660,9 +655,8 @@ export default function Feedback() {
                   : selectedPeer.outcome === 'skipped'
                     ? 'You left this blank last time. Anything you write now will be sent.'
                     : 'You have already sent feedback about this person, and you can change it. ' +
-                      'Only Amazing administrators can read what you wrote, so we cannot show it ' +
-                      'back to you here — anything you write now replaces your answer to that ' +
-                      'question, and a question you leave blank keeps the answer you gave before.'}
+                      'Anything you write now replaces your answer to that question, and a ' +
+                      'question you leave blank keeps the answer you gave before.'}
               </p>
             </div>
           )}
@@ -713,9 +707,8 @@ export default function Feedback() {
 
             {peers.length === 0 ? (
               <EmptyState>
-                Nobody else has been checked in at this event yet, so there is nobody to
-                write about. That is not the same as nobody having come — if check-in was
-                not finished on the door, a host can still put it right.
+                Nobody else has been checked in at this event yet. If someone you met is
+                missing, ask a host to check them in.
               </EmptyState>
             ) : shownPeers.length === 0 ? (
               // QLT-02. An empty filter is not an empty event, and saying so
@@ -773,27 +766,22 @@ export default function Feedback() {
               so we name it: a correction reopens both this list and that
               person's own form.
             */}
-            <p className="mt-3 text-xs leading-relaxed text-dim">
-              Only people checked in at the door are here. If someone you met is missing,
-              their check-in was probably missed rather than skipped — ask a host to correct
-              it and they will appear.
-            </p>
+            {peers.length > 0 && (
+              <p className="mt-3 text-xs leading-relaxed text-dim">
+                If someone you met is missing, ask a host to check them in and they will appear.
+              </p>
+            )}
           </section>
 
           <section>
-            <SectionHeader
-              title="The event itself"
-              caption="Two questions about the evening rather than the people."
-            />
+            <SectionHeader title="The event itself" />
 
             {eventOutcome === 'submitted' ? (
               // FDB-12/13. Confirmation and nothing else: no score read back,
               // no summary, no "you said".
               <Panel className="px-5 py-6">
                 <p className="text-sm text-fg">You have sent your feedback on this event.</p>
-                <p className="mt-2 text-sm leading-relaxed text-muted">
-                  It is with Amazing's administrators. Thank you.
-                </p>
+                <NextStep page={BOOKING_PAGES.past} />
               </Panel>
             ) : (
               <EventForm
@@ -811,12 +799,6 @@ export default function Feedback() {
           </section>
         </div>
       )}
-
-      <p className="mt-12 pb-10 text-center text-xs text-dim">
-        <Link to="/events/mine" className="transition-colors hover:text-fg">
-          Back to your events
-        </Link>
-      </p>
     </Shell>
   )
 }
@@ -850,12 +832,18 @@ function Ineligible({ title, body }: { title: string; body: string }) {
     <Panel className="px-6 py-10">
       <h1 className="display text-2xl">{title}</h1>
       <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
-      <div className="mt-7">
-        <Link to="/events/mine" className="text-sm text-gold transition-colors hover:text-fg">
-          Your events
-        </Link>
-      </div>
     </Panel>
+  )
+}
+
+/** The next step right after the event form is sent. */
+function NextStep({ page }: { page: { title: string; path: string } }) {
+  return (
+    <p className="mt-4 text-sm">
+      <Link to={page.path} className="brand-text-link">
+        Go to {page.title}
+      </Link>
+    </p>
   )
 }
 

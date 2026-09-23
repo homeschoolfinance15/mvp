@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Button, Field, Input, LoadFailed, Panel, Spinner } from '../../components/ui'
+import { Button, Field, Input, Notice, Panel, Spinner } from '../../components/ui'
 import { useLive } from '../../lib/live'
-import { loadFailed, supabase } from '../../lib/supabase'
-import type { CheckInResult, EventAttendance, EventRecord } from '../../lib/events'
+import { supabase } from '../../lib/supabase'
+import type { CheckInResult, EventAttendance } from '../../lib/events'
+import { ManagedEventGate, ManageShell, useManagedEvent } from './shared'
 
 /**
  * The door.
@@ -68,7 +69,7 @@ function barcodeReaderConstructor(): BarcodeReaderConstructor | null {
  * render a success that did not happen, so "we do not know" is a first-class
  * outcome with its own words rather than an error that looks like a refusal.
  */
-type Outcome = CheckInResult | 'unreachable'
+type Outcome = CheckInResult | 'unreachable' | 'refused'
 
 interface OutcomeStyle {
   headline: string
@@ -90,7 +91,7 @@ const OUTCOMES: Record<Outcome, OutcomeStyle> = {
   // failure. It gets the calm gold of "have a look", never red.
   already: {
     headline: 'Already checked in',
-    instruction: 'This is not a problem. They have arrived once and are counted once.',
+    instruction: 'Let them in. They are counted once.',
     frame: 'border-[#efc98f] bg-[#f6ecd9]',
     badge: 'text-[#8a4b00]',
   },
@@ -108,7 +109,8 @@ const OUTCOMES: Record<Outcome, OutcomeStyle> = {
   },
   cancelled: {
     headline: 'Ticket cancelled',
-    instruction: 'This booking was cancelled or the ticket was replaced. Send them to a host.',
+    instruction:
+      'This booking or the event was cancelled, or the ticket was replaced. Send them to a host.',
     frame: 'border-[#e6b5ad] bg-[#fff0ec]',
     badge: 'text-negative',
   },
@@ -120,10 +122,21 @@ const OUTCOMES: Record<Outcome, OutcomeStyle> = {
     frame: 'border-line-strong bg-raised',
     badge: 'text-muted',
   },
+  // ATT-02. The database answered, and the answer was no — a steward who is
+  // not a host, or a session that ran out. Its own sentence replaces this
+  // instruction, because "scan again when you have signal" would be a lie.
+  refused: {
+    headline: 'Not checked',
+    instruction: 'This phone is not allowed to check people in. Ask a host.',
+    frame: 'border-[#e6b5ad] bg-[#fff0ec]',
+    badge: 'text-negative',
+  },
 }
 
 interface Shown {
   outcome: Outcome
+  /** The database's own words, when it refused rather than answered. */
+  message?: string
   /** Only known once the ticket has been traced back to a person. */
   name?: string
   attendance?: Pick<EventAttendance, 'recorded_at' | 'recorded_by' | 'corrected'>
@@ -151,7 +164,11 @@ function arrivalSentence(shown: Shown): string | null {
 export default function CheckIn() {
   const { id = '' } = useParams()
 
-  const [event, setEvent] = useState<EventRecord | null>(null)
+  // EML-09. The same load and the same host check as every other organiser
+  // screen, so a steward who is not a host is told so rather than handed a
+  // scanner that refuses every ticket.
+  const { result, reload } = useManagedEvent(id)
+  const event = result.state === 'ready' ? result.data.event : null
   const [attendance, setAttendance] = useState<EventAttendance[]>([])
   const [names, setNames] = useState<Record<string, string>>({})
   const [expected, setExpected] = useState<number | null>(null)
@@ -164,8 +181,6 @@ export default function CheckIn() {
    * shout, and the previous figure is still the best one available.
    */
   const [rosterStale, setRosterStale] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
 
   const [shown, setShown] = useState<Shown | null>(null)
   const [busy, setBusy] = useState(false)
@@ -220,23 +235,10 @@ export default function CheckIn() {
     setRosterStale(Boolean(arrivals.error || people.error || confirmed.error))
   }, [id])
 
-  const load = useCallback(async () => {
-    setFailed(false)
-    const { data, error } = await supabase.from('events').select('*').eq('id', id).maybeSingle()
-    if (error || !data) {
-      if (error) loadFailed(error, 'this event')
-      setFailed(true)
-      setLoading(false)
-      return
-    }
-    setEvent(data as EventRecord)
-    await refreshRoster()
-    setLoading(false)
-  }, [id, refreshRoster])
-
+  const ready = result.state === 'ready'
   useEffect(() => {
-    void load()
-  }, [load])
+    if (ready) void refreshRoster()
+  }, [ready, refreshRoster])
 
   /*
    * ATT-03. Two stewards on two phones are one door. Until now each saw only
@@ -285,7 +287,13 @@ export default function CheckIn() {
         // we say so — and the fact that a repeat scan is harmless is the
         // instruction, not a caveat.
         console.error('[amazing] check-in failed:', error)
-        setShown({ outcome: 'unreachable' })
+        // P0001 is a raise in check_in itself: a refusal with a sentence, not
+        // a lost request.
+        setShown(
+          error.code === 'P0001'
+            ? { outcome: 'refused', message: error.message }
+            : { outcome: 'unreachable' },
+        )
         inFlight.current = false
         setBusy(false)
         return
@@ -399,23 +407,24 @@ export default function CheckIn() {
 
   /* ---- render ----------------------------------------------------------- */
 
-  if (loading) {
+  if (!event) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-dim">
-        <Spinner />
-      </div>
+      <ManagedEventGate result={result} reload={reload}>
+        {() => null}
+      </ManagedEventGate>
     )
   }
 
-  if (failed || !event) {
+  // ORG-5. A cancelled event admits nobody, and the database answers
+  // "cancelled" for every ticket. Saying it once here beats a steward
+  // discovering it one guest at a time.
+  if (event.status === 'cancelled') {
     return (
-      <div className="mx-auto max-w-lg px-5 py-16">
-        <LoadFailed what="this event's door" onRetry={() => void load()} />
-        <p className="mt-6 text-center text-sm text-dim">
-          If you are not a host or member of staff on this event, you will not be able to
-          check anybody in.
-        </p>
-      </div>
+      <ManageShell event={event}>
+        <Notice tone="error">
+          This event was cancelled. Nobody can be checked in.
+        </Notice>
+      </ManageShell>
     )
   }
 
@@ -443,10 +452,10 @@ export default function CheckIn() {
                 should not have to reach for the browser's back button to get
                 to the rest of the event. */}
             <Link
-              to={`/manage/events/${event.id}/guests`}
+              to={`/manage/events/${event.id}`}
               className="eyebrow mt-1 inline-block text-dim transition-colors hover:text-fg"
             >
-              &#8592; Manage event
+              &#8592; Event
             </Link>
           </div>
           <div className="shrink-0 text-right">
@@ -469,7 +478,7 @@ export default function CheckIn() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl space-y-6 px-5 py-6">
+      <main className="mx-auto max-w-2xl space-y-6 px-5 pt-6 pb-10">
         {/* The answer, first and largest. aria-live so a screen reader gets it
             without the steward hunting for where it appeared. */}
         <div aria-live="assertive">
@@ -487,7 +496,9 @@ export default function CheckIn() {
               {shown.outcome === 'already' && arrivalSentence(shown) && (
                 <p className="mt-1 text-sm text-fg">{arrivalSentence(shown)}</p>
               )}
-              <p className="mt-3 text-sm leading-relaxed text-muted">{style.instruction}</p>
+              <p className="mt-3 text-sm leading-relaxed text-muted">
+                {shown.message ?? style.instruction}
+              </p>
             </div>
           )}
 
@@ -533,10 +544,8 @@ export default function CheckIn() {
                   rather than showing a dead black rectangle. */}
               {camera === 'unsupported' && (
                 <p className="text-sm leading-relaxed text-muted">
-                  This browser cannot read QR codes. Scanning works in Chrome and Edge on
-                  Android, and in Chrome on ChromeOS and macOS. On anything else — Safari and
-                  Firefox included — type or paste the ticket code below instead. It records
-                  exactly the same arrival.
+                  This browser cannot read QR codes. Type or paste the ticket code below, or
+                  scan in Chrome or Edge on Android, or Chrome on ChromeOS or macOS.
                 </p>
               )}
 
@@ -631,12 +640,6 @@ export default function CheckIn() {
             </ul>
           )}
         </section>
-
-        <p className="pb-10 text-center text-xs text-dim">
-          <Link to={`/manage/events/${id}`} className="transition-colors hover:text-fg">
-            Back to the event
-          </Link>
-        </p>
       </main>
     </div>
   )

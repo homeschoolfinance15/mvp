@@ -41,9 +41,22 @@ const NO_SESSION_AFTER_SIGNUP =
   "Your account was created, but we couldn't sign you in automatically. " +
   'Check your inbox for a confirmation link, then sign in.'
 
+const EXISTING_ACCOUNT_WRONG_PASSWORD =
+  'An account already exists for that email address, and that password does not ' +
+  "match it. Enter that account's password to use your code with it."
+
+const NOT_AN_ADMIN_EMAIL =
+  "This email isn't approved for administrator access. Ask an existing " +
+  'administrator to add it.'
+
 const RATE_LIMITED =
   'Too many accounts have been created in the last hour. Please try again ' +
   'shortly, or ask the person who invited you to let us know.'
+
+function isAlreadyRegistered(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message : String(error)
+  return /already registered|already been registered/i.test(raw)
+}
 
 /**
  * Supabase surfaces provisioning problems as raw strings like "email rate limit
@@ -69,7 +82,7 @@ function humanSignupError(error: unknown): Error {
     return new Error(RATE_LIMITED)
   }
 
-  if (/already registered|already been registered/i.test(raw)) {
+  if (isAlreadyRegistered(raw)) {
     return new Error('An account already exists for that email address. Try signing in instead.')
   }
 
@@ -110,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const fetchProfile = useCallback(async (id: string) => {
+  const fetchProfile = useCallback(async (id: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
       // The questionnaire stamp rides along: RequireRole needs it on every
@@ -119,13 +132,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', id)
       .maybeSingle()
 
-    if (error) {
-      console.error('Failed to load profile', error)
-      setProfile(null)
-    } else {
-      setProfile((data as Profile) ?? null)
-    }
+    const next = error ? null : ((data as Profile) ?? null)
+    if (error) console.error('Failed to load profile', error)
+    setProfile(next)
     setSettledFor(id)
+    return next
   }, [])
 
   useEffect(() => {
@@ -158,13 +169,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const joinWithCode = useCallback<AuthValue['joinWithCode']>(
     async ({ code, fullName, email, password }) => {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: { data: { full_name: fullName.trim() } },
-      })
-      if (error) throw humanSignupError(error)
-      if (!data.session) throw new Error(NO_SESSION_AFTER_SIGNUP)
+      // ACC-2, ACC-06. The account may already exist: somebody whose earlier
+      // redemption failed after signUp, or an event-only account now joining a
+      // network. Signing up again would be refused forever, so reuse the
+      // session that is there, or sign in with the password they just typed.
+      let user = (await supabase.auth.getSession()).data.session?.user ?? null
+      if (!user) {
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: fullName.trim() } },
+        })
+        if (error && (error.code === 'user_already_exists' || isAlreadyRegistered(error))) {
+          const { data: signedIn, error: signInError } = await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          })
+          if (signInError) throw new Error(EXISTING_ACCOUNT_WRONG_PASSWORD)
+          user = signedIn.user
+        } else {
+          if (error) throw humanSignupError(error)
+          if (!data.session) throw new Error(NO_SESSION_AFTER_SIGNUP)
+          user = data.session.user
+        }
+      }
 
       const { data: redeemed, error: redeemError } = await supabase.rpc('redeem_code', {
         p_code: code.trim(),
@@ -176,11 +204,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // not be asked the same thirty questions again. Best effort: failing to
       // copy old answers must not fail the join.
       const { error: claimError } = await supabase.rpc('claim_waitlist_answers', {
-        p_email: email.trim(),
+        p_email: user.email ?? email.trim(),
       })
       if (claimError) console.error('[amazing] waitlist answers:', claimError)
 
-      await fetchProfile(data.session.user.id)
+      await fetchProfile(user.id)
       return redeemed as RedeemResult
     },
     [fetchProfile],
@@ -195,9 +223,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       if (error) throw humanSignupError(error)
       if (!data.session) throw new Error(NO_SESSION_AFTER_SIGNUP)
-      await fetchProfile(data.session.user.id)
+      // ACC-9. handle_new_user only provisions an allowlisted email. Anyone
+      // else is left holding a session with no profile, so sign them straight
+      // back out and say why. If the email is allowlisted later,
+      // provision_allowlisted_admin() gives this same account its profile.
+      if (!(await fetchProfile(data.session.user.id))) {
+        await signOut()
+        throw new Error(NOT_AN_ADMIN_EMAIL)
+      }
     },
-    [fetchProfile],
+    [fetchProfile, signOut],
   )
 
   const loading = !sessionLoaded || (userId !== null && settledFor !== userId)

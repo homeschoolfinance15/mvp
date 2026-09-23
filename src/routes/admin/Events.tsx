@@ -6,7 +6,6 @@ import {
   Input,
   Notice,
   Panel,
-  SectionHeader,
   Spinner,
 } from '../../components/ui'
 import { useLive } from '../../lib/live'
@@ -85,20 +84,16 @@ export default function Events() {
         </div>
       )}
 
-      <SectionHeader
-        title="Events"
-        caption="Every event on the platform. Open one to see its full record — registrations, payments, tickets, emails and feedback."
-        action={
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="w-56">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events"
-              aria-label="Search events by title, link or host"
-              />
-            </div>
-            {/* ORG-01. This section is the administrator's read-only record of
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
+        <div className="w-56">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search events"
+            aria-label="Search events by title, link or host"
+          />
+        </div>
+        {/* ORG-01. This section is the administrator's read-only record of
                 the platform (ORG-14) and stays that way — but it was also the
                 only place an administrator ever saw the word "Events", so with
                 no control here the create screen had no door at all. The button
@@ -106,24 +101,24 @@ export default function Events() {
                 under /manage/events for administrators and connectors alike,
                 and one editor for both is what keeps ORG-01 and ORG-01B the
                 same code path. */}
-            {/* The only door. An administrator manages every event, so the
+        {/* The only door. An administrator manages every event, so the
                 "Hosting" list that used to sit beside this ran the identical
                 query and showed the identical rows — the same platform, listed
                 twice, differing only in which page a row opened. Creating
                 starts here; opening a row gives the record, and the record
                 links on to the editor. */}
-            <Link to="/manage/events/new">
-              <Button variant="primary" size="sm">
-                Create event
-              </Button>
-            </Link>
-          </div>
-        }
-      />
+        <Link to="/manage/events/new">
+          <Button variant="primary" size="sm">
+            Create event
+          </Button>
+        </Link>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState>
-          {events.length === 0 ? 'No events yet.' : 'No events match that search.'}
+          {events.length === 0
+            ? 'No events yet. Press Create event to add the first.'
+            : 'No events match that search. Try a title, link or host name.'}
         </EmptyState>
       ) : (
         <Panel className="divide-y divide-line">

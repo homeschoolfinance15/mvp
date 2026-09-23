@@ -31,11 +31,11 @@ export function CitySearch({
   const boxRef = useRef<HTMLDivElement>(null)
   // What was last chosen or typed deliberately, so re-rendering does not
   // reopen the list on top of a settled answer.
-  const settled = useRef(value)
+  const [settled, setSettled] = useState(value.trim())
 
   useEffect(() => {
     const query = value.trim()
-    if (query === settled.current || query.length < MIN_QUERY) {
+    if (query === settled || query.length < MIN_QUERY) {
       setHits([])
       return
     }
@@ -57,7 +57,7 @@ export function CitySearch({
       controller.abort()
       setSearching(false)
     }
-  }, [value])
+  }, [value, settled])
 
   useEffect(() => {
     if (!open) return
@@ -69,7 +69,7 @@ export function CitySearch({
   }, [open])
 
   function choose(hit: CityHit) {
-    settled.current = hit.label
+    setSettled(hit.label.trim())
     onChange(hit.label)
     setOpen(false)
     setHits([])
@@ -97,7 +97,7 @@ export function CitySearch({
         <Input
           value={value}
           onChange={(e) => {
-            settled.current = ''
+            setSettled('')
             onChange(e.target.value)
           }}
           onKeyDown={onKeyDown}
@@ -152,7 +152,12 @@ export function CitySearch({
       )}
 
       {/* The fallback the handoff asks for, stated rather than implied. */}
-      {value.trim().length >= MIN_QUERY && !searching && hits.length === 0 && (
+      {/* Not for a settled answer: a chosen suggestion or a saved city is
+          not searched, so an empty list there means nothing. */}
+      {value.trim().length >= MIN_QUERY &&
+        value.trim() !== settled &&
+        !searching &&
+        hits.length === 0 && (
         <p className="mt-1.5 text-xs text-dim">
           No match. What you have typed is fine as it is.
         </p>

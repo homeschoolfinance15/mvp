@@ -5,7 +5,6 @@ import {
   Initials,
   Notice,
   Panel,
-  SectionHeader,
   Spinner,
   StatusBadge,
 } from '../../components/ui'
@@ -44,7 +43,8 @@ export default function Circles() {
       supabase
         .from('circle_messages')
         .select('*')
-        .order('created_at', { ascending: true })
+        // Newest 500, reversed below, so recent conversation is never cut off.
+        .order('created_at', { ascending: false })
         .limit(500),
     ])
 
@@ -59,7 +59,7 @@ export default function Circles() {
     setConnectors((connectorsRes.data as unknown as ConnectorRow[]) ?? [])
     setLinks((linksRes.data as unknown as LinkRow[]) ?? [])
     setProfilesById(byId((profilesRes.data as Profile[]) ?? []))
-    setMessages((circlesRes.data as CircleMessage[]) ?? [])
+    setMessages(((circlesRes.data as CircleMessage[]) ?? []).reverse())
     setLoading(false)
   }, [])
 
@@ -92,13 +92,8 @@ export default function Circles() {
         </div>
       )}
 
-      <SectionHeader
-        title="Circles"
-        caption="Every connector, the people beneath them, and what is being said in each room."
-      />
-
       {connectors.length === 0 ? (
-        <EmptyState>No connectors yet, so there are no circles.</EmptyState>
+        <EmptyState>Create a connector to start the first circle.</EmptyState>
       ) : (
         <div className="space-y-4">
           {connectors.map((connector) => {
@@ -118,12 +113,11 @@ export default function Circles() {
                         {connector.profiles?.full_name ?? 'Unknown'}
                       </span>
                       <span className="block truncate text-xs text-dim">
-                        {members.length} of {connector.invite_capacity} invited{' '}
-                        &middot; {said.length}{' '}
-                        {said.length === 1 ? 'message' : 'messages'}
+                        {said.length === 0
+                          ? 'No messages'
+                          : `${said.length} ${said.length === 1 ? 'message' : 'messages'} · last ${formatDate(said[said.length - 1].created_at)}`}
                       </span>
                     </span>
-                    <StatusBadge status={connector.invite_status} />
                   </summary>
 
                   <div className="border-t border-line">

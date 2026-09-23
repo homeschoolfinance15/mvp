@@ -4,6 +4,7 @@ import { errorMessage, loadFailed, supabase } from '../lib/supabase'
 import type { Profile, ProfileReport, ReportStatus } from '../lib/types'
 import {
   Button,
+  ConfirmModal,
   EmptyState,
   formatDate,
   LoadFailed,
@@ -12,6 +13,9 @@ import {
   SectionHeader,
   Spinner,
 } from './ui'
+
+/** Email only comes from profiles, i.e. for the people this viewer may contact. */
+type Person = Pick<Profile, 'id' | 'full_name'> & { email?: string | null }
 
 /**
  * What members have raised about each other.
@@ -26,21 +30,27 @@ export function FlagsPanel() {
   const { profile } = useAuth()
 
   const [reports, setReports] = useState<ProfileReport[]>([])
-  const [people, setPeople] = useState<Record<string, Profile>>({})
+  const [people, setPeople] = useState<Record<string, Person>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  // Closing a report can't be undone and tells the person who raised it, so
+  // Dismiss and Resolved ask first (ADM-15).
+  const [pending, setPending] = useState<{ id: string; status: ReportStatus } | null>(null)
 
   const load = useCallback(async () => {
     setError('')
     setFailed(false)
-    const [reportsRes, peopleRes] = await Promise.all([
+    // profiles only reaches a connector's own circle, but a report can come
+    // from anyone in the network, so member_directory names the rest.
+    const [reportsRes, peopleRes, directoryRes] = await Promise.all([
       supabase.from('profile_reports').select('*').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('*'),
+      supabase.from('profiles').select('id, full_name, email'),
+      supabase.from('member_directory').select('id, full_name'),
     ])
 
-    const firstError = [reportsRes.error, peopleRes.error].find(Boolean)
+    const firstError = [reportsRes.error, peopleRes.error, directoryRes.error].find(Boolean)
     if (firstError) {
       loadFailed(firstError, 'what people have raised')
       setFailed(true)
@@ -49,9 +59,12 @@ export function FlagsPanel() {
     }
 
     setReports((reportsRes.data as ProfileReport[]) ?? [])
-    setPeople(
-      Object.fromEntries(((peopleRes.data as Profile[]) ?? []).map((p) => [p.id, p])),
-    )
+    // Directory first so a profiles row (which carries email) wins.
+    const everyone = [
+      ...((directoryRes.data as Person[]) ?? []),
+      ...((peopleRes.data as Person[]) ?? []),
+    ]
+    setPeople(Object.fromEntries(everyone.map((p) => [p.id, p])))
     setLoading(false)
   }, [])
 
@@ -62,7 +75,9 @@ export function FlagsPanel() {
   const open = useMemo(() => reports.filter((r) => r.status === 'open'), [reports])
   const settled = useMemo(() => reports.filter((r) => r.status !== 'open'), [reports])
 
-  async function resolve(id: string, status: ReportStatus) {
+  async function resolve() {
+    if (!pending) return
+    const { id, status } = pending
     setBusyId(id)
     setError('')
     const { error: rpcError } = await supabase.rpc('resolve_profile_report', {
@@ -70,6 +85,7 @@ export function FlagsPanel() {
       p_status: status,
     })
     setBusyId(null)
+    setPending(null)
     if (rpcError) {
       setError(errorMessage(rpcError))
       return
@@ -87,11 +103,6 @@ export function FlagsPanel() {
 
   return (
     <>
-      <SectionHeader
-        title="Raised"
-        caption="What members have said about each other's profiles. The person it's about is never shown this, and never told."
-      />
-
       {error && (
         <div className="mb-4">
           <Notice tone="error">{error}</Notice>
@@ -101,7 +112,7 @@ export function FlagsPanel() {
       {failed ? (
         <LoadFailed what="what people have raised" onRetry={load} />
       ) : open.length === 0 ? (
-        <EmptyState>Nothing outstanding.</EmptyState>
+        <EmptyState>No open reports.</EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
           {open.map((report) => (
@@ -112,7 +123,7 @@ export function FlagsPanel() {
               // Rule 4, mirrored in the UI so the button isn't offered at all.
               canAct={report.reporter_id !== profile?.id}
               busy={busyId === report.id}
-              onResolve={resolve}
+              onResolve={async (id, status) => setPending({ id, status })}
             />
           ))}
         </Panel>
@@ -128,6 +139,23 @@ export function FlagsPanel() {
           </Panel>
         </div>
       )}
+
+      <ConfirmModal
+        open={pending !== null}
+        title={pending?.status === 'dismissed' ? 'Dismiss this?' : 'Mark this resolved?'}
+        body={(() => {
+          const report = reports.find((r) => r.id === pending?.id)
+          const reporter = (report && people[report.reporter_id]?.full_name) ?? 'Whoever raised it'
+          return pending?.status === 'dismissed'
+            ? `It moves to Dealt with as dismissed, with no change made. ${reporter} is told it has been dealt with. It can't be reopened.`
+            : `It moves to Dealt with as resolved. ${reporter} is told it has been dealt with. It can't be reopened.`
+        })()}
+        confirmLabel={pending?.status === 'dismissed' ? 'Dismiss' : 'Resolved'}
+        tone="primary"
+        busy={busyId !== null}
+        onConfirm={() => void resolve()}
+        onClose={() => setPending(null)}
+      />
     </>
   )
 }
@@ -146,7 +174,7 @@ function ReportRow({
   onResolve,
 }: {
   report: ProfileReport
-  people: Record<string, Profile>
+  people: Record<string, Person>
   canAct?: boolean
   busy?: boolean
   onResolve?: (id: string, status: ReportStatus) => Promise<void>

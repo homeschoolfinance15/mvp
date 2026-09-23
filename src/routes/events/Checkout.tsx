@@ -22,6 +22,7 @@ import {
   WhenWhere,
   countdown,
   loadPublicEvent,
+  bookingPage,
   useLoader,
   useNow,
 } from './shared'
@@ -53,7 +54,9 @@ const PATIENCE_MS = 90_000
 interface Loaded {
   event: PublicEvent | null
   /** The reader's live place, if they have one. */
-  registration: (EventRegistration & { event_tickets: { id: string }[] | null }) | null
+  // One object, not a list: event_tickets.registration_id is unique, so
+  // PostgREST embeds it one-to-one.
+  registration: (EventRegistration & { event_tickets: { id: string } | null }) | null
   /** Their most recent order for this event, whatever became of it. */
   order: EventOrder | null
 }
@@ -120,7 +123,12 @@ export default function Checkout() {
   const chosen: TicketType | null =
     types.find((t) => t.id === wanted) ?? (types.length === 1 ? types[0] : null)
 
-  const paidUp = order?.status === 'paid' || registration?.status === 'confirmed'
+  // ATT-3. A paid order only counts for the place it paid for. Cancelling a
+  // paid place leaves the order `paid` (no refund has happened), so without
+  // the match they would be told they are going and could never book again.
+  const paidUp =
+    registration?.status === 'confirmed' ||
+    (order?.status === 'paid' && order.registration_id === registration?.id)
 
   // ORG-04. `remaining` is composed by `attachAvailability`; `quantity` is the
   // organiser's cap and never moves, so it could never answer this.
@@ -244,11 +252,8 @@ export default function Checkout() {
         <div className="mx-auto max-w-md py-20 text-center">
           <h1 className="display text-3xl">We can&rsquo;t find that event</h1>
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            Nothing has been charged. The link may have been cut short on its way to you.
+            Nothing has been charged. Ask whoever sent you the link to send it again.
           </p>
-          <Link to="/events" className="mt-8 inline-block">
-            <Button variant="primary">See what else is on</Button>
-          </Link>
         </div>
       </EventShell>
     )
@@ -276,9 +281,8 @@ export default function Checkout() {
           <Panel className="px-6 py-8 sm:px-8">
             <h1 className="display text-2xl">One thing first</h1>
             <p className="mt-4 text-sm leading-relaxed text-muted">
-              Before you take a place we need a little about you &mdash; it takes under a minute,
-              and the host sees it on their guest list. Nothing has been charged, and we&rsquo;ll
-              bring you straight back here afterwards.
+              Finish your profile before you take a place. The host sees it on their guest list.
+              Nothing has been charged, and you&rsquo;ll come straight back here afterwards.
             </p>
             <Button
               variant="primary"
@@ -428,10 +432,11 @@ export default function Checkout() {
           <Confirmed
             event={event}
             free={free}
-            ticketId={registration?.event_tickets?.[0]?.id ?? null}
+            ticketId={registration?.event_tickets?.id ?? null}
+            page={bookingPage(event, registration)}
           />
         ) : processing ? (
-          <Processing since={waitingSince} now={now} />
+          <Processing since={waitingSince} now={now} page={bookingPage(event, registration)} />
         ) : chosenSoldOut ? (
           /* ORG-04. The event can be open while this one option has gone, and
              this screen is reachable without passing the event page that would
@@ -449,14 +454,6 @@ export default function Checkout() {
                 ? 'Other tickets for this event may still be available.'
                 : 'Places sometimes reopen when somebody cancels.'}
             </p>
-            <div className="mt-6">
-              <Link
-                to={`/e/${encodeURIComponent(event.slug)}`}
-                className="text-sm text-fg underline-offset-4 hover:underline"
-              >
-                Back to the event
-              </Link>
-            </div>
           </Panel>
         ) : !canRegister(event.capacity_state) ? (
           /* BUY-05 and ORG-03A. Arriving here after it filled up, closed or
@@ -478,11 +475,9 @@ export default function Checkout() {
                   ? 'The organisers have stopped taking new registrations for this event. You have not been charged.'
                   : event.capacity_state === 'cancelled'
                     ? 'It is not going ahead. You have not been charged.'
-                    : 'You have not been charged.'}
+                    : 'You have not been charged.'}{' '}
+              Pick another event under Browse.
             </p>
-            <Link to="/events" className="mt-6 inline-block">
-              <Button>See what else is on</Button>
-            </Link>
           </Panel>
         ) : (
           <Panel className="mt-6 px-6 py-7 sm:px-8">
@@ -509,9 +504,6 @@ export default function Checkout() {
 
             {types.length > 1 && !chosen ? (
               <>
-                <p className="mt-4 text-sm text-muted">
-                  There is more than one kind of ticket for this event, and none has been chosen.
-                </p>
                 <Link to={eventLink(event.slug)} className="mt-6 inline-block">
                   <Button variant="primary">Choose a ticket</Button>
                 </Link>
@@ -541,8 +533,7 @@ export default function Checkout() {
 
                 {!free && (
                   <p className="mt-4 text-xs leading-relaxed text-dim">
-                    You will be taken to Stripe to pay. Your card details never reach Amazing. The
-                    charge appears once, for {money(total, currency)}.
+                    You will pay on Stripe. The charge appears once, for {money(total, currency)}.
                   </p>
                 )}
 
@@ -565,21 +556,11 @@ export default function Checkout() {
               <p className="mt-3 text-sm leading-relaxed whitespace-pre-wrap text-muted">
                 {event.refund_terms ??
                   'The host has not set out cancellation terms for this event. You can cancel your ' +
-                    'place at any time from your events; anything owed back to you is handled by the host.'}
+                    'place from Coming up until the event ends; anything owed back to you is handled by the host.'}
               </p>
             </div>
           </Panel>
         )}
-
-        <p className="mt-8 text-center text-xs text-dim">
-          <button
-            type="button"
-            onClick={() => navigate('/events/mine')}
-            className="underline underline-offset-4 hover:text-fg"
-          >
-            Everything you have booked
-          </button>
-        </p>
       </div>
     </EventShell>
   )
@@ -598,7 +579,15 @@ export default function Checkout() {
  * patience runs out, because somebody who has been staring at a spinner for
  * forty seconds is already reaching for the back button.
  */
-function Processing({ since, now }: { since: number | null; now: number }) {
+function Processing({
+  since,
+  now,
+  page,
+}: {
+  since: number | null
+  now: number
+  page: { title: string; path: string }
+}) {
   const waited = since ? now - since : 0
   const slow = waited > PATIENCE_MS
 
@@ -619,17 +608,13 @@ function Processing({ since, now }: { since: number | null; now: number }) {
 
       <p className="mt-3 text-sm leading-relaxed text-muted">
         <strong>Please do not pay again.</strong> Refreshing this page is safe, and closing it is
-        safe too &mdash; your confirmation email arrives either way, and everything you have booked
-        is listed under my events.
+        safe too &mdash; your confirmation email arrives either way.
       </p>
 
       {slow && (
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link to="/events/mine">
-            <Button variant="primary">Check my events</Button>
-          </Link>
-          <Link to="/events">
-            <Button>Browse events</Button>
+        <div className="mt-6">
+          <Link to={page.path}>
+            <Button variant="primary">{page.title}</Button>
           </Link>
         </div>
       )}
@@ -651,10 +636,12 @@ function Confirmed({
   event,
   free,
   ticketId,
+  page,
 }: {
   event: PublicEvent
   free: boolean
   ticketId: string | null
+  page: { title: string; path: string }
 }) {
   return (
     <Panel className="mt-6 px-6 py-7 sm:px-8">
@@ -662,7 +649,7 @@ function Confirmed({
         {free ? 'Your place is confirmed.' : 'Your payment went through and your place is confirmed.'}
       </h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
-        We have emailed you the details. {event.attendee_instructions ? 'There are instructions below for when you arrive.' : 'Everything you need is on your ticket.'}
+        We have emailed you the details.{event.attendee_instructions ? '' : ' Everything you need is on your ticket.'}
       </p>
 
       {event.attendee_instructions && (
@@ -680,13 +667,10 @@ function Confirmed({
             <Button variant="primary">See your ticket</Button>
           </Link>
         ) : (
-          <Link to="/events/mine">
-            <Button variant="primary">My events</Button>
+          <Link to={page.path}>
+            <Button variant="primary">{page.title}</Button>
           </Link>
         )}
-        <Link to={eventLink(event.slug)}>
-          <Button>Back to the event</Button>
-        </Link>
       </div>
     </Panel>
   )

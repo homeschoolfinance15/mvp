@@ -14,7 +14,7 @@
  * marketing. So the full list is on screen with its triggers, said plainly.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   Button,
@@ -45,7 +45,6 @@ import {
   skippedSentence,
 } from './rules'
 import {
-  Explainer,
   ManageShell,
   ManagedEventGate,
   Row,
@@ -306,13 +305,8 @@ function Emails({ data }: { data: ManagedEvent }) {
     await load()
   }
 
-  const capacityNote = useMemo(
-    () => eventWhen({ starts_at: event.starts_at, ends_at: event.ends_at, timezone: event.timezone }),
-    [event.starts_at, event.ends_at, event.timezone],
-  )
-
   return (
-    <ManageShell event={event} current="emails">
+    <ManageShell event={event}>
       {outcome && (
         <div className="mb-6">
           <Notice tone="success">{outcome}</Notice>
@@ -324,20 +318,9 @@ function Emails({ data }: { data: ManagedEvent }) {
         </div>
       )}
 
-      {/* ORG-16. The reminder schedule is meaningless without the event's own
-          clock next to it, so both are stated before anything is set. */}
-      <Panel className="mb-8 px-6 py-5">
-        <div className="eyebrow">This event runs</div>
-        <p className="mt-2 text-sm text-fg">{capacityNote}</p>
-        <p className="mt-1 text-xs text-dim">
-          Timezone {event.timezone}. Reminder times below are counted back from the start and are
-          shown in that zone.
-        </p>
-      </Panel>
-
       <SectionHeader
         title="Reminders before the event"
-        caption="ORG-16. Off, on, and how far ahead. Nothing here changes anything until you save."
+        caption="Nothing changes until you save."
         action={<SaveState dirty={dirty} saving={saving} savedAt={savedAt} />}
       />
 
@@ -351,10 +334,6 @@ function Emails({ data }: { data: ManagedEvent }) {
           />
           <span>
             Send reminder emails for this event
-            <span className="block text-xs text-dim">
-              Currently {enabled ? 'on' : 'off'}
-              {dirty ? ' in this form — not yet saved' : ''}.
-            </span>
           </span>
         </label>
 
@@ -372,7 +351,7 @@ function Emails({ data }: { data: ManagedEvent }) {
             </button>
           </EmptyState>
         ) : reminders.length === 0 ? (
-          <EmptyState>No reminder times set. Nobody will be reminded about this event.</EmptyState>
+          <EmptyState>No reminders set.</EmptyState>
         ) : (
           <ul className="space-y-3">
             {reminders.map((r, i) => {
@@ -412,9 +391,7 @@ function Emails({ data }: { data: ManagedEvent }) {
                       </div>
                       {skips && (
                         <div className="mt-1 text-dim">
-                          This event is sooner than this reminder, so it will not be sent — nothing
-                          is wrong, its moment has simply already passed. Sending it now would tell
-                          people about an event that has already started.
+                          This time has already passed, so it will not be sent.
                         </div>
                       )}
                       {!enabled && (
@@ -488,55 +465,11 @@ function Emails({ data }: { data: ManagedEvent }) {
 
       {/* ------------------------------------------------------------------ */}
 
-      <div className="mt-12">
-        <SectionHeader
-          title="What attendees will receive"
-          caption="EML-01. Every email this event sends on its own, what sets it off, who gets it, and what it tells them."
-        />
-        <Rows>
-          {AUTOMATIC_MESSAGES.map((m) => (
-            <Row key={m.situation}>
-              <span className="min-w-0 flex-1 sm:max-w-64">
-                <span className="block text-sm text-fg">{m.situation}</span>
-                <span className="block text-xs text-dim">{m.trigger}</span>
-              </span>
-              <span className="min-w-0 text-xs text-muted sm:w-44">
-                <span className="eyebrow block">Goes to</span>
-                <span className="mt-1 block">{m.recipient}</span>
-              </span>
-              <span className="min-w-0 flex-1 text-xs text-muted">
-                <span className="eyebrow block">Makes clear</span>
-                <span className="mt-1 block leading-relaxed">{m.makesClear}</span>
-              </span>
-              <span className="text-xs sm:w-32">
-                {m.organiserControlled ? (
-                  <span className="text-[#8a4b00]">
-                    {enabled ? 'You have these on' : 'You have these off'}
-                  </span>
-                ) : (
-                  <span className="text-dim">Always sent</span>
-                )}
-              </span>
-            </Row>
-          ))}
-        </Rows>
-        <div className="mt-4">
-          <Explainer>
-            EML-02. Switching reminders off stops the reminder emails and nothing else. The
-            registration confirmation, the payment confirmation, the attendee's own cancellation
-            notice, refund updates, the event-cancellation notice and the feedback request all
-            still go out — those are the platform keeping the promises it made to the people
-            attending, not your marketing, and they are not yours to switch off.
-          </Explainer>
-        </div>
-      </div>
-
       {/* ------------------------------------------------------------------ */}
 
       <div className="mt-12">
         <SectionHeader
           title="Scheduled and sent"
-          caption="EML-08. Saved, queued and sent are three different things, and none of them is delivered or read."
           action={
             <Button size="sm" onClick={() => setUpdating(true)} disabled={event.status !== 'published'}>
               Send an update to attendees
@@ -558,7 +491,7 @@ function Emails({ data }: { data: ManagedEvent }) {
         )}
 
         {history.length === 0 ? (
-          <EmptyState>Nothing has been queued for this event yet.</EmptyState>
+          <EmptyState>Nothing sent yet.</EmptyState>
         ) : (
           <Rows>
             {history.map((m) => (
@@ -626,26 +559,24 @@ function Emails({ data }: { data: ManagedEvent }) {
                 </span>
 
                 {m.failedCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => void retry(m)}
-                    className="text-xs text-dim transition-colors hover:text-fg"
-                  >
-                    Retry the {m.failedCount} that failed
-                  </button>
+                  <span className="text-xs sm:w-44">
+                    <button
+                      type="button"
+                      onClick={() => void retry(m)}
+                      className="text-dim transition-colors hover:text-fg"
+                    >
+                      Retry the {m.failedCount} that failed
+                    </button>
+                    <span className="block text-dim">
+                      A retry only resends to the addresses that failed.
+                    </span>
+                  </span>
                 )}
               </Row>
             ))}
           </Rows>
         )}
 
-        <div className="mt-4">
-          <Explainer>
-            "Sent" here means the mail provider accepted a copy for that person. It is not a
-            delivery receipt and it is not a read receipt — we do not know either, and neither does
-            anybody who tells you otherwise. A retry only touches the addresses that failed.
-          </Explainer>
-        </div>
       </div>
 
       <ReminderPreview event={event} reminder={previewing} onClose={() => setPreviewing(null)} />
@@ -712,8 +643,7 @@ function ReminderPreview({
 
       <p className="mt-5 text-xs leading-relaxed text-dim">
         Goes out {at.toLocaleString(undefined, { timeZone: event.timezone })} ({event.timezone}), to
-        everybody with a confirmed place at that moment — not to the list as it stands today.
-        Somebody who cancels in the meantime is dropped before it sends.
+        everybody with a confirmed place at that moment.
       </p>
 
       <div className="mt-7">
@@ -783,7 +713,7 @@ function UpdateModal({
     await onSent(
       count === 0
         ? 'There is nobody to notify yet — no one has a confirmed place on this event. Nothing was sent.'
-        : `Queued for ${count} ${count === 1 ? 'person' : 'people'}. The history below shows what happens to each copy.`,
+        : `Queued for ${count} ${count === 1 ? 'person' : 'people'}.`,
     )
   }
 
@@ -791,7 +721,7 @@ function UpdateModal({
     <Modal open={open} title="Send an update to attendees" onClose={busy ? () => {} : onClose}>
       <p className="text-sm leading-relaxed text-muted">
         Goes to everybody with a confirmed place, one copy each — they never see who else is on the
-        list. It is recorded here against your name.
+        list. It is recorded against your name.
       </p>
 
       <div className="mt-5 space-y-5">

@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DashboardShell } from '../../components/DashboardShell'
 import {
   Button,
@@ -39,12 +39,14 @@ import { payoutState, type ConnectorPayments, type PayoutState } from '../connec
 import {
   COHOST_MONEY_NOTE,
   NOTIFIABLE_FIELDS,
+  browserTimeZone,
   changedDetails,
+  fromZonedInput,
   lockedSentence,
   paymentRecipientSentence,
   previewFingerprint,
   remedyFor,
-  slugify,
+  toZonedInput,
   validateEvent,
   whyNoCreate,
   type ChangedDetails,
@@ -56,9 +58,9 @@ import {
   ManageShell,
   ManagedEventGate,
   SaveState,
+  eventsListPath,
   fromLocalInput,
   refusal,
-  toLocalInput,
   useManagedEvent,
   useWarnOnUnsaved,
   type ManagedEvent,
@@ -133,10 +135,13 @@ function NewEvent() {
         host_id: profile.id,
         title: title.trim(),
         starts_at: startsIso,
+        // ORG-25. The box above was typed on this browser's clock, so that is
+        // the event's zone until somebody picks another — what was typed is
+        // what the editor shows next.
+        timezone: browserTimeZone(),
         status: 'draft',
-        // The trigger fills this when it is blank, but sending a readable one
-        // means the link matches the title people were told about (EVT-01).
-        slug: slugify(title),
+        // No slug: the trigger makes one from the title with a random suffix,
+        // so two events called "Sunday dinner" never collide (EVT-01).
         payment_connector_id: (connector as { id: string } | null)?.id ?? null,
         payment_recipient_id: profile.id,
       })
@@ -156,7 +161,7 @@ function NewEvent() {
   return (
     <DashboardShell
       title="Create an event"
-      caption="A title and a start time make a draft. Nobody can see a draft but you and your cohosts."
+      caption={blocked ? undefined : 'Add a title and a start time to save a draft.'}
     >
       {blocked ? (
         <Panel className="border-dashed px-6 py-6 text-sm leading-relaxed text-muted">
@@ -176,7 +181,7 @@ function NewEvent() {
 
             <Field
               label="Starts"
-              hint="Your own local time for now. You can set the event's timezone on the next screen."
+              hint={`In ${browserTimeZone()}, your own timezone. You can change the event's timezone on the next screen.`}
               error={errors.starts_at}
             >
               <Input
@@ -192,7 +197,7 @@ function NewEvent() {
               <Button type="submit" variant="primary" loading={busy} disabled={canCreate === null}>
                 Start a draft
               </Button>
-              <Button type="button" onClick={() => navigate('/manage/events')}>
+              <Button type="button" onClick={() => navigate(eventsListPath(profile))}>
                 Cancel
               </Button>
             </div>
@@ -247,8 +252,8 @@ function draftOf(event: EventRecord): Draft {
   return {
     title: event.title,
     description: event.description ?? '',
-    starts_at: toLocalInput(event.starts_at),
-    ends_at: toLocalInput(event.ends_at),
+    starts_at: toZonedInput(event.starts_at, event.timezone),
+    ends_at: toZonedInput(event.ends_at, event.timezone),
     timezone: event.timezone,
     venue_name: event.venue_name ?? '',
     address: event.address ?? '',
@@ -277,8 +282,10 @@ function columnsOf(draft: Draft): Partial<EventRecord> {
   return {
     title: draft.title.trim(),
     description: draft.description.trim() || null,
-    starts_at: fromLocalInput(draft.starts_at) ?? '',
-    ends_at: fromLocalInput(draft.ends_at),
+    // ORG-25. The boxes are on the event's clock. Changing the zone keeps the
+    // times as typed and moves the moment, as Eventbrite and Luma do.
+    starts_at: fromZonedInput(draft.starts_at, draft.timezone) ?? '',
+    ends_at: fromZonedInput(draft.ends_at, draft.timezone),
     timezone: draft.timezone,
     venue_name: draft.venue_name.trim() || null,
     address: draft.address.trim() || null,
@@ -287,7 +294,8 @@ function columnsOf(draft: Draft): Partial<EventRecord> {
     capacity: draft.capacity.trim() === '' ? null : Number(draft.capacity),
     registration_closed: draft.registration_closed,
     currency: draft.currency,
-    feedback_opens_after_minutes: Number(draft.feedback_opens_after_minutes) || 120,
+    feedback_opens_after_minutes:
+      draft.feedback_opens_after_minutes === '' ? 120 : Number(draft.feedback_opens_after_minutes),
   }
 }
 
@@ -666,8 +674,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       <>
         Cancelled. Registration is closed and tickets no longer admit anybody. Everyone holding or
         confirmed on a place is being emailed automatically, and pending reminders and the feedback
-        request have been stopped. The Emails tab shows the notice going out, copy by copy. Paid
-        orders and their refunds are listed under Results.
+        request have been stopped. Follow each copy of the notice on the Emails page, and paid orders
+        and their refunds on the Results page.
       </>,
     )
   }
@@ -742,7 +750,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   const remedy = remedyFor(payout?.fix ?? null, account, profile?.id ?? null)
 
   return (
-    <ManageShell event={event} current="details">
+    <ManageShell event={event}>
       {/* ORG-02 / QLT-03. The save state and the actions travel with the page
           rather than sitting at the bottom of a long form. */}
       <div className="sticky top-14 z-20 -mx-5 mb-8 border-b border-line bg-ink/90 px-5 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
@@ -765,10 +773,18 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                 Publish
               </Button>
             )}
-            {event.status === 'published' && !finished && (
+            {/* ORG-22. Once somebody holds a confirmed place, taking the event
+                down would strand them silently; the database refuses it and
+                cancelling is the way to call it off. */}
+            {event.status === 'published' && !finished && audience === 0 && (
               <Button size="sm" onClick={() => setConfirming('unpublish')}>
                 Take down
               </Button>
+            )}
+            {event.status === 'published' && !finished && audience > 0 && (
+              <span className="text-xs text-dim">
+                People have registered, so this can be cancelled but not taken down.
+              </span>
             )}
             {event.status !== 'cancelled' && !finished && (
               <Button size="sm" variant="danger" onClick={() => setConfirming('cancel')}>
@@ -781,38 +797,6 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           </div>
         </div>
       </div>
-
-      {/*
-        BUY-14. Persistent and informational, not a modal and not a gate.
-        Nothing has gone wrong — an organiser is allowed to build the event
-        first and connect payments when they are ready to sell, which is how
-        every comparable product works. The sale is stopped at the sale; this
-        is the other half of the requirement, which is telling them.
-      */}
-      {cannotSell && (
-        <div className="mb-6">
-          <Panel className="border-[#efc98f] bg-[#f6ecd9] px-6 py-5">
-            <div className="eyebrow text-[#8a4b00]">This event cannot take payments yet</div>
-            <p className="mt-2 text-sm leading-relaxed text-fg">
-              {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
-            </p>
-            {remedy.href ? (
-              <a
-                href={remedy.href}
-                target={remedy.href.startsWith('http') ? '_blank' : undefined}
-                rel={remedy.href.startsWith('http') ? 'noreferrer noopener' : undefined}
-                className="mt-3 inline-block text-xs text-gold underline underline-offset-2"
-              >
-                {remedy.label}
-              </a>
-            ) : (
-              remedy.label && (
-                <p className="mt-2 text-sm leading-relaxed text-muted">{remedy.label}</p>
-              )
-            )}
-          </Panel>
-        </div>
-      )}
 
       {outcome && (
         <div className="mb-6">
@@ -828,7 +812,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       {/*
         EML-08. Saving did not send anything, and this says so rather than
         letting the organiser walk away assuming it did. The offer to send an
-        update also stands permanently on the Emails tab, so the action never
+        update also stands permanently on the Emails page, so the action never
         depends on catching this banner.
       */}
       {unannounced && (
@@ -840,20 +824,9 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
               className="underline underline-offset-2"
               onClick={() => navigate(`/manage/events/${event.id}/emails`)}
             >
-              Send an update from the Emails tab
+              Send an update from the Emails page
             </button>{' '}
             whenever you are ready.
-          </Notice>
-        </div>
-      )}
-
-      {event.status === 'cancelled' && (
-        <div className="mb-6">
-          <Notice tone="error">
-            This event was cancelled
-            {event.cancelled_at ? ` on ${new Date(event.cancelled_at).toLocaleDateString()}` : ''}.
-            It is kept here as a record: the guest list, the orders and the refunds all stay
-            readable.
           </Notice>
         </div>
       )}
@@ -864,10 +837,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
           </Field>
 
-          <Field
-            label="Description"
-            hint="What this is and who it is for. Editing this does not interrupt anybody."
-          >
+          <Field label="Description" hint="Say what it is and who it is for.">
             <Textarea
               rows={5}
               value={draft.description}
@@ -886,17 +856,12 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             >
               {eventLink(event.slug)}
             </a>
-            {event.published_at && (
-              <span className="block text-xs text-dim">
-                Fixed now that the event has been published — people already have this link.
-              </span>
-            )}
           </Fact>
         </Section>
 
         <Section
           title="When and where"
-          caption="Changing any of these interrupts people's plans, so saving them offers to tell attendees."
+          caption="Saving a change here offers to tell attendees."
         >
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label="Starts" error={errors.starts_at}>
@@ -917,7 +882,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
           <Field
             label="Timezone"
-            hint="The boxes above are in your own local time. Attendees see the event's time, in this zone."
+            hint="The times above are in this zone, and attendees see them in it too."
           >
             <Select
               value={draft.timezone}
@@ -973,10 +938,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           </Field>
         </Section>
 
-        <Section
-          title="Places"
-          caption="ORG-03. Every ticket option draws on the same limit — the options divide the room, they do not add to it."
-        >
+        <Section title="Places">
           <div className="mb-6 grid gap-4 sm:grid-cols-3">
             <StatTile label="Limit" value={event.capacity ?? 'No limit'} />
             <StatTile label="Confirmed" value={capacity?.confirmed ?? 0} />
@@ -1009,17 +971,14 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             <span>
               Close registration now
               <span className="block text-xs text-dim">
-                ORG-03A. Different from selling out: the event page says you closed it, not that it
+                Different from selling out: the event page says you closed it, not that it
                 filled up.
               </span>
             </span>
           </label>
         </Section>
 
-        <Section
-          title="Ticket options"
-          caption="ORG-04. Free or paid. Prices are in the event's currency."
-        >
+        <Section title="Ticket options">
           <div className="mb-5 w-40">
             <Field label="Currency">
               <Select
@@ -1071,7 +1030,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                     <Field label="Limit" hint="Empty shares the event limit">
                       <Input
                         type="number"
-                        min={0}
+                        min={1}
                         value={t.quantity}
                         onChange={(e) => patchTicket(i, { quantity: e.target.value })}
                       />
@@ -1108,9 +1067,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
           <div className="mt-5">
             <Explainer>
-              ORG-10. Changing a price never changes what somebody has already paid. Their order
-              keeps the amount they were charged, and any refund is calculated from that, not from
-              the price shown here today.
+              Changing a price does not change what anybody has already paid, or what they can
+              be refunded.
             </Explainer>
           </div>
         </Section>
@@ -1138,7 +1096,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         <Section title="Refunds and feedback">
           <Field
             label="Refund terms"
-            hint="BUY-15. Shown before anybody pays, and kept with their order exactly as it read then."
+            hint="Shown before anybody pays, and kept with their order exactly as it read then."
           >
             <Textarea
               rows={3}
@@ -1148,7 +1106,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           </Field>
           <Field
             label="Feedback opens this many minutes after the event ends"
-            hint="FDB-15. Two hours by default."
+            hint="Two hours by default."
           >
             <div className="w-40">
               <Input
@@ -1255,7 +1213,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             setNotifyOpen(false)
             setProblem(
               `The event was saved, but nobody was emailed: ${refused.message} ` +
-                'Nothing about the event was undone — you can send the update from the Emails tab.',
+                'Nothing about the event was undone — you can send the update from the Emails page.',
             )
             return
           }
@@ -1287,7 +1245,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
           setOutcome(
             `Saved, and an update has been queued for ${count} ${count === 1 ? 'person' : 'people'}. ` +
-              'The Emails tab shows what happens to each copy.',
+              'Follow each copy on the Emails page.',
           )
         }}
       />
@@ -1316,9 +1274,9 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         busy={saving}
         body={
           <>
-            It goes back to a draft: nobody can find it and the link stops working. Anybody who has
-            already registered keeps their place and their ticket, and nobody is emailed. Cancelling
-            is the thing that tells people it is off.
+            It goes back to a draft: nobody can find it and the link stops working, and nobody is
+            emailed. This is only possible while nobody holds a confirmed place — after that,
+            cancelling is the thing that tells people it is off.
           </>
         }
         onConfirm={() => void setStatus('draft')}
@@ -1472,10 +1430,7 @@ function PaymentPanel({
 
   return (
     <section>
-      <SectionHeader
-        title="Who receives the ticket money"
-        caption="Decided by whoever created the event. Shown here before anything can be sold."
-      />
+      <SectionHeader title="Who receives the ticket money" />
       <Panel className="space-y-5 px-6 py-6">
         <div className="rounded-sm border border-line-strong bg-raised px-5 py-4">
           <div className="eyebrow">Payment account</div>
@@ -1484,7 +1439,6 @@ function PaymentPanel({
               ? paymentRecipientSentence(account, overridden)
               : 'No account has been set to receive money for this event.'}
           </p>
-          <p className="mt-3 text-xs leading-relaxed text-muted">{COHOST_MONEY_NOTE}</p>
         </div>
 
         {locked ? (
@@ -1496,16 +1450,16 @@ function PaymentPanel({
                 Name a different payment recipient
               </Button>
               <p className="mt-2 text-xs leading-relaxed text-dim">
-                BUY-14. Only for the case where Amazing sets an event up on a partner's behalf. It
-                is never the default, and it cannot be changed once anybody has paid.
+                Use only when Amazing sets an event up for a partner. It cannot be changed once
+                anybody has paid.
               </p>
             </div>
           )
         )}
 
         {/*
-          The same sentence as the banner at the top of this screen and as the
-          refusal a buyer would read at checkout — one `reason`, rendered
+          BUY-14. Shown once, here where the payment account is set: the same
+          sentence as the refusal a buyer would read at checkout — one `reason`, rendered
           wherever somebody needs it, never reworded per screen.
         */}
         {cannotSell && (
@@ -1513,15 +1467,15 @@ function PaymentPanel({
             <p className="text-sm leading-relaxed text-fg">
               {payout?.outstanding ?? 'Payments are not set up for this event yet.'}
             </p>
+            {/* ORG-12. Same rule as the first publish, held by the database. */}
+            {event.status === 'published' && (
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                Until this is fixed, a paid ticket option cannot be put on sale here: saving a new
+                one, or switching one on, will be refused.
+              </p>
+            )}
             {remedy.href ? (
-              <a
-                href={remedy.href}
-                target={remedy.href.startsWith('http') ? '_blank' : undefined}
-                rel={remedy.href.startsWith('http') ? 'noreferrer noopener' : undefined}
-                className="mt-2 inline-block text-xs text-gold underline underline-offset-2"
-              >
-                {remedy.label}
-              </a>
+              <RemedyLink href={remedy.href} label={remedy.label} className="mt-2" />
             ) : (
               remedy.label && <p className="mt-1.5 text-sm leading-relaxed text-muted">{remedy.label}</p>
             )}
@@ -1710,17 +1664,11 @@ function HostPanel({
 
   return (
     <section>
-      <SectionHeader
-        title="Hosting team"
-        caption="ORG-05. Everybody here is named as a host on the event page."
-      />
+      <SectionHeader title="Hosting team" />
       <Panel className="space-y-5 px-6 py-6">
         <Explainer>
-          Being <span className="text-fg">listed as a host</span> is what attendees read on the
-          event page. What that account <span className="text-fg">may do</span> is separate: a
-          cohost can edit this event, invite people to it, check them in and email its attendees —
-          on <span className="text-fg">this event only</span>. It gives them nothing on your other
-          events, nothing in your community, and no share of the money.
+          Anyone you add here can edit this event, invite people, check them in and email its
+          attendees.
         </Explainer>
 
         <ul className="divide-y divide-line">
@@ -1748,7 +1696,7 @@ function HostPanel({
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1">
-            <Field label="Add a cohost" hint="Connectors and administrators can host.">
+            <Field label="Add a cohost" hint={COHOST_MONEY_NOTE}>
               <Select value={chosen} onChange={(e) => setChosen(e.target.value)}>
                 <option value="">Choose somebody…</option>
                 {addable.map((c) => (
@@ -1894,9 +1842,9 @@ function NotifyModal({
                 {NOTIFIABLE_FIELDS[field as keyof typeof NOTIFIABLE_FIELDS] ?? field}
               </dt>
               <dd className="text-sm text-fg">
-                <span className="text-dim line-through">{show(change.from)}</span>
+                <span className="text-dim line-through">{show(change.from, event.timezone)}</span>
                 {' → '}
-                <span>{show(change.to)}</span>
+                <span>{show(change.to, event.timezone)}</span>
               </dd>
             </div>
           ))}
@@ -1986,11 +1934,13 @@ function NotifyModal({
   )
 }
 
-function show(value: unknown): string {
+function show(value: unknown, timeZone: string): string {
   if (value === null || value === undefined || String(value).trim() === '') return 'not set'
   const text = String(value)
   // The two notifiable fields that hold a timestamp read as gibberish raw.
-  return /^\d{4}-\d{2}-\d{2}T/.test(text) ? new Date(text).toLocaleString() : text
+  return /^\d{4}-\d{2}-\d{2}T/.test(text)
+    ? new Date(text).toLocaleString(undefined, { timeZone, timeZoneName: 'short' })
+    : text
 }
 
 /**
@@ -2006,4 +1956,18 @@ function timezones(current: string): string[] {
     ? supported('timeZone')
     : ['Europe/London', 'Europe/Paris', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'UTC']
   return all.includes(current) ? all : [current, ...all]
+}
+
+/** A remedy inside the app stays in the app; only Stripe opens a new tab. */
+function RemedyLink({ href, label, className }: { href: string; label: string; className: string }) {
+  const style = `${className} inline-block text-xs text-gold underline underline-offset-2`
+  return href.startsWith('http') ? (
+    <a href={href} target="_blank" rel="noreferrer noopener" className={style}>
+      {label}
+    </a>
+  ) : (
+    <Link to={href} className={style}>
+      {label}
+    </Link>
+  )
 }

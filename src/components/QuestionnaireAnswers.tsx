@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useAuth } from '../context/AuthProvider'
-import { DISCLOSURE } from '../lib/questionnaire'
+import { isNetworkMember, useAuth } from '../context/AuthProvider'
+import { MEMBER_DISCLOSURE } from '../lib/questionnaire'
 import { QuestionnaireForm } from './QuestionnaireForm'
 import { Button, SectionHeader } from './ui'
 
@@ -15,13 +15,14 @@ export function QuestionnaireAnswers() {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
 
-  if (!profile) return null
+  // Event-only accounts never had the network questionnaire.
+  if (!profile || !isNetworkMember(profile)) return null
 
   return (
     <section className="mt-12">
       <SectionHeader
         title="Your answers"
-        caption={DISCLOSURE}
+        caption={MEMBER_DISCLOSURE}
         action={
           <Button size="sm" onClick={() => setOpen((o) => !o)}>
             {open ? 'Hide' : 'Edit answers'}

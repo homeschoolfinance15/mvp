@@ -34,7 +34,7 @@ import {
   type TicketType,
 } from '../../lib/events'
 import type { Profile } from '../../lib/types'
-import { EventStatusBadge, Explainer, Fact, statusSentence } from '../manage/shared'
+import { EventStatusBadge, Explainer, Fact } from '../manage/shared'
 import { reminderLabel } from '../manage/rules'
 
 /**
@@ -301,12 +301,10 @@ function Section({
       <SectionHeader title={title} caption={caption} />
       {loaded.failed ? (
         <Notice tone="error">
-          <strong>{title} could not be read.</strong> This is not the same as there being
-          none &mdash; we do not know what is in this part of the record, so do not read the
-          space below as empty. The rest of this page is unaffected.
+          This part didn&rsquo;t load. Try again.
           <span className="mt-3 block">
             <Button size="sm" onClick={onRetry}>
-              Read it again
+              Try again
             </Button>
           </span>
         </Notice>
@@ -476,15 +474,19 @@ export default function AdminEvent() {
     return (
       <DashboardShell title="Event record">
         <EmptyState>
-          {failed
-            ? 'We could not load this event just now.'
-            : 'There is no event with that address. It may have been deleted.'}
+          {failed ? 'We could not load this event just now.' : 'No event at this address.'}
         </EmptyState>
         <div className="mt-6 flex gap-3">
-          <Button onClick={() => void load()}>Try again</Button>
-          <Link to="/admin">
-            <Button variant="primary">Back to administration</Button>
-          </Link>
+          {failed ? (
+            <Button onClick={() => void load()}>Try again</Button>
+          ) : (
+            <Link
+              to="/admin/events"
+              className="text-xs text-dim underline-offset-4 hover:text-fg hover:underline"
+            >
+              &larr; Events
+            </Link>
+          )}
         </div>
       </DashboardShell>
     )
@@ -514,10 +516,7 @@ export default function AdminEvent() {
     : null
 
   return (
-    <DashboardShell
-      title={event.title}
-      caption="The platform's record of this event, in full. Read-only: this is what the system holds, not a second place to change it."
-    >
+    <DashboardShell title={event.title}>
       <div className="flex flex-wrap items-center gap-4">
         <Link
           to="/admin/events"
@@ -557,15 +556,6 @@ export default function AdminEvent() {
         administrator loses the history, or that a registration is not really
         recorded until an admin has looked at it.
       */}
-      <div className="mt-8">
-        <Explainer>
-          These records belong to Amazing, not to this account. They are written as people
-          register, pay, arrive and submit feedback, without waiting for an administrator to
-          open the event, and they stay exactly as they are when an administrator is added
-          or replaced. This view reads them; the actions that change them live on the
-          screens that own them.
-        </Explainer>
-      </div>
 
       {/*
         QLT-09. Anything that fell between two steps, at the top, where it is
@@ -587,9 +577,7 @@ export default function AdminEvent() {
       {/* ORG-14. Details and status first: the questions asked most often. */}
       <section className="mt-8">
         <Panel className="px-6 py-6">
-          <p className="text-sm leading-relaxed text-muted">{statusSentence(event)}</p>
-
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Fact label="When">{eventWhen(event)}</Fact>
             <Fact label="Where">{eventWhere(event) ?? 'Not given'}</Fact>
             <Fact label="Timezone">{event.timezone}</Fact>
@@ -623,8 +611,7 @@ export default function AdminEvent() {
             <div className="mt-6">
               <Notice tone="error">
                 <strong>Cancelled {formatDateTime(event.cancelled_at)}</strong> by{' '}
-                {personName(event.cancelled_by, people)}. Entry is void and any refund
-                due is tracked under payments below.
+                {personName(event.cancelled_by, people)}.
               </Notice>
             </div>
           )}
@@ -654,7 +641,6 @@ export default function AdminEvent() {
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Hosts"
-        caption="Who runs this event. The creator is the one the money answers to."
         loaded={record.hosts}
         count={record.hosts.rows.length + 1}
         onRetry={() => void load()}
@@ -668,7 +654,7 @@ export default function AdminEvent() {
                 {personName(event.host_id, people)}
               </span>
               <span className="block truncate text-xs text-dim">
-                Created this event &mdash; its revenue is theirs (§7.0)
+                Creator
               </span>
             </span>
           </Row>
@@ -685,7 +671,7 @@ export default function AdminEvent() {
                     {personName(host.profile_id, people)}
                   </span>
                   <span className="block truncate text-xs text-dim">
-                    Cohost &mdash; may run the event, takes no share of the money (ORG-05)
+                    Cohost
                   </span>
                 </span>
               </Row>
@@ -695,10 +681,7 @@ export default function AdminEvent() {
 
       {/* ---------------------------------------------------------------- */}
       <section className="mt-14">
-        <SectionHeader
-          title="Where the money goes"
-          caption="Decided by who created the event, and frozen once the first ticket is paid for."
-        />
+        <SectionHeader title="Where the money goes" />
         <Panel className="px-6 py-5">
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <Fact label="Paid to">
@@ -711,7 +694,7 @@ export default function AdminEvent() {
               ) : (
                 <>
                   Amazing&rsquo;s own Stripe account
-                  <span className="text-dim"> (BUY-13)</span>
+                  <span className="text-dim"> (a platform event)</span>
                 </>
               )}
             </Fact>
@@ -729,28 +712,16 @@ export default function AdminEvent() {
                 : 'No paid order yet'}
             </Fact>
           </div>
-
-          <div className="mt-6">
-            <Explainer>
-              Whoever created the event owns its money. An event an administrator created
-              pays Amazing; an event a super connector created is charged on that
-              connector&rsquo;s own Stripe account, and the fees, refunds and disputes are
-              theirs. Being added as a cohost never moves the money, and once the first paid
-              order exists the recipient cannot be changed &mdash; revenue for tickets
-              already sold cannot be retargeted.
-            </Explainer>
-          </div>
         </Panel>
       </section>
 
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Ticket types"
-        caption="All options share the event's capacity."
         loaded={record.types}
         count={record.types.rows.length}
         onRetry={() => void load()}
-        empty="No ticket types. Nothing can be registered for."
+        empty="No ticket types."
       >
         <Panel className="divide-y divide-line">
           {record.types.rows.map((type) => (
@@ -769,7 +740,6 @@ export default function AdminEvent() {
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Registrations and attendance"
-        caption="Everybody who took a place, what became of it, and whether they arrived."
         loaded={record.registrations}
         count={record.registrations.rows.length}
         onRetry={() => void load()}
@@ -826,8 +796,8 @@ export default function AdminEvent() {
         {erasedArrivals > 0 && (
           <p className="mt-3 text-xs leading-relaxed text-dim">
             {erasedArrivals === 1
-              ? 'One further arrival was recorded against an account that has since been closed. It is not listed above, because the registration went with the account — the arrival itself still counts towards who was in the room.'
-              : `${erasedArrivals} further arrivals were recorded against accounts that have since been closed. They are not listed above, because their registrations went with the accounts — the arrivals themselves still count towards who was in the room.`}
+              ? 'One more arrival, from a closed account.'
+              : `${erasedArrivals} more arrivals, from closed accounts.`}
           </p>
         )}
       </Section>
@@ -835,11 +805,10 @@ export default function AdminEvent() {
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Payments, fees and refunds"
-        caption="Every order, and the Stripe account that actually took it."
         loaded={record.orders}
         count={record.orders.rows.length}
         onRetry={() => void load()}
-        empty="No orders. Either this event is free, or nobody has paid yet."
+        empty="No orders."
       >
         <Panel className="divide-y divide-line">
           {record.orders.rows.map((order) => {
@@ -921,7 +890,6 @@ export default function AdminEvent() {
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Tickets and check-in"
-        caption="One ticket per confirmed place. A revoked ticket does not open the door."
         loaded={record.tickets}
         count={record.tickets.rows.length}
         onRetry={() => void load()}
@@ -954,7 +922,6 @@ export default function AdminEvent() {
       {/* ---------------------------------------------------------------- */}
       <Section
         title="Invitations"
-        caption="Who was asked directly, and through which community."
         loaded={record.invites}
         count={record.invites.rows.length}
         onRetry={() => void load()}
@@ -988,12 +955,10 @@ export default function AdminEvent() {
       <section className="mt-14">
         <SectionHeader
           title="Email"
-          caption="What this event is set to send, and everything it has sent."
         />
         {record.emailSettingsFailed ? (
           <Notice tone="error">
-            <strong>Email settings could not be read.</strong> This is not the same as this
-            event having none &mdash; we do not know what it is set to send.
+            Email settings didn't load.
             <span className="mt-3 block">
               <Button size="sm" onClick={() => void load()}>
                 Read it again
@@ -1028,7 +993,6 @@ export default function AdminEvent() {
 
       <Section
         title="Message history"
-        caption="Every message queued for this event, and what became of it."
         loaded={record.messages}
         count={record.messages.rows.length}
         onRetry={() => void load()}
@@ -1149,7 +1113,6 @@ function FeedbackSections({
     <>
       <Section
         title="Peer feedback"
-        caption="What people said about each other at this event."
         loaded={peer}
         count={pairs.length}
         onRetry={onRetry}
@@ -1157,22 +1120,14 @@ function FeedbackSections({
       >
         <div className="space-y-3">
           <Explainer>
-            Every review on this event is here, including any written about an administrator
-            who hosted or attended it &mdash; nothing about feedback is hidden from
-            administration. Each entry is one person&rsquo;s observation of another{' '}
-            <em>at this event</em>, with the question as it was asked. It is not what the
-            subject said about the author, and it is not a score for anybody. If the same two
-            people meet again elsewhere, that is a separate observation on that event, which
-            is what eventually distinguishes one evening from a pattern.
-            {' '}Only administrators may read any of this &mdash; the same rule applies to
-            anything carried off this screen, including exports and written summaries.
+            Only administrators may read this &mdash; including anything exported or summarised
+            from it.
             {subjects.rows.length > 0 && (
               <>
                 {' '}
                 Of {subjects.rows.length} pairs asked: {outcomes.submitted ?? 0} answered,{' '}
                 {outcomes.did_not_meet ?? 0} said they did not meet, {outcomes.skipped ?? 0}{' '}
-                skipped, {outcomes.pending ?? 0} not yet answered. None of the last three is
-                an unfavourable review.
+                skipped, {outcomes.pending ?? 0} not yet answered.
               </>
             )}
           </Explainer>
@@ -1217,7 +1172,6 @@ function FeedbackSections({
 
       <Section
         title="Feedback on the event"
-        caption="How the evening itself was received."
         loaded={eventFeedback}
         count={eventFeedback.rows.length}
         onRetry={onRetry}
@@ -1230,9 +1184,7 @@ function FeedbackSections({
             deliberately not turned into a rating of any one of them.
           */}
           <Explainer>
-            This is what attendees said about the event. Hosted by {hostNames.join(', ')}. It
-            is feedback on the event, not a rating of the people who ran it, and it is not
-            totalled against any of them.
+            Hosted by {hostNames.join(', ')}.
           </Explainer>
 
           <Panel className="divide-y divide-line">

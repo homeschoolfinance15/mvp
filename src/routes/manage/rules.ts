@@ -96,10 +96,9 @@ export function previewFingerprint(draft: Partial<EventRecord>): string {
  * registration confirmation when a paid order exists.
  *
  * Four columns, the same four the requirement has: the situation, what sets it
- * off, who receives it, and what it has to make clear. On screen so an
- * organiser can see it without running an event to find out — and specifically
- * so that turning reminders off cannot be mistaken for turning email off
- * (EML-02). Only the reminder row is theirs to switch.
+ * off, who receives it, and what it has to make clear. No longer shown as a
+ * table; the sent list names a message by its situation. Only the reminder row
+ * is the organiser's to switch (EML-02).
  */
 export const AUTOMATIC_MESSAGES: Array<{
   /** The kinds in `event_messages` this row covers. */
@@ -386,7 +385,7 @@ export function mayMarkAttended(actorHostsEvent: boolean): boolean {
 export function whyNoCreate(role: string | undefined, canCreateEvents: boolean): string | null {
   if (role === 'admin') return null
   if (role !== 'connector') {
-    return 'Events are hosted by connectors and administrators. Ask an administrator if you would like to host one.'
+    return 'Ask an administrator if you would like to host one.'
   }
   if (canCreateEvents) return null
   return 'Your account is not set up to create events yet. An administrator can switch this on for you. Events you already host are unaffected.'
@@ -428,9 +427,7 @@ export function paymentRecipientSentence(account: PaymentAccount, overridden: bo
 }
 
 /** ORG-05. Said next to the recipient every time, because it is the assumption people make. */
-export const COHOST_MONEY_NOTE =
-  'Adding a cohost does not split the money. A cohost can run this event — edit it, invite ' +
-  'people, check them in — and none of that moves a penny.'
+export const COHOST_MONEY_NOTE = 'Adding a cohost does not split the money.'
 
 /** §7.2. Why the recipient cannot be changed any more, rather than a control that will fail. */
 export function lockedSentence(lockedAt: string): string {
@@ -510,6 +507,7 @@ export function remedyFor(
 export function validateEvent(draft: Partial<EventRecord>): Record<string, string> {
   const errors: Record<string, string> = {}
   if (!normalise(draft.title)) errors.title = 'Give the event a title.'
+  else if (normalise(draft.title).length > 200) errors.title = 'Keep the title to 200 characters or fewer.'
   if (!normalise(draft.starts_at)) errors.starts_at = 'Say when it starts.'
   if (
     draft.starts_at &&
@@ -518,8 +516,12 @@ export function validateEvent(draft: Partial<EventRecord>): Record<string, strin
   ) {
     errors.ends_at = 'The end time is before the start time.'
   }
-  if (draft.capacity !== null && draft.capacity !== undefined && draft.capacity < 1) {
-    errors.capacity = 'A limit has to be at least one place, or leave it empty for no limit.'
+  if (
+    draft.capacity !== null &&
+    draft.capacity !== undefined &&
+    (!Number.isInteger(draft.capacity) || draft.capacity < 1)
+  ) {
+    errors.capacity = 'A limit has to be a whole number of places, at least one, or leave it empty for no limit.'
   }
   return errors
 }
@@ -617,4 +619,72 @@ export const MESSAGE_AUDIENCE: Partial<Record<MessageKind, string>> & {
   // QLT-06. Existing behaviour: somebody handed the ability to edit an event,
   // invite to it, scan its door and refund its orders is told they have it.
   cohost: 'The person you added as a cohost',
+}
+
+/* -------------------------------------------------------------------------- */
+/* ORG-7 — who can be marked as having been there                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ORG-7. `mark_attended()` refuses anybody without a confirmed place or an
+ * invitation to this event, so the button is not offered for them either — a
+ * cancelled or expired registration is a person the host already let go.
+ */
+export function mayBeMarkedAttended(status: RegistrationStatus, invited: boolean): boolean {
+  return status === 'confirmed' || invited
+}
+
+/* -------------------------------------------------------------------------- */
+/* ORG-25 — the boxes speak the event's timezone                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What `<input type="datetime-local">` should hold for `iso`, read on the
+ * event's clock rather than the reader's. A London dinner edited from New York
+ * shows 19:00, not 14:00.
+ */
+export function toZonedInput(iso: string | null | undefined, timeZone: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+
+/**
+ * The inverse: a wall-clock time typed in `timeZone`, as an instant.
+ *
+ * Guess the instant as if the zone were UTC, measure how far the zone's clock
+ * is from UTC at that guess, and correct; a second pass settles the guesses
+ * that straddle a clock change. A time that does not exist (inside the spring
+ * gap) lands an hour later, which is what calendar apps do too.
+ */
+export function fromZonedInput(local: string, timeZone: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local)
+  if (!m) return null
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
+  const offsetAt = (t: number) => {
+    const shown = toZonedInput(new Date(t).toISOString(), timeZone)
+    return Date.parse(`${shown}:00Z`) - t
+  }
+  let t = wall - offsetAt(wall)
+  t = wall - offsetAt(t)
+  return Number.isNaN(t) ? null : new Date(t).toISOString()
+}
+
+/** The reader's own zone: what a box with no event zone yet was typed in. */
+export function browserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London'
 }
