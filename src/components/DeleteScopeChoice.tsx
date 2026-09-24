@@ -41,12 +41,12 @@ export function DeleteScopeChoice({
     {
       scope: 'account',
       title: 'Delete the account',
-      detail: `Removes ${whose} profile, login, posts, comments, messages, registrations and tickets. Events ${hosts} that nobody else is part of are deleted. Attendance and event feedback stay on the events, under an anonymous label instead of a name.`,
+      detail: `Removes ${whose} profile, profile photo, login, posts, comments, messages, registrations and tickets. Events ${hosts} that nobody else is part of are deleted. Attendance and event feedback stay on the events, under an anonymous label instead of a name.`,
     },
     {
       scope: 'everything',
       title: 'Delete the account and everything in it',
-      detail: `Also removes ${whose} attendance, feedback written about events and people, uploaded photos and videos, and notifications sent to others.`,
+      detail: `Also removes ${whose} attendance, feedback written about events and people, every uploaded photo and video (the profile photo included), and notifications sent to others.`,
     },
   ]
 
@@ -112,15 +112,23 @@ export function DeleteScopeChoice({
  * refuses in the database while any file is left, so a failure here surfaces
  * as that refusal.
  *
+ * The profile photo goes in both scopes: it is the person's face, and nothing
+ * kept under a pseudonym needs it. 'everything' takes the rest of the folder.
+ *
  * The files go before the database can refuse for another reason (a hosted
  * event other people are part of, a refund in flight), and would then be gone
- * with the account still open. Only 'everything' calls this, which asked for
- * them to go either way.
+ * with the account still open, its avatar_path pointing at nothing (the
+ * initials show instead). Both scopes asked for them to go either way.
  *
  * ponytail: one page of 1,000 objects. Loop on the list if anybody ever
  * uploads more than that.
  */
-export async function removeMediaOf(profileId: string): Promise<void> {
+export async function removeMediaFor(profileId: string, scope: DeleteScope): Promise<void> {
+  if (scope === 'account') {
+    const { data } = await supabase.from('profiles').select('avatar_path').eq('id', profileId).maybeSingle()
+    if (data?.avatar_path) await supabase.storage.from('media').remove([data.avatar_path])
+    return
+  }
   const { data } = await supabase.storage.from('media').list(profileId, { limit: 1000 })
   const paths = (data ?? []).map((object) => `${profileId}/${object.name}`)
   if (paths.length > 0) await supabase.storage.from('media').remove(paths)

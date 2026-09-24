@@ -6,6 +6,16 @@
  */
 export function toLink(raw: string): string | null {
   const value = raw.trim()
-  if (!value) return null
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`
+  if (!value || /\s/.test(value)) return null
+  const link = /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`
+  // ACC-07. "my name is mona" is not a link: it needs a dotted host name.
+  try {
+    const { protocol, hostname } = new URL(link)
+    return /^https?:$/.test(protocol) && /^[^.]+(\.[^.]+)+$/.test(hostname) ? link : null
+  } catch {
+    return null
+  }
 }
+
+export const LINK_HINT = 'Enter a link, like linkedin.com/in/you.'
+

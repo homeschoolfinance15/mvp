@@ -4,6 +4,7 @@ import { Button, Field, Input, Notice, Panel, Spinner } from '../../components/u
 import { useLive } from '../../lib/live'
 import { supabase } from '../../lib/supabase'
 import type { CheckInResult, EventAttendance } from '../../lib/events'
+import { outsideEventDay } from './rules'
 import { ManagedEventGate, ManageShell, useManagedEvent } from './shared'
 
 /**
@@ -260,7 +261,9 @@ export default function CheckIn() {
 
   const present = useCallback(
     async (code: string) => {
-      const trimmed = code.trim()
+      // Codes are stored lower-case, and check_in folds what it is given the
+      // same way; the lookup below has to as well or the name never shows.
+      const trimmed = code.trim().toLowerCase()
       if (!trimmed || inFlight.current) return
 
       const now = Date.now()
@@ -479,6 +482,12 @@ export default function CheckIn() {
       </header>
 
       <main className="mx-auto max-w-2xl space-y-6 px-5 pt-6 pb-10">
+        {outsideEventDay(event.starts_at, event.ends_at, event.timezone) && (
+          <Notice tone="warning">
+            Today is not the day of this event. Check the ticket is for this event before letting
+            anyone in — check-in still works.
+          </Notice>
+        )}
         {/* The answer, first and largest. aria-live so a screen reader gets it
             without the steward hunting for where it appeared. */}
         <div aria-live="assertive">

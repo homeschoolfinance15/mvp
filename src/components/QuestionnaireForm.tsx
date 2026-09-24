@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   AGE_RANGES,
-  DISCLOSURE,
   EMPTY_TAG_ANSWER,
   GATHERING_OPTIONS,
   INITIAL_ORDER,
   LATER_ORDER,
+  MEMBER_DISCLOSURE,
+  PHONE_PATTERN,
   PREFERENCE_CAVEAT,
   TAG_QUESTIONS,
   TEXT_QUESTIONS,
@@ -161,6 +162,9 @@ export function QuestionnaireForm({
       const project = (draft.current_project ?? '').trim()
       if (!project) return "Tell us what you're working on."
       if (!draft.phone?.trim()) return 'What is your phone number?'
+      if (!PHONE_PATTERN.test(draft.phone.trim())) {
+        return 'Enter a phone number using digits, like +44 7700 900123.'
+      }
       if (!draft.home_city?.trim()) return 'Where are you based?'
       if (!draft.travel_preference) return 'How far are you willing to travel?'
     }
@@ -290,8 +294,10 @@ export function QuestionnaireForm({
 
   return (
     <div className="space-y-8">
+      {/* Only somebody with an account reaches this form, so the waitlist
+          no longer applies to them. */}
       {mode === 'signup' && stage === 'initial' && (
-        <p className="text-xs leading-relaxed text-dim">{DISCLOSURE}</p>
+        <p className="text-xs leading-relaxed text-dim">{MEMBER_DISCLOSURE}</p>
       )}
 
       {showInitial && (

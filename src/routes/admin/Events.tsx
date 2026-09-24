@@ -12,7 +12,6 @@ import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { Profile } from '../../lib/types'
 import { eventWhen, type EventRecord } from '../../lib/events'
-import { EventStatusBadge } from '../manage/shared'
 import { byId, loadProfiles } from './shared'
 
 /**
@@ -24,12 +23,18 @@ import { byId, loadProfiles } from './shared'
  * door. Nothing here is framed as the administrator's own events, because
  * these are the platform's records and most of them belong to somebody else.
  */
-export default function Events() {
+export default function Events({
+  bucket = 'upcoming',
+}: {
+  bucket?: 'upcoming' | 'drafts' | 'past' | 'cancelled'
+}) {
   const [events, setEvents] = useState<EventRecord[]>([])
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [query, setQuery] = useState('')
+  // Stamped by each load, so "over" moves with every refresh and render stays pure.
+  const [now, setNow] = useState(0)
 
   const load = useCallback(async () => {
     setLoadError('')
@@ -46,6 +51,7 @@ export default function Events() {
 
     setEvents((eventsRes.data as EventRecord[]) ?? [])
     setProfilesById(byId((profilesRes.data as Profile[]) ?? []))
+    setNow(Date.now())
     setLoading(false)
   }, [])
 
@@ -58,7 +64,23 @@ export default function Events() {
   // already loaded — so this runs unconditionally.
   useLive(['events', 'profiles'], () => void load())
 
-  const filtered = events.filter((event) => {
+  // The same four buckets Hosting uses (manage/EventList), so an event sits
+  // on the same page whichever sidebar it is reached from.
+  const over = (e: EventRecord) => new Date(e.ends_at ?? e.starts_at).getTime() < now
+  const inBucket = events.filter((event) =>
+    bucket === 'drafts'
+      ? event.status === 'draft'
+      : bucket === 'cancelled'
+        ? event.status === 'cancelled'
+        : event.status === 'published' && over(event) === (bucket === 'past'),
+  )
+  // Loaded newest first, which suits Past; Upcoming reads soonest first.
+  if (bucket === 'upcoming') inBucket.reverse()
+  // A new event starts as a draft on its way to Upcoming; Past and Cancelled
+  // are not where anybody goes to make one.
+  const offersCreate = bucket === 'upcoming' || bucket === 'drafts'
+
+  const filtered = inBucket.filter((event) => {
     if (!query.trim()) return true
     const q = query.toLowerCase()
     return (
@@ -107,18 +129,20 @@ export default function Events() {
                 twice, differing only in which page a row opened. Creating
                 starts here; opening a row gives the record, and the record
                 links on to the editor. */}
-        <Link to="/manage/events/new">
-          <Button variant="primary" size="sm">
-            Create event
-          </Button>
-        </Link>
+        {offersCreate && (
+          <Link to="/manage/events/new">
+            <Button variant="primary" size="sm">
+              Create event
+            </Button>
+          </Link>
+        )}
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState>
-          {events.length === 0
-            ? 'No events yet. Press Create event to add the first.'
-            : 'No events match that search. Try a title, link or host name.'}
+          {query.trim()
+            ? 'No events match that search. Try a title, link or host name.'
+            : EMPTY[bucket]}
         </EmptyState>
       ) : (
         <Panel className="divide-y divide-line">
@@ -135,11 +159,18 @@ export default function Events() {
                   {profilesById[event.host_id]?.full_name ?? 'a removed account'}
                 </span>
               </span>
-              <EventStatusBadge event={event} />
+              {/* No status badge: the page itself is the status. */}
             </Link>
           ))}
         </Panel>
       )}
     </>
   )
+}
+
+const EMPTY = {
+  upcoming: 'Nothing coming up. Press Create event to make one.',
+  drafts: 'No drafts. Press Create event to make one.',
+  past: 'No past events.',
+  cancelled: 'No cancelled events.',
 }

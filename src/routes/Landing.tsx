@@ -63,6 +63,12 @@ function WaitlistForm({ onClose }: { onClose: () => void }) {
       .then(({ data }) => setTags((data as ProfileTag[]) ?? []))
   }, [page, tags.length])
 
+  // An error answers the last submit. Once anything it was about changes, or
+  // the person moves to another step, it no longer describes what they see.
+  useEffect(() => {
+    setError('')
+  }, [page, fullName, email, phone, linkedin, homeCity, travel, answers, text])
+
   const answerOf = (field: TagField) => answers[field] ?? EMPTY_TAG_ANSWER
 
   async function submit() {

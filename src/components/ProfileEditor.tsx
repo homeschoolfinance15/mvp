@@ -3,7 +3,7 @@ import { isNetworkMember, useAuth } from '../context/AuthProvider'
 import { formatInterests, INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { forgetSigned, removeMedia, signMedia, uploadMedia } from '../lib/media'
 import { errorMessage, supabase } from '../lib/supabase'
-import { toLink } from '../lib/url'
+import { LINK_HINT, toLink } from '../lib/url'
 import {
   Button,
   Field,
@@ -63,6 +63,12 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
   async function chooseAvatar(file: File | undefined) {
     if (!file || !profile) return
     setError('')
+    // ACC-06. The accept list is only a hint to the file picker.
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPEG, PNG or WebP photo.')
+      if (fileInput.current) fileInput.current.value = ''
+      return
+    }
     setUploading(true)
     const previous = profile.avatar_path
 
@@ -98,6 +104,9 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
     interests !== formatInterests(profile?.interests) ||
     linkedin !== (profile?.linkedin_url ?? '')
 
+  // ACC-03. Admins skip onboarding, so they have no profession to keep.
+  const professionRequired = profile?.role !== 'admin'
+
   function edit<T>(set: (v: T) => void) {
     return (v: T) => {
       set(v)
@@ -110,21 +119,29 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
     if (!profile) return
     setError('')
     setSaved(false)
-    if (!fullName.trim() || !profession.trim()) {
-      setError('Your name and current profession cannot be left blank.')
+    if (!fullName.trim() || (professionRequired && !profession.trim())) {
+      setError(professionRequired
+        ? 'Your name and current profession cannot be left blank.'
+        : 'Your name cannot be left blank.')
+      return
+    }
+    const link = toLink(linkedin)
+    if (linkedin.trim() && !link) {
+      setError(LINK_HINT)
       return
     }
     setBusy(true)
 
+    const stored = {
+      full_name: fullName.trim(),
+      current_profession: profession.trim() || null,
+      semantic_summary: summary.trim() || null,
+      interests: parseInterests(interests),
+      linkedin_url: link,
+    }
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({
-        full_name: fullName.trim(),
-        current_profession: profession.trim(),
-        semantic_summary: summary.trim() || null,
-        interests: parseInterests(interests),
-        linkedin_url: toLink(linkedin),
-      })
+      .update(stored)
       .eq('id', profile.id)
 
     setBusy(false)
@@ -132,8 +149,13 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
       setError(errorMessage(updateError))
       return
     }
-    // Show the link as stored, or the form reads as unsaved straight after saving.
-    setLinkedin(toLink(linkedin) ?? '')
+    // ACC-04. Show every field as stored, or the form reads as unsaved
+    // straight after saving.
+    setFullName(stored.full_name)
+    setProfession(stored.current_profession ?? '')
+    setSummary(stored.semantic_summary ?? '')
+    setInterests(formatInterests(stored.interests))
+    setLinkedin(link ?? '')
     await refreshProfile()
     await onSaved?.()
     setSaved(true)
@@ -183,7 +205,7 @@ export function ProfileEditor({ onSaved }: { onSaved?: () => Promise<void> }) {
 
           <Field label="Current profession">
             <Input
-              required
+              required={professionRequired}
               value={profession}
               onChange={(e) => edit(setProfession)(e.target.value)}
             />

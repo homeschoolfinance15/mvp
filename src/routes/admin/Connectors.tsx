@@ -26,7 +26,7 @@ import {
 } from '../../lib/types'
 import {
   DeleteScopeChoice,
-  removeMediaOf,
+  removeMediaFor,
   scopeConfirmed,
   type DeleteScope,
 } from '../../components/DeleteScopeChoice'
@@ -120,7 +120,7 @@ export default function Connectors() {
    * about a row that was swapped underneath the dialog is exactly the kind of
    * thing a confirmation exists to prevent.
    */
-  useLive(['connectors', 'connector_user_links', 'profiles'], () => void load(), {
+  useLive(['connectors', 'connector_user_links', 'connector_invitations', 'profiles'], () => void load(), {
     enabled: !open && !connectorToDelete && !capacityFor && !invitationToRevoke && !pending && !busy,
   })
 
@@ -385,6 +385,7 @@ export default function Connectors() {
         <RemoveConnectorModal
           connector={connectorToDelete}
           connectors={connectors}
+          invitedCount={invitedCount}
           members={links
             .filter((l) => l.connector_id === connectorToDelete.id)
             .map((l) => profilesById[l.user_profile_id])
@@ -583,12 +584,14 @@ function CreateConnectorModal({
 function RemoveConnectorModal({
   connector,
   connectors,
+  invitedCount,
   members,
   onClose,
   onChanged,
 }: {
   connector: ConnectorRow
   connectors: ConnectorRow[]
+  invitedCount: Record<string, number>
   members: Profile[]
   onClose: () => void
   onChanged: () => Promise<void>
@@ -596,9 +599,14 @@ function RemoveConnectorModal({
   const destinations = connectors.filter(
     (c) => c.id !== connector.id && c.invite_status === 'active' && c.profiles,
   )
+  // Same sum as connector_available_capacity; the move RPC still decides.
+  const placesLeft = (c: ConnectorRow) =>
+    Math.max(0, c.invite_capacity - (invitedCount[c.id] ?? 0))
 
   const [selected, setSelected] = useState<string[]>(() => members.map((m) => m.id))
-  const [destination, setDestination] = useState(destinations[0]?.id ?? '')
+  const [destination, setDestination] = useState(
+    destinations.find((c) => placesLeft(c) > 0)?.id ?? '',
+  )
   const [scope, setScope] = useState<DeleteScope>('account')
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
@@ -632,7 +640,7 @@ function RemoveConnectorModal({
   async function remove() {
     setError('')
     setBusy(true)
-    if (scope === 'everything') await removeMediaOf(connector.profile_id)
+    await removeMediaFor(connector.profile_id, scope)
     const { error: rpcError } = await supabase.rpc('delete_managed_profile', {
       p_profile_id: connector.profile_id,
       p_scope: scope,
@@ -702,8 +710,9 @@ function RemoveConnectorModal({
                     onChange={(e) => setDestination(e.target.value)}
                   >
                     {destinations.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.profiles?.full_name ?? 'Unknown'}
+                      <option key={c.id} value={c.id} disabled={placesLeft(c) === 0}>
+                        {c.profiles?.full_name ?? 'Unknown'} — {c.profiles?.email ?? 'no email'} ·{' '}
+                        {placesLeft(c)} {placesLeft(c) === 1 ? 'place' : 'places'} left
                       </option>
                     ))}
                   </Select>

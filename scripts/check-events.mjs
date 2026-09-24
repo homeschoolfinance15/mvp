@@ -924,7 +924,7 @@ async function main() {
   check(
     'the erasure is registered with a pseudonym and an expiry date (Art. 5(1)(e))',
     register.body?.length === 1 &&
-      /^Former attendee [0-9A-F]{4}$/.test(register.body[0].pseudonym ?? '') &&
+      /^Deleted account [0-9A-F]{4}$/.test(register.body[0].pseudonym ?? '') &&
       typeof register.body[0].retention_until === 'string',
     JSON.stringify(register.body?.[0]),
   )

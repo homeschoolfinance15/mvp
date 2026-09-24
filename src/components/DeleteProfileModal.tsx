@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { errorMessage, supabase } from '../lib/supabase'
-import { DeleteScopeChoice, removeMediaOf, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
+import { DeleteScopeChoice, removeMediaFor, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
 import { Button, Modal, Notice } from './ui'
 
 export function DeleteProfileModal({
@@ -36,7 +36,7 @@ export function DeleteProfileModal({
 
     setBusy(true)
     setError('')
-    if (scope === 'everything') await removeMediaOf(profileId)
+    await removeMediaFor(profileId, scope)
     const { error: deleteError } = await supabase.rpc('delete_managed_profile', {
       p_profile_id: profileId,
       p_scope: scope,

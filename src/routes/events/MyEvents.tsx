@@ -160,11 +160,20 @@ export default function MyEvents({ bucket = 'upcoming' }: { bucket?: Bucket }) {
    * booked is shown. Anything that took money stays, lapsed or not, so a late
    * payment is never hidden.
    */
+  /*
+   * Decision 18. One event, one status: somebody who cancelled and then booked
+   * again sees the new booking only, not the old one still under Cancelled.
+   * The load is newest first, so the first booking kept for an event wins.
+   */
+  const seen = new Set<string>()
   const bookings = (data?.bookings ?? []).filter((b) => {
     const lapsed =
       b.status === 'expired' ||
       (b.status === 'pending' && b.hold_expires_at !== null && Date.parse(b.hold_expires_at) <= now)
-    return !lapsed || (b.event_orders ?? []).some((o) => SETTLED.includes(o.status))
+    if (lapsed && !(b.event_orders ?? []).some((o) => SETTLED.includes(o.status))) return false
+    if (seen.has(b.event_id)) return false
+    seen.add(b.event_id)
+    return true
   })
 
   const bucketOf = (b: Booking): Bucket => bookingBucket(b.events, b, now)
@@ -363,7 +372,9 @@ function BookingCard({
         speak for the other.
       */}
       <div className="mt-5 border-t border-line pt-5 text-sm">
-        <p className="text-fg">{attendanceAndMoney(booking.status, refund?.status ?? null)}</p>
+        <p className="text-fg">
+          {attendanceAndMoney(booking.status, refund?.status ?? null, cancelled)}
+        </p>
 
         {order && (
           <p className="mt-1.5 text-muted">

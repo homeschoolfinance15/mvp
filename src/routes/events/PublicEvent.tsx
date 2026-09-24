@@ -81,7 +81,12 @@ export default function PublicEvent() {
    * resolving and the page already says so — which is the point, rather than
    * letting them discover it on the card screen.
    */
-  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true))
+  //
+  // Other people's registrations are hidden from this reader by RLS, so the
+  // subscription alone never hears the last place go. The poll does.
+  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true), {
+    poll: 15_000,
+  })
 
   const covers = useCovers([event?.cover_path])
   const coverUrl = event?.cover_path ? covers[event.cover_path] : undefined
@@ -239,6 +244,9 @@ export default function PublicEvent() {
       ? selected!.remaining <= 0
       : false
   const left = remainingWords(event)
+  // A place at a cancelled event is not a place: the notice at the top says
+  // it is not going ahead, and nothing below may contradict it.
+  const place = state === 'cancelled' ? null : mine
 
   /**
    * BUY-01. One button, two destinations.
@@ -360,7 +368,7 @@ export default function PublicEvent() {
 
         {/* Nothing to offer and nothing booked (finished, cancelled): no empty
             panel with a heading over nothing. */}
-        {(mine || open || state === 'sold_out' || state === 'closed') && (
+        {(place || open || state === 'sold_out' || state === 'closed') && (
         <section className="mt-8" aria-labelledby="register-heading">
           <Panel className="px-6 py-7 sm:px-9">
             <h2 id="register-heading" className="eyebrow">
@@ -373,15 +381,15 @@ export default function PublicEvent() {
               unique index would refuse them anyway, which is a worse way to
               find out.
             */}
-            {mine ? (
+            {place ? (
               <div className="mt-4">
                 <p className="text-sm text-fg">
-                  {mine.status === 'confirmed'
+                  {place.status === 'confirmed'
                     ? 'You have a place at this event.'
                     : 'Your place is being held while your payment completes.'}
                 </p>
-                {mine.ticket_id && (
-                  <Link to={`/events/tickets/${mine.ticket_id}`} className="mt-5 inline-block">
+                {place.ticket_id && (
+                  <Link to={`/events/tickets/${place.ticket_id}`} className="mt-5 inline-block">
                     <Button variant="primary">See your ticket</Button>
                   </Link>
                 )}

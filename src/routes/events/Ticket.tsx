@@ -40,7 +40,11 @@ interface TicketRow extends EventTicket {
   } | null
 }
 
+/** A hand-typed or truncated id is a ticket we cannot find, not a load failure. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 async function loadTicket(id: string, profileId: string): Promise<TicketRow | null> {
+  if (!UUID.test(id)) return null
   const { data, error } = await supabase
     .from('event_tickets')
     .select('*, events(*), event_registrations(status, ticket_types(name))')
@@ -129,6 +133,7 @@ export default function Ticket() {
   const cancelledEvent = event.status === 'cancelled'
   const usable = !revoked && !cancelledPlace && !cancelledEvent
   const page = bookingPage(event, registration)
+  const past = Date.parse(event.ends_at ?? event.starts_at) < Date.now()
 
   return (
     <EventShell back={{ to: page.path, label: page.title }}>
@@ -160,7 +165,9 @@ export default function Ticket() {
               {/* BUY-10. What the door scans. The code itself is random and
                   unguessable, which is the only reason showing it is safe. */}
               <QrCode code={ticket.code} />
-              <p className="mt-5 text-xs text-dim">Show this at the door.</p>
+              <p className="mt-5 text-xs text-dim">
+                {past ? 'This event has finished.' : 'Show this at the door.'}
+              </p>
               <div className="mt-3 flex justify-center">
                 {/* If a scanner will not co-operate, a host can type it. */}
                 <CopyCode code={ticket.code} size="sm" />

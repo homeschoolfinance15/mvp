@@ -104,11 +104,12 @@ export function EventShell({
 
 export type BookingBucket = 'upcoming' | 'past' | 'cancelled'
 
-/** The three My events pages, each its own sidebar link. */
+/** The three My events pages, each its own sidebar link. The sidebar says
+    "Cancelled"; the page says whose (decision 5). */
 export const BOOKING_PAGES: Record<BookingBucket, { title: string; path: string }> = {
   upcoming: { title: 'Coming up', path: '/events/mine' },
   past: { title: 'Been to', path: '/events/mine/past' },
-  cancelled: { title: 'Cancelled', path: '/events/mine/cancelled' },
+  cancelled: { title: 'Cancelled bookings', path: '/events/mine/cancelled' },
 }
 
 /**

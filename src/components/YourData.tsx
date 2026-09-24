@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isNetworkMember, useAuth } from '../context/AuthProvider'
 import { errorMessage, supabase } from '../lib/supabase'
-import { DeleteScopeChoice, removeMediaOf, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
+import { DeleteScopeChoice, removeMediaFor, scopeConfirmed, type DeleteScope } from './DeleteScopeChoice'
 import { Button, Modal, Notice, Panel, SectionHeader } from './ui'
 
 /**
@@ -58,16 +58,19 @@ export function YourData() {
     setError('')
     // Files first: once the account is gone the bucket no longer lets anybody
     // but an administrator remove them.
-    if (scope === 'everything') await removeMediaOf(profile.id)
+    await removeMediaFor(profile.id, scope)
     const { error: rpcError } = await supabase.rpc('delete_my_account', { p_scope: scope })
-    if (rpcError) {
+    // ACC-12. Closed already, from another device: this session is all that is left.
+    if (rpcError && rpcError.message !== 'This account no longer exists.') {
       setBusy(false)
       setConfirming(false)
       setError(errorMessage(rpcError))
       return
     }
+    // ACC-11. Leave the guarded page first; signing out under it lets
+    // RequireSession replace the address with a bare /signin.
+    navigate('/signin', { replace: true, state: { notice: 'Your account is closed.' } })
     await signOut()
-    navigate('/')
   }
 
   return (

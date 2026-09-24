@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { MIN_QUERY, searchCities, type CityHit } from '../lib/cities'
+import { searchCities, type CityHit } from '../lib/cities'
 import { Field, Input } from './ui'
+
+/** Two letters match half a continent; three is where a lookup narrows. */
+const MIN_QUERY = 3
+/** Long enough that a steady typist sends one request, not one per key. */
+const DEBOUNCE_MS = 350
 
 /**
  * "City search + fallback."
@@ -50,7 +55,7 @@ export function CitySearch({
       setActive(-1)
       setOpen(found.length > 0)
       setSearching(false)
-    }, 300)
+    }, DEBOUNCE_MS)
 
     return () => {
       clearTimeout(timer)
@@ -110,6 +115,9 @@ export function CitySearch({
           aria-controls="city-suggestions"
         />
       </Field>
+      <p className="mt-1.5 text-xs text-dim">
+        What you type here is sent to Photon (photon.komoot.io) to suggest a city.
+      </p>
 
       {searching && (
         <p aria-live="polite" className="mt-1.5 text-xs text-dim">

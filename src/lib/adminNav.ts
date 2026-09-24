@@ -13,7 +13,6 @@ import { supabase } from './supabase'
 export interface AdminCounts {
   connectors: number | null
   members: number | null
-  events: number | null
   notes: number | null
   waitlist: number | null
 }
@@ -26,6 +25,10 @@ export interface AdminLink {
   group: string
   /** Which live count to show beside the label, if any. */
   badge?: keyof AdminCounts
+  /** The page's heading, where the label alone would not say what it is. */
+  title?: string
+  /** Which of the admin events lists this is (decision 15). */
+  bucket?: 'upcoming' | 'drafts' | 'past' | 'cancelled'
 }
 
 /** Every screen under /admin, in sidebar order. */
@@ -40,8 +43,14 @@ export const ADMIN_LINKS: AdminLink[] = [
   { to: '/admin/notes', label: 'Notes', group: 'Network', badge: 'notes' },
   { to: '/admin/raised', label: 'Raised', group: 'Network' },
 
+  // Every event on the platform, one page per state, as Hosting has. No
+  // badge: a count of every event ever made says nothing about Upcoming.
+  { to: '/admin/events', label: 'Upcoming', group: 'Events', title: 'Upcoming events', bucket: 'upcoming' },
+  { to: '/admin/events/drafts', label: 'Drafts', group: 'Events', title: 'Draft events', bucket: 'drafts' },
+  { to: '/admin/events/past', label: 'Past', group: 'Events', title: 'Past events', bucket: 'past' },
+  { to: '/admin/events/cancelled', label: 'Cancelled', group: 'Events', title: 'Cancelled events', bucket: 'cancelled' },
+
   // ORG-14. The platform's own records.
-  { to: '/admin/events', label: 'Events', group: 'Platform', badge: 'events' },
   { to: '/admin/payments', label: 'Payments', group: 'Platform' },
   { to: '/admin/log', label: 'Log', group: 'Platform' },
 ]
@@ -49,13 +58,12 @@ export const ADMIN_LINKS: AdminLink[] = [
 const NO_COUNTS: AdminCounts = {
   connectors: null,
   members: null,
-  events: null,
   notes: null,
   waitlist: null,
 }
 
 /**
- * Five `head: true` counts — no rows cross the wire, only the numbers. AppShell
+ * Four `head: true` counts — no rows cross the wire, only the numbers. AppShell
  * calls this on every page; `enabled` false (anybody but an administrator)
  * runs no query and subscribes to nothing.
  */
@@ -66,11 +74,10 @@ export function useAdminCounts(enabled: boolean): AdminCounts {
   const load = useCallback(async () => {
     if (!enabled) return
     const head = { count: 'exact' as const, head: true }
-    const [connectors, members, events, notes, waitlist] = await Promise.all([
+    const [connectors, members, notes, waitlist] = await Promise.all([
       supabase.from('connectors').select('id', head),
       // Event-only accounts are listed apart on the Members page (ADM-10).
       supabase.from('profiles').select('id', head).eq('role', 'user').eq('network_member', true),
-      supabase.from('events').select('id', head),
       supabase.from('connector_notes').select('id', head),
       // Only people still waiting on a decision (ADM-14): turned down and
       // already handed a code are both decided.
@@ -85,7 +92,6 @@ export function useAdminCounts(enabled: boolean): AdminCounts {
     setCounts({
       connectors: connectors.count,
       members: members.count,
-      events: events.count,
       notes: notes.count,
       waitlist: waitlist.count,
     })
@@ -96,10 +102,12 @@ export function useAdminCounts(enabled: boolean): AdminCounts {
   }, [load, pathname])
 
   // Live, so approving somebody updates the badge beside the page you are on.
+  // Polled as well: a note withdrawn by its connector leaves the admin's RLS,
+  // and Realtime does not deliver an UPDATE its reader can no longer see.
   useLive(
-    ['connectors', 'profiles', 'events', 'connector_notes', 'waitlist_entries'],
+    ['connectors', 'profiles', 'connector_notes', 'waitlist_entries'],
     load,
-    { enabled },
+    { enabled, poll: 10_000 },
   )
 
   return counts

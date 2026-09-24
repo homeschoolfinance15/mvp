@@ -159,6 +159,9 @@ export function NotificationBell() {
   const [avatars, setAvatars] = useState<Record<string, string>>({})
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  // Read from the Realtime callback without resubscribing on every load.
+  const directoryRef = useRef(directory)
+  directoryRef.current = directory
 
   const unread = items.filter((n) => !n.read_at).length
 
@@ -215,9 +218,13 @@ export function NotificationBell() {
         (payload) => {
           const incoming = payload.new as Notification
           // A pushed row carries only the columns of the table, so a waitlist
-          // notice would arrive without the applicant's name. Cheaper to ask
-          // for the page again than to fetch the one name separately.
-          if (incoming.kind === 'waitlist_joined') {
+          // notice would arrive without the applicant's name, and a member who
+          // joined after the last load has no directory entry yet. Cheaper to
+          // ask for the page again than to fetch the one name separately.
+          if (
+            incoming.kind === 'waitlist_joined' ||
+            (incoming.actor_id && !directoryRef.current[incoming.actor_id])
+          ) {
             void load()
             return
           }
@@ -270,6 +277,8 @@ export function NotificationBell() {
         .from('notifications')
         .update({ read_at: new Date().toISOString() })
         .eq('id', notification.id)
+        // A query builder is lazy: without then() the update is never sent.
+        .then(() => {})
     }
 
     const to = destination(notification, profile?.role)

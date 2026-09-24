@@ -14,7 +14,7 @@
  * Mirrors docs/event-platform/CONTRACT.md §2, §4, §7.
  */
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DashboardShell } from '../../components/DashboardShell'
 import {
@@ -33,6 +33,7 @@ import {
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
+import { useLive } from '../../lib/live'
 import { eventLink, eventWhen, type EventRecord, type TicketType } from '../../lib/events'
 import { ACCEPT_ATTR, uploadMedia } from '../../lib/media'
 import { payoutState, type ConnectorPayments, type PayoutState } from '../connector/payouts'
@@ -91,6 +92,8 @@ function NewEvent() {
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [failure, setFailure] = useState('')
+  // A double click lands twice before `busy` re-renders; this does not.
+  const creating = useRef(false)
 
   useEffect(() => {
     if (!profile) return
@@ -116,8 +119,9 @@ function NewEvent() {
     const startsIso = fromLocalInput(startsAt)
     const found = validateEvent({ title, starts_at: startsIso ?? '' })
     setErrors(found)
-    if (Object.keys(found).length > 0) return
+    if (Object.keys(found).length > 0 || creating.current) return
 
+    creating.current = true
     setBusy(true)
 
     // §7.0. The money follows the creator, decided here, once. An admin's
@@ -150,6 +154,7 @@ function NewEvent() {
 
     setBusy(false)
     if (error || !data) {
+      creating.current = false
       setFailure(errorMessage(error))
       return
     }
@@ -376,7 +381,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
    * being invited to press the same failing button again.
    */
   const [rebuilt, setRebuilt] = useState<{ changes: ChangedDetails; fields: string[] } | null>(null)
-  const [confirming, setConfirming] = useState<'publish' | 'unpublish' | 'cancel' | null>(null)
+  const [confirming, setConfirming] = useState<'publish' | 'unpublish' | 'cancel' | 'delete' | null>(null)
   const [account, setAccount] = useState<PaymentAccount | null>(null)
   const [readiness, setReadiness] = useState<SaleReadiness | null>(null)
   const [stripe, setStripe] = useState<ConnectorStripe | null>(null)
@@ -390,6 +395,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   useWarnOnUnsaved(dirty)
 
   const locked = paymentLockedAt(event)
+  const cancelled = event.status === 'cancelled'
   const finished = new Date(event.ends_at ?? event.starts_at).getTime() < Date.now()
 
   /*
@@ -432,7 +438,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             .eq('id', event.payment_connector_id)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      supabase.from('profiles').select('id, full_name, role').in('id', hostIds),
+      supabase.from('member_directory').select('id, full_name, role').in('id', hostIds),
       supabase
         .from('event_registrations')
         .select('id')
@@ -499,6 +505,26 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     void loadSurroundings()
   }, [loadSurroundings])
 
+  // ORG-22. Whether "Take down" is offered depends on who has registered, and
+  // that changes without this organiser doing anything, and so do the Places
+  // counts. The event reloads in place — the draft is local state and survives
+  // — and the fresh hostIds re-run loadSurroundings.
+  useLive(['event_registrations'], () => void reload(), {
+    filter: `event_id=eq.${event.id}`,
+  })
+
+  /*
+   * A save refreshes the event in place, so the ticket rows have to be read
+   * back: a newly inserted option only has an id once it is stored, and
+   * keeping the id-less copy would insert it a second time on the next save.
+   */
+  const resync = useRef(false)
+  useEffect(() => {
+    if (!resync.current) return
+    resync.current = false
+    setTicketDrafts(ticketsOf(tickets))
+  }, [tickets])
+
   /*
    * Saved options and unsaved ones both count. The readiness definition knows
    * only what is stored, but an organiser adding their first paid ticket in
@@ -527,6 +553,9 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     for (const t of ticketDrafts) {
       if (!t.name.trim()) found.tickets = 'Every ticket option needs a name.'
       if (priceCents(t.price) < 0) found.tickets = 'A price cannot be negative.'
+      if (t.quantity.trim() !== '' && !(Number.isInteger(Number(t.quantity)) && Number(t.quantity) >= 1)) {
+        found.tickets = 'A ticket limit has to be a whole number, at least one, or empty.'
+      }
     }
     setErrors(found)
     if (Object.keys(found).length > 0) return false
@@ -569,6 +598,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     setSaving(false)
     setRemovedTickets([])
     setSavedAt(new Date().toISOString())
+    resync.current = true
     await reload()
 
     if (problems.length > 0) {
@@ -595,6 +625,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
   async function setStatus(status: 'published' | 'draft') {
     setProblem('')
+    setOutcome(null)
     if (dirty) {
       const ok = await save()
       if (!ok) return
@@ -619,7 +650,12 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       )
       .eq('id', event.id)
     if (error) {
+      // Somebody may have registered since the dialog opened: close it and
+      // re-read, so the screen offers what is actually possible now.
+      setConfirming(null)
       setProblem(errorMessage(error))
+      void loadSurroundings()
+      await reload()
       return
     }
     setConfirming(null)
@@ -678,6 +714,30 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         and their refunds on the Results page.
       </>,
     )
+  }
+
+  /**
+   * Decision 16. Only a draft nobody holds a place on offers this, and the
+   * button is a courtesy: guard_event_deletion() is what decides, and its
+   * refusal is shown as it stands. `.select()` because RLS refuses a delete by
+   * matching nothing, not by erroring.
+   */
+  async function deleteDraft() {
+    setProblem('')
+    setSaving(true)
+    const { data: gone, error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', event.id)
+      .select('id')
+    setSaving(false)
+    setConfirming(null)
+    if (error || !gone?.length) {
+      setProblem(error ? errorMessage(error) : 'This draft could not be deleted.')
+      return
+    }
+    const list = eventsListPath(profile)
+    navigate(list === '/events/mine' ? list : `${list}/drafts`, { replace: true })
   }
 
   /* ---------------------------------------------------------------------- */
@@ -745,6 +805,13 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
   const cannotSell = hasPaidTicket && readiness !== null && !readiness.canSell
   const canPublish = !cannotSell
+  // Decision 13. Publishing a past date is allowed, only said out loud.
+  const startsInPast = new Date(columns.starts_at || event.starts_at).getTime() < Date.now()
+  // ORG-15: the creator or an admin, and never once somebody holds a place.
+  const canDelete =
+    event.status === 'draft' &&
+    audience === 0 &&
+    (event.host_id === profile?.id || profile?.role === 'admin')
 
   /* The one judgement that is this screen's: whether the reader can act. */
   const remedy = remedyFor(payout?.fix ?? null, account, profile?.id ?? null)
@@ -773,6 +840,11 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                 Publish
               </Button>
             )}
+            {canDelete && (
+              <Button size="sm" variant="danger" onClick={() => setConfirming('delete')}>
+                Delete draft
+              </Button>
+            )}
             {/* ORG-22. Once somebody holds a confirmed place, taking the event
                 down would strand them silently; the database refuses it and
                 cancelling is the way to call it off. */}
@@ -791,13 +863,24 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                 Cancel event
               </Button>
             )}
-            <Button size="sm" variant="primary" loading={saving} onClick={() => void saveClicked()}>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={saving}
+              disabled={cancelled}
+              onClick={() => void saveClicked()}
+            >
               Save changes
             </Button>
           </div>
         </div>
       </div>
 
+      {cancelled && (
+        <div className="mb-6">
+          <Notice tone="warning">This event is cancelled. Its details can no longer be changed.</Notice>
+        </div>
+      )}
       {outcome && (
         <div className="mb-6">
           <Notice tone="success">{outcome}</Notice>
@@ -831,7 +914,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         </div>
       )}
 
-      <div className="space-y-10">
+      {/* A disabled fieldset turns off every box and button inside it at once. */}
+      <fieldset disabled={cancelled} className="min-w-0 space-y-10">
         <Section title="The event itself">
           <Field label="Title" error={errors.title}>
             <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
@@ -1107,11 +1191,14 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           <Field
             label="Feedback opens this many minutes after the event ends"
             hint="Two hours by default."
+            error={errors.feedback_opens_after_minutes}
           >
             <div className="w-40">
               <Input
                 type="number"
                 min={0}
+                max={20160}
+                step={1}
                 value={draft.feedback_opens_after_minutes}
                 onChange={(e) =>
                   setDraft({ ...draft, feedback_opens_after_minutes: e.target.value })
@@ -1120,7 +1207,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             </div>
           </Field>
         </Section>
-      </div>
+      </fieldset>
 
       <NotifyModal
         open={notifyOpen}
@@ -1260,6 +1347,11 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           <>
             The event becomes visible in the attendee browse list and its link starts working.
             {cannotSell && ` ${payout?.outstanding ?? ''}`}
+            {startsInPast && (
+              <p className="mt-3 text-fg">
+                Its start time has already passed. Check the date before publishing.
+              </p>
+            )}
           </>
         }
         onConfirm={() => void setStatus('published')}
@@ -1303,6 +1395,21 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           </>
         }
         onConfirm={() => void cancelEvent()}
+        onClose={() => setConfirming(null)}
+      />
+
+      <ConfirmModal
+        open={confirming === 'delete'}
+        title="Delete this draft?"
+        confirmLabel="Delete draft"
+        busy={saving}
+        body={
+          <>
+            The draft, its tickets and everything typed into it are removed for good. This cannot
+            be undone.
+          </>
+        }
+        onConfirm={() => void deleteDraft()}
         onClose={() => setConfirming(null)}
       />
     </ManageShell>
@@ -1638,25 +1745,25 @@ function HostPanel({
   onAdd: (id: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
 }) {
-  const [candidates, setCandidates] = useState<Array<{ id: string; full_name: string; role: string }>>(
-    [],
-  )
+  const [candidates, setCandidates] = useState<
+    Array<{ id: string; full_name: string; role: string; current_profession: string | null; email: string }>
+  >([])
   const [chosen, setChosen] = useState('')
   const [busy, setBusy] = useState(false)
   const [dropping, setDropping] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
+    // Not member_directory: it has no email, and the email is what tells two
+    // people with the same name apart. The function refuses anybody who is not
+    // a connector or an admin.
     void supabase
-      .from('member_directory')
-      .select('id, full_name, role')
-      .in('role', ['connector', 'admin'])
-      .order('full_name')
+      .rpc('cohost_candidates')
       .then(({ data, error }) => {
         if (error) {
           loadFailed(error, 'the people who can cohost')
           return
         }
-        setCandidates((data as Array<{ id: string; full_name: string; role: string }>) ?? [])
+        setCandidates((data as typeof candidates) ?? [])
       })
   }, [])
 
@@ -1701,7 +1808,10 @@ function HostPanel({
                 <option value="">Choose somebody…</option>
                 {addable.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.full_name}
+                    {/* Two people can share a name, even a profession; never an email. */}
+                    {[c.full_name, c.role === 'admin' ? 'Administrator' : 'Connector', c.email]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </option>
                 ))}
               </Select>

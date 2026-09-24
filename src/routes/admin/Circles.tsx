@@ -76,6 +76,14 @@ export default function Circles() {
     () => void load(),
   )
 
+  // Decision 12. The circle that spoke most recently comes first; silent ones
+  // follow in the order they were loaded. `messages` is oldest first, so the
+  // last write per connector wins. ponytail: a circle whose latest message is
+  // older than the newest 500 on the platform sorts as silent.
+  const lastSaid: Record<string, number> = {}
+  for (const m of messages) lastSaid[m.connector_id] = Date.parse(m.created_at)
+  const ordered = [...connectors].sort((a, b) => (lastSaid[b.id] ?? 0) - (lastSaid[a.id] ?? 0))
+
   if (loading) {
     return (
       <div className="flex justify-center py-16 text-dim">
@@ -96,7 +104,7 @@ export default function Circles() {
         <EmptyState>Create a connector to start the first circle.</EmptyState>
       ) : (
         <div className="space-y-4">
-          {connectors.map((connector) => {
+          {ordered.map((connector) => {
             const members = links
               .filter((l) => l.connector_id === connector.id)
               .map((l) => profilesById[l.user_profile_id])

@@ -35,6 +35,7 @@ export interface ManagedEvent {
 type LoadState =
   | { state: 'loading' }
   | { state: 'failed' }
+  | { state: 'missing' }
   | { state: 'denied' }
   | { state: 'ready'; data: ManagedEvent }
 
@@ -44,7 +45,9 @@ export function useManagedEvent(eventId: string | undefined) {
 
   const load = useCallback(async () => {
     if (!eventId || !profile) return
-    setResult({ state: 'loading' })
+    // A reload refreshes in place: the screen already showing the event stays
+    // mounted, so what it is holding — a save result, a problem — survives.
+    setResult((r) => (r.state === 'ready' && r.data.event.id === eventId ? r : { state: 'loading' }))
 
     const [eventRes, ticketRes, hostRes, capacityRes] = await Promise.all([
       supabase.from('events').select('*').eq('id', eventId).maybeSingle(),
@@ -57,9 +60,15 @@ export function useManagedEvent(eventId: string | undefined) {
       supabase.rpc('event_capacity_state', { p_event: eventId }),
     ])
 
-    if (eventRes.error || !eventRes.data) {
+    // No row (deleted, never existed, or a mangled address — 22P02 is Postgres
+    // refusing a non-uuid) is an answer, not a failure: trying again cannot help.
+    if (eventRes.error && eventRes.error.code !== '22P02') {
       loadFailed(eventRes.error, 'this event')
       setResult({ state: 'failed' })
+      return
+    }
+    if (!eventRes.data) {
+      setResult({ state: 'missing' })
       return
     }
 
@@ -175,6 +184,8 @@ export function ManagedEventGate({
       <>
         {result.state === 'failed' ? (
           <LoadFailed what="this event" onRetry={() => void reload()} />
+        ) : result.state === 'missing' ? (
+          <Notice tone="warning">No event at this address.</Notice>
         ) : (
           <Notice tone="error">
             This event belongs to somebody else. You can only open events you host.

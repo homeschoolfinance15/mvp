@@ -68,6 +68,7 @@ export default function ConnectorPeople() {
         <section id="person-detail" className="scroll-mt-20">
           {selected && connector && (
             <PersonDetail
+              key={selected.profile.id}
               person={selected}
               connectorId={connector.id}
               notes={notes.filter((n) => n.user_profile_id === selected.profile.id)}

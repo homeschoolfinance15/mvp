@@ -4,7 +4,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { Button, CopyCode, Field, Input, Notice, Textarea } from '../components/ui'
 import { INTERESTS_PLACEHOLDER, parseInterests } from '../lib/interests'
 import { errorMessage, supabase } from '../lib/supabase'
-import { toLink } from '../lib/url'
+import { LINK_HINT, toLink } from '../lib/url'
 import {
   homePathFor,
   needsOnboarding,
@@ -50,6 +50,10 @@ export default function Onboarding() {
     // made of spaces would send them straight back here with nothing said.
     if (!profession.trim()) {
       setError('Please enter your current profession.')
+      return
+    }
+    if (linkedin.trim() && !toLink(linkedin)) {
+      setError(LINK_HINT)
       return
     }
     setBusy(true)
@@ -116,6 +120,7 @@ export default function Onboarding() {
       eyebrow={isConnector ? 'Connector setup' : undefined}
       title={`Tell us about you, ${profile?.full_name.split(' ')[0] ?? 'friend'}`}
       caption={isConnector ? 'The people you invite will see this.' : undefined}
+      signOut
     >
       {firstCode && (
         <div className="mb-7 rounded-sm border border-gold/25 bg-gold-wash px-4 py-4">

@@ -16,7 +16,8 @@ import {
   useAuth,
 } from './context/AuthProvider'
 import { AppShell } from './components/AppShell'
-import { Button, PageLoader, Panel, Wordmark } from './components/ui'
+import { Button, Modal, Notice, PageLoader, Panel, Wordmark } from './components/ui'
+import { errorMessage, supabase } from './lib/supabase'
 import type { AppRole } from './lib/types'
 
 import Landing from './routes/Landing'
@@ -48,6 +49,7 @@ import EventEmails from './routes/manage/EventEmails'
 import EventResults from './routes/manage/EventResults'
 import CheckIn from './routes/manage/CheckIn'
 import AdminEvent from './routes/admin/AdminEvent'
+import AdminEvents from './routes/admin/Events'
 import PaymentSetup from './routes/connector/PaymentSetup'
 import AdminLayout, { ADMIN_SECTIONS } from './routes/admin/AdminLayout'
 import ConnectorPeople from './routes/connector/ConnectorPeople'
@@ -64,6 +66,27 @@ import { FEATURES } from './lib/features'
 function NotProvisioned() {
   const { session, signOut } = useAuth()
   const navigate = useNavigate()
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  // ACC-01. A login with no profile (a half-finished event signup, or an
+  // uninvited signup) still holds an email, so it can be closed like any other.
+  async function closeLogin() {
+    setBusy(true)
+    setError('')
+    const { error: rpcError } = await supabase.rpc('delete_my_account', { p_scope: 'account' })
+    if (rpcError && rpcError.message !== 'This account no longer exists.') {
+      setBusy(false)
+      setConfirming(false)
+      setError(errorMessage(rpcError))
+      return
+    }
+    // ACC-11. Leave first, then sign out: signing out under a guarded page
+    // lets RequireSession replace the address with a bare /signin.
+    navigate('/signin', { replace: true, state: { notice: 'Your account is closed.' } })
+    await signOut()
+  }
 
   return (
     <div className="ambient flex min-h-screen items-center justify-center px-5">
@@ -89,7 +112,39 @@ function NotProvisioned() {
             Sign out
           </Button>
         </div>
+        <button
+          type="button"
+          className="mt-6 text-xs text-dim underline-offset-4 transition-colors hover:text-fg hover:underline"
+          onClick={() => setConfirming(true)}
+        >
+          Close this login
+        </button>
+        {error && (
+          <div className="mt-4 text-left">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        )}
       </Panel>
+
+      <Modal
+        open={confirming}
+        title="Close this login?"
+        onClose={() => {
+          if (!busy) setConfirming(false)
+        }}
+      >
+        <p className="text-sm leading-relaxed text-muted">
+          {session?.user.email} will no longer be able to sign in. This cannot be undone.
+        </p>
+        <div className="mt-7 flex gap-3">
+          <Button className="flex-1" onClick={() => setConfirming(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="danger" className="flex-1" loading={busy} onClick={() => void closeLogin()}>
+            Close this login
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -97,9 +152,10 @@ function NotProvisioned() {
 function RequireRole({ role, children }: { role?: AppRole | AppRole[]; children: ReactNode }) {
   const { session, profile, loading } = useAuth()
   const { pathname } = useLocation()
+  const toSignIn = useSignInHere()
 
   if (loading) return <PageLoader />
-  if (!session) return <Navigate to="/signin" replace />
+  if (!session) return toSignIn
   if (!profile) return <NotProvisioned />
   // /profile holds "Download your data" and "Delete my account". Neither may
   // wait on onboarding or the questionnaire: somebody who wants to leave
@@ -179,13 +235,17 @@ function ToHome() {
 }
 
 /**
- * The four Hosting lists. An administrator's single events list is
- * /admin/events, so they are sent there rather than shown a second one.
+ * The four Hosting lists. An administrator's events lists are /admin/events
+ * and its three siblings, so they are sent to the same one there rather than
+ * shown a second copy.
  */
 function HostingList({ bucket }: { bucket: 'upcoming' | 'drafts' | 'past' | 'cancelled' }) {
   const { profile } = useAuth()
-  if (profile?.role === 'admin') return <Navigate to="/admin/events" replace />
-  return <EventList bucket={bucket} />
+  if (profile?.role === 'admin') {
+    return <Navigate to={bucket === 'upcoming' ? '/admin/events' : `/admin/events/${bucket}`} replace />
+  }
+  // Keyed so a search typed on one bucket's page does not follow to the next.
+  return <EventList key={bucket} bucket={bucket} />
 }
 
 /** /home is the member dashboard; an event-only account's home is its events. */
@@ -196,15 +256,15 @@ function MemberHome() {
 }
 
 /**
- * The questionnaire curates people into the network, so an administrator and
- * an event-only account are owed none; either is sent home instead.
+ * The questionnaire curates people into the network, so an administrator, a
+ * connector and an event-only account are owed none; each is sent home.
  */
 function QuestionsPage() {
   const { profile } = useAuth()
   // Decided on arrival, so finishing here goes where Questions sends you,
   // not to /profile the moment the refreshed answers say done.
   const [answered] = useState(() => profile?.role === 'user' && !needsQuestionnaire(profile))
-  if (profile?.role === 'admin' || (profile?.role === 'user' && profile.network_member === false)) {
+  if (profile?.role !== 'user' || profile.network_member === false) {
     return <Navigate to={homePathFor(profile)} replace />
   }
   // A member who has finished edits their answers on Profile.
@@ -219,11 +279,43 @@ function CirclePage() {
   return <Circle />
 }
 
+/**
+ * ACC-11. /signin, plus the one-line fact a closed account leaves behind
+ * (`state.notice`). The page is reached before sign-out finishes, so it waits
+ * for the session to go rather than bouncing the closing account home.
+ */
+function SignInRoute() {
+  const { session } = useAuth()
+  const notice = (useLocation().state as { notice?: string } | null)?.notice
+  if (notice && session) return <PageLoader />
+  return (
+    <>
+      {notice && (
+        <div className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+          <Notice tone="success">{notice}</Notice>
+        </div>
+      )}
+      <SignIn />
+    </>
+  )
+}
+
+/**
+ * Decision 4. Signed out, a guarded address sends you to sign in and back
+ * again: a deep link from an email or a colleague survives the login.
+ * SignIn honours `next` only when it resolves to this origin.
+ */
+function useSignInHere() {
+  const { pathname, search } = useLocation()
+  return <Navigate to={`/signin?next=${encodeURIComponent(pathname + search)}`} replace />
+}
+
 function RequireSession({ children }: { children: ReactNode }) {
   const { session, profile, loading } = useAuth()
+  const toSignIn = useSignInHere()
 
   if (loading) return <PageLoader />
-  if (!session) return <Navigate to="/signin" replace />
+  if (!session) return toSignIn
   if (!profile) return <NotProvisioned />
 
   return <>{children}</>
@@ -278,7 +370,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/join" element={<Join />} />
-          <Route path="/signin" element={<SignIn />} />
+          <Route path="/signin" element={<SignInRoute />} />
           <Route path="/admin-setup" element={<AdminSetup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           {/* Where a recovery link lands. Public: the link is the credential. */}
@@ -493,7 +585,11 @@ export default function App() {
           >
             <Route index element={<Navigate to={ADMIN_SECTIONS[0].to} replace />} />
             {ADMIN_SECTIONS.map((section) => (
-              <Route key={section.to} path={section.to} element={section.element} />
+              <Route
+                key={section.to}
+                path={section.to}
+                element={section.bucket ? <AdminEvents key={section.bucket} bucket={section.bucket} /> : section.element}
+              />
             ))}
           </Route>
           {/* A connector's home is three pages, one per sidebar link;

@@ -38,8 +38,13 @@ export default function Browse() {
    * Reloaded quietly: there is nothing here to lose, but swapping a read list
    * for a spinner because somebody elsewhere bought a ticket is its own kind
    * of rudeness.
+   *
+   * Other people's registrations are hidden from this reader by RLS, so the
+   * subscription never hears them; the poll is what moves the number.
    */
-  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true))
+  useLive(['events', 'ticket_types', 'event_registrations'], () => void reload(true), {
+    poll: 30_000,
+  })
 
   const covers = useCovers((events ?? []).map((e) => e.cover_path))
 

@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { needsQuestionnaire, useAuth } from '../context/AuthProvider'
+import { useAuth } from '../context/AuthProvider'
 import { ADMIN_LINKS, useAdminCounts, type AdminCounts } from '../lib/adminNav'
 import { isGroup, navLinks, SiteHeader, useDrawer } from './SiteHeader'
 
@@ -76,7 +76,7 @@ const ALIASES: [from: string, to: string][] = [
   ['/e', '/events'],
 ]
 
-/** An administrator's hosting screens belong to the admin Events section. */
+/** An administrator's hosting screens belong to the admin Events group. */
 const ADMIN_ALIASES: [from: string, to: string][] = [['/manage/events', '/admin/events']]
 
 /**
@@ -184,14 +184,11 @@ export function AppShell({
   // An administrator's Dashboard is /admin, which is the first section anyway.
   const admin = profile?.role === 'admin'
   const counts = useAdminCounts(admin)
-  // Until the questionnaire is answered every other page bounces back to it.
-  const groups: SideGroup[] = needsQuestionnaire(profile)
-    ? [{ links: [{ to: '/questions', label: 'Questions' }, { to: '/profile', label: 'Profile' }] }]
-    : [
-        ...(context ? [context] : []),
-        ...(admin ? adminGroups(counts) : []),
-        ...roleGroups(profile, admin),
-      ]
+  const groups: SideGroup[] = [
+    ...(context ? [context] : []),
+    ...(admin ? adminGroups(counts) : []),
+    ...roleGroups(profile, admin),
+  ]
   // One address, one link: a page offered twice in the sidebar is the
   // duplication the owner ruled out. Checked in development only.
   if (import.meta.env.DEV) {

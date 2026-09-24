@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const fetchProfile = useCallback(async (id: string): Promise<Profile | null> => {
+  const fetchProfile = useCallback(async (id: string, keepOnError = false): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
       // The questionnaire stamp rides along: RequireRole needs it on every
@@ -134,7 +134,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const next = error ? null : ((data as Profile) ?? null)
     if (error) console.error('Failed to load profile', error)
-    setProfile(next)
+    // A network blip on a background refresh leaves the page as it was.
+    if (error && keepOnError) return null
+    // Same answer, same object: pages keyed on `profile` (an event's editor
+    // among them) must not reload, and lose typing, every time a tab refocuses.
+    setProfile((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
     setSettledFor(id)
     return next
   }, [])
@@ -148,6 +152,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (settledFor === userId) return
     void fetchProfile(userId)
   }, [userId, settledFor, fetchProfile])
+
+  // Decision 22. A role or membership changed elsewhere (an admin promoted
+  // this account, a code was redeemed in another tab) reaches an open session
+  // the next time its tab comes back, rather than at the next sign-in.
+  useEffect(() => {
+    if (!userId) return
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void fetchProfile(userId, true)
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [userId, fetchProfile])
 
   const refreshProfile = useCallback(async () => {
     if (userId) await fetchProfile(userId)

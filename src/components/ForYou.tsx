@@ -72,6 +72,8 @@ export function ForYou() {
       .from('recommendations')
       .update({ acted_at: new Date().toISOString() })
       .eq('id', item.id)
+      // A query builder is lazy: without then() the update is never sent.
+      .then(() => {})
 
     if (item.member_id) {
       const who = directory[item.member_id]

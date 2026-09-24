@@ -56,14 +56,17 @@ export const ADMIN_SECTIONS: AdminSection[] = ADMIN_LINKS.map((link) => ({
 export default function AdminLayout() {
   const location = useLocation()
 
-  const current = ADMIN_SECTIONS.find((s) => location.pathname.startsWith(s.to))
+  // The longest match: /admin/events/drafts is Drafts, not Upcoming.
+  const current = ADMIN_SECTIONS.filter(
+    (s) => location.pathname === s.to || location.pathname.startsWith(s.to + '/'),
+  ).sort((a, b) => b.to.length - a.to.length)[0]
 
   // AppShell owns the sidebar, its live counts, the phone drawer and the top bar.
   return (
     <AppShell title="Administration">
       <main className="px-5 pb-24 sm:px-8">
         <div className="border-b border-line py-8 sm:py-10">
-          <h1 className="display text-3xl sm:text-4xl">{current?.label ?? 'Administration'}</h1>
+          <h1 className="display text-3xl sm:text-4xl">{current?.title ?? current?.label ?? 'Administration'}</h1>
         </div>
 
         {/* The four tiles that used to sit here are gone.

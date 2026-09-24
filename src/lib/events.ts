@@ -385,7 +385,14 @@ export const REFUND_WORDS: Record<RefundStatus, string> = {
 export function attendanceAndMoney(
   registration: RegistrationStatus,
   refund: RefundStatus | null,
+  eventCancelled = false,
 ): string {
+  // A host-cancelled event leaves its registrations confirmed. The card says
+  // the event is not going ahead; "your place is confirmed" beside it would
+  // contradict that, so only the money is spoken for.
+  if (eventCancelled && registration !== 'cancelled') {
+    return refund ? `${REFUND_WORDS[refund]}.` : ''
+  }
   const place =
     registration === 'cancelled'
       ? 'Your attendance is cancelled'

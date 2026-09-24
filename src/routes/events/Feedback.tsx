@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Link, useParams } from 'react-router-dom'
 import { useSidebarCurrent } from '../../components/AppShell'
 import {
+  Button,
   EmptyState,
   Initials,
   Input,
@@ -40,7 +41,8 @@ import { BOOKING_PAGES, EventShell, bookingPage } from './shared'
  * confirmation. So there is no "what I said" screen and no "reviews about me"
  * screen, and `my_feedback_progress` — which returns outcomes and never
  * answer text — is deliberately the only thing this page reads about work
- * already done.
+ * already done. The one exception is decision 19: somebody who asks to change
+ * their event feedback gets their own answers back, and only then.
  */
 
 /** The event as the public view hands it over. Slug in, feedback window out. */
@@ -155,6 +157,8 @@ export default function Feedback() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [justSent, setJustSent] = useState('')
+  /** Decision 19. Changing event feedback already sent, from what was sent. */
+  const [revising, setRevising] = useState(false)
 
   /**
    * QLT-01. Once this screen has had a session, losing it must not swap the
@@ -472,11 +476,41 @@ export default function Feedback() {
 
       await loadProgress(event.id)
       setEventDraft({})
+      setRevising(false)
       setJustSent('Sent. Thank you.')
     } catch (submitError) {
       setError(submitFailure(submitError, session !== null))
     }
     setBusy(false)
+  }
+
+  /**
+   * Decision 19. Opens the event form on what this person sent, read through
+   * my_event_feedback — their own answers and nobody else's. The save is the
+   * same upserting submit_event_feedback, so the attendance, cancelled and
+   * window rules still apply. A draft already on this device wins over the
+   * stored answer for the same question.
+   */
+  async function reviseEvent() {
+    if (!event) return
+    setBusy(true)
+    setError('')
+    setJustSent('')
+    const { data: sent, error: readError } = await supabase.rpc('my_event_feedback', {
+      p_event: event.id,
+    })
+    setBusy(false)
+    if (readError) {
+      setError(`We could not open your feedback. ${errorMessage(readError)}`)
+      return
+    }
+    const stored: Draft = Object.fromEntries(
+      ((sent as { question_id: string; answer_scale: number | null; answer_text: string | null }[]) ?? []).map(
+        (a) => [a.question_id, { text: a.answer_text ?? '', choice: null, scale: a.answer_scale }],
+      ),
+    )
+    setEventDraft((d) => ({ ...stored, ...d }))
+    setRevising(true)
   }
 
   /* ---- gates ------------------------------------------------------------ */
@@ -566,12 +600,11 @@ export default function Feedback() {
           body={
             Date.now() < ended
               ? `${event.title} hasn't happened yet. It runs ${eventWhen(event)}.`
-              : `Feedback opens shortly after the event finishes — from ${new Date(
-                  opensAt,
-                ).toLocaleString(undefined, {
-                  weekday: 'long',
-                  hour: 'numeric',
-                  minute: '2-digit',
+              : // In the event's own zone, named, like every other time on it.
+                `Feedback opens shortly after the event finishes — from ${eventWhen({
+                  starts_at: new Date(opensAt).toISOString(),
+                  ends_at: null,
+                  timezone: event.timezone,
                 })}.`
           }
         />
@@ -776,25 +809,43 @@ export default function Feedback() {
           <section>
             <SectionHeader title="The event itself" />
 
-            {eventOutcome === 'submitted' ? (
+            {eventOutcome === 'submitted' && !revising ? (
               // FDB-12/13. Confirmation and nothing else: no score read back,
-              // no summary, no "you said".
+              // no summary, no "you said" — until they ask to change it.
               <Panel className="px-5 py-6">
                 <p className="text-sm text-fg">You have sent your feedback on this event.</p>
-                <NextStep page={BOOKING_PAGES.past} />
+                {error && (
+                  <div className="mt-4">
+                    <Notice tone="error">{error}</Notice>
+                  </div>
+                )}
+                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <Button size="sm" loading={busy} onClick={() => void reviseEvent()}>
+                    Change my feedback
+                  </Button>
+                  <NextStep page={BOOKING_PAGES.past} />
+                </div>
               </Panel>
             ) : (
-              <EventForm
-                questions={eventQuestions}
-                draft={eventDraft}
-                busy={busy}
-                error={error}
-                onChange={(questionId, next) => {
-                  setEventDraft((d) => ({ ...d, [questionId]: next }))
-                  setError('')
-                }}
-                onSubmit={() => void submitEvent()}
-              />
+              <>
+                {revising && (
+                  <p className="mb-4 text-xs leading-relaxed text-muted">
+                    Change any answer and send again. An answer you clear keeps what you sent
+                    before.
+                  </p>
+                )}
+                <EventForm
+                  questions={eventQuestions}
+                  draft={eventDraft}
+                  busy={busy}
+                  error={error}
+                  onChange={(questionId, next) => {
+                    setEventDraft((d) => ({ ...d, [questionId]: next }))
+                    setError('')
+                  }}
+                  onSubmit={() => void submitEvent()}
+                />
+              </>
             )}
           </section>
         </div>
@@ -839,7 +890,7 @@ function Ineligible({ title, body }: { title: string; body: string }) {
 /** The next step right after the event form is sent. */
 function NextStep({ page }: { page: { title: string; path: string } }) {
   return (
-    <p className="mt-4 text-sm">
+    <p className="text-sm">
       <Link to={page.path} className="brand-text-link">
         Go to {page.title}
       </Link>

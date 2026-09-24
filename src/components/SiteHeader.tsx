@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { homePathFor, isNetworkMember, useAuth } from '../context/AuthProvider'
+import { homePathFor, isNetworkMember, needsQuestionnaire, useAuth } from '../context/AuthProvider'
 import { NotificationBell } from './NotificationBell'
 import { Wordmark } from './ui'
 import { FEATURES } from '../lib/features'
@@ -141,6 +141,17 @@ export function navLinks(profile: Profile | null): NavEntry[] {
     ]
   }
 
+  // Until the questionnaire is answered every network page bounces back to
+  // it, but events never did (their routes skip RequireRole), so a member
+  // still answering keeps them — as Luma and Meetup let you book first.
+  if (needsQuestionnaire(profile)) {
+    return [
+      { to: '/questions', label: 'Questions' },
+      ...(FEATURES.events ? [{ label: 'Events', items: [...browse, ...mine] }] : []),
+      { to: '/profile', label: 'Profile' },
+    ]
+  }
+
   const hosting: NavLeaf[] =
     FEATURES.events && hosts
       ? [
@@ -167,7 +178,7 @@ export function navLinks(profile: Profile | null): NavEntry[] {
     // Held back until the client signs them off. See src/lib/features.ts.
     ...(FEATURES.feed && member ? [{ to: '/feed', label: 'Feed' }] : []),
     ...(FEATURES.events
-      ? // An administrator's Platform section already has an "Events".
+      ? // An administrator's admin sections already have an "Events".
         [{ label: profile?.role === 'admin' ? 'Attending' : 'Events', items: [...browse, ...mine] }]
       : []),
     ...(hosting.length ? [{ label: 'Hosting', items: hosting }] : []),

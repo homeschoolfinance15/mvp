@@ -15,8 +15,9 @@ export function QuestionnaireAnswers() {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
 
-  // Event-only accounts never had the network questionnaire.
-  if (!profile || !isNetworkMember(profile)) return null
+  // Only members are curated by it: event-only accounts never had it, and
+  // connectors and admins run the network rather than being placed in it.
+  if (!profile || profile.role !== 'user' || !isNetworkMember(profile)) return null
 
   return (
     <section className="mt-12">

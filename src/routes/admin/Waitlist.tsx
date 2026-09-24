@@ -27,6 +27,7 @@ import { loadConnectors, type ConnectorRow } from './shared'
 export default function Waitlist() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([])
   const [connectors, setConnectors] = useState<ConnectorRow[]>([])
+  const [linkedCount, setLinkedCount] = useState<Record<string, number>>({})
   const [codesById, setCodesById] = useState<Record<string, InviteCode>>({})
   // Labels for the chips a waitlist applicant picked, so the detail view can
   // show "Starting a business" rather than current_focus.starting_a_business.
@@ -44,11 +45,12 @@ export default function Waitlist() {
 
   const load = useCallback(async () => {
     setLoadError('')
-    const [waitlistRes, connectorsRes, codesRes, tagsRes] = await Promise.all([
+    const [waitlistRes, connectorsRes, codesRes, tagsRes, linksRes] = await Promise.all([
       supabase.from('waitlist_entries').select('*').order('created_at', { ascending: false }),
       loadConnectors(),
       supabase.from('invite_codes').select('*'),
       supabase.from('profile_tags').select('*').order('field').order('position'),
+      supabase.from('connector_user_links').select('connector_id'),
     ])
 
     const firstError = [
@@ -56,6 +58,7 @@ export default function Waitlist() {
       connectorsRes.error,
       codesRes.error,
       tagsRes.error,
+      linksRes.error,
     ].find(Boolean)
     if (firstError) setLoadError(errorMessage(firstError))
 
@@ -65,6 +68,11 @@ export default function Waitlist() {
       Object.fromEntries(((codesRes.data as InviteCode[]) ?? []).map((c) => [c.id, c])),
     )
     setTags((tagsRes.data as ProfileTag[]) ?? [])
+    const counts: Record<string, number> = {}
+    for (const l of (linksRes.data as { connector_id: string }[]) ?? []) {
+      counts[l.connector_id] = (counts[l.connector_id] ?? 0) + 1
+    }
+    setLinkedCount(counts)
     setLoading(false)
   }, [])
 
@@ -84,7 +92,7 @@ export default function Waitlist() {
    * destroy the only copy. The view and delete dialogs hold the entry their
    * decision is about.
    */
-  useLive(['waitlist_entries', 'invite_codes', 'connectors'], () => void load(), {
+  useLive(['waitlist_entries', 'invite_codes', 'connectors', 'connector_user_links'], () => void load(), {
     enabled: !assigning && !viewing && !deleting && !decliningId && !deleteBusy,
   })
 
@@ -292,6 +300,7 @@ export default function Waitlist() {
           key={assigning.id}
           entry={assigning}
           connectors={connectors}
+          linkedCount={linkedCount}
           onClose={() => setAssigning(null)}
           onAssigned={load}
         />
@@ -415,19 +424,25 @@ function WaitlistEntryModal({
 function AssignWaitlistModal({
   entry,
   connectors,
+  linkedCount,
   onClose,
   onAssigned,
 }: {
   entry: WaitlistEntry
   connectors: ConnectorRow[]
+  linkedCount: Record<string, number>
   onClose: () => void
   onAssigned: () => Promise<void>
 }) {
-  // ponytail: only the obvious filter here. Capacity is enforced by
-  // assign_waitlist_entry, not re-derived in the browser.
   const eligible = connectors.filter((c) => c.invite_status === 'active' && c.profiles)
+  // Same sum as connector_available_capacity, so a full connector is marked
+  // before submitting; assign_waitlist_entry still decides.
+  const placesLeft = (c: ConnectorRow) =>
+    Math.max(0, c.invite_capacity - (linkedCount[c.id] ?? 0))
 
-  const [connectorId, setConnectorId] = useState(eligible[0]?.id ?? '')
+  const [connectorId, setConnectorId] = useState(
+    eligible.find((c) => placesLeft(c) > 0)?.id ?? '',
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [code, setCode] = useState<string | null>(null)
@@ -437,6 +452,7 @@ function AssignWaitlistModal({
   async function submit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    if (!connectorId) return setError('Every active connector is full. Raise a capacity first.')
     setBusy(true)
 
     const { data, error: rpcError } = await supabase.rpc('assign_waitlist_entry', {
@@ -487,8 +503,9 @@ function AssignWaitlistModal({
               onChange={(e) => setConnectorId(e.target.value)}
             >
               {eligible.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.profiles?.full_name ?? 'Unknown'}
+                <option key={c.id} value={c.id} disabled={placesLeft(c) === 0}>
+                  {c.profiles?.full_name ?? 'Unknown'} — {c.profiles?.email ?? 'no email'} ·{' '}
+                  {placesLeft(c)} {placesLeft(c) === 1 ? 'place' : 'places'} left
                 </option>
               ))}
             </Select>

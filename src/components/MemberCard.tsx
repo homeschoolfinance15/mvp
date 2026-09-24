@@ -55,9 +55,9 @@ export function MemberCard({
               role={member.role}
               size="lg"
             />
+            {/* The modal title already names them. */}
             <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-fg">{member.full_name}</div>
-              <div className="truncate text-xs text-dim">
+              <div className="truncate text-sm text-muted">
                 {ROLE_WORD[member.role] ?? 'Member'}
                 {member.current_profession ? ` · ${member.current_profession}` : ''}
               </div>
@@ -183,7 +183,7 @@ function RaiseReport({
         <Select value={kind} onChange={(e) => setKind(e.target.value as ReportKind)}>
           {REPORT_KINDS.map((k) => (
             <option key={k} value={k}>
-              {k}
+              {k[0].toUpperCase() + k.slice(1)}
             </option>
           ))}
         </Select>

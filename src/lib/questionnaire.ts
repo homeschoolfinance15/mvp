@@ -21,6 +21,9 @@ export const INTRO =
 /** For people already in the network, where the waitlist no longer applies. */
 export const MEMBER_DISCLOSURE = 'Your answers are not shown to other members.'
 
+/** ACC-05. Digits with an optional leading +, spaces, brackets and dashes. */
+export const PHONE_PATTERN = /^\+?[0-9 ()-]{7,20}$/
+
 export const DISCLOSURE =
   'Your answers are not shown to other members. If you join the waitlist, an assigned connector can view them once you are placed in a community.'
 

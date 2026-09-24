@@ -39,7 +39,7 @@ const TITLES: Record<HostingBucket, string> = {
   upcoming: 'Upcoming',
   drafts: 'Drafts',
   past: 'Past',
-  cancelled: 'Cancelled',
+  cancelled: 'Cancelled events',
 }
 
 /** One page per bucket, each its own route and sidebar link — no tab bar. */

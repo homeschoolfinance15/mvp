@@ -51,6 +51,19 @@ function normalise(value: unknown): string {
 }
 
 /**
+ * The same, for a detail field: a time is the instant, not its spelling —
+ * Postgres hands back `+00:00` where the editor writes `.000Z`.
+ */
+function detail(field: NotifiableField, value: unknown): string {
+  const text = normalise(value)
+  if ((field === 'starts_at' || field === 'ends_at') && text) {
+    const t = new Date(text).getTime()
+    return Number.isNaN(t) ? text : String(t)
+  }
+  return text
+}
+
+/**
  * What changed between the event as stored and the event as edited, limited to
  * the fields an attendee needs. Returns an empty object when nothing an
  * attendee cares about moved — which is how the editor knows not to ask.
@@ -61,8 +74,8 @@ export function changedDetails(
 ): ChangedDetails {
   const out: ChangedDetails = {}
   for (const field of Object.keys(NOTIFIABLE_FIELDS) as NotifiableField[]) {
-    const from = normalise(before[field])
-    const to = normalise(after[field])
+    const from = detail(field, before[field])
+    const to = detail(field, after[field])
     if (from !== to) out[field] = { from: before[field] ?? null, to: after[field] ?? null }
   }
   return out
@@ -76,7 +89,7 @@ export function changedDetails(
  */
 export function previewFingerprint(draft: Partial<EventRecord>): string {
   return (Object.keys(NOTIFIABLE_FIELDS) as NotifiableField[])
-    .map((field) => `${field}=${normalise(draft[field])}`)
+    .map((field) => `${field}=${detail(field, draft[field])}`)
     .join('|')
 }
 
@@ -177,6 +190,14 @@ export const AUTOMATIC_MESSAGES: Array<{
     trigger: 'Automatically, as the cancellation is confirmed',
     recipient: 'Everyone affected, including anybody with an unresolved booking or payment',
     makesClear: 'That the event will not happen, and what becomes of their booking and their money.',
+    organiserControlled: false,
+  },
+  {
+    kinds: ['cohost'],
+    situation: 'You add a cohost',
+    trigger: 'Automatically, once you add them to the hosting team',
+    recipient: 'The person added',
+    makesClear: 'Which event it is, and that they can now edit it, invite people, check them in and email its attendees.',
     organiserControlled: false,
   },
   {
@@ -523,6 +544,15 @@ export function validateEvent(draft: Partial<EventRecord>): Record<string, strin
   ) {
     errors.capacity = 'A limit has to be a whole number of places, at least one, or leave it empty for no limit.'
   }
+  const feedback = draft.feedback_opens_after_minutes
+  if (
+    feedback !== null &&
+    feedback !== undefined &&
+    (!Number.isInteger(feedback) || feedback < 0 || feedback > 20160)
+  ) {
+    errors.feedback_opens_after_minutes =
+      'Feedback has to open between 0 and 20160 minutes (two weeks) after the event, in whole minutes.'
+  }
   return errors
 }
 
@@ -687,4 +717,21 @@ export function fromZonedInput(local: string, timeZone: string): string | null {
 /** The reader's own zone: what a box with no event zone yet was typed in. */
 export function browserTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London'
+}
+
+/**
+ * Whether the door is being worked on a day the event is not on, by the
+ * event's own calendar. A warning, never a refusal: early setup, a late
+ * night past midnight and a mistyped date all look the same from here, and
+ * the steward can tell which it is (Eventbrite Organizer warns the same way).
+ */
+export function outsideEventDay(
+  startsAt: string,
+  endsAt: string | null,
+  timeZone: string,
+  now = new Date(),
+): boolean {
+  const day = (iso: string) => toZonedInput(iso, timeZone).slice(0, 10)
+  const today = day(now.toISOString())
+  return today < day(startsAt) || today > day(endsAt ?? startsAt)
 }

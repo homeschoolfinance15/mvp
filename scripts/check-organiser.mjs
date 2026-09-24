@@ -166,8 +166,8 @@ check('EML-06 a skipped reminder reads as a schedule fact, not a fault', () => {
   assert.match(skippedSentence('reminder', null), /moved\s+earlier/)
 })
 
-check('EML-01 all nine situations are accounted for, and a paid purchase is one email', () => {
-  assert.equal(AUTOMATIC_MESSAGES.length, 9)
+check('EML-01 all ten situations are accounted for, and a paid purchase is one email', () => {
+  assert.equal(AUTOMATIC_MESSAGES.length, 10)
   // Only the reminder is the organiser's to switch off (EML-02).
   assert.deepEqual(
     AUTOMATIC_MESSAGES.filter((m) => m.organiserControlled).map((m) => m.kinds[0]),
@@ -176,7 +176,7 @@ check('EML-01 all nine situations are accounted for, and a paid purchase is one 
   // Every kind the queue can hold is accounted for exactly once.
   const kinds = AUTOMATIC_MESSAGES.flatMap((m) => m.kinds)
   assert.equal(new Set(kinds).size, kinds.length)
-  assert.equal(kinds.length, 9)
+  assert.equal(kinds.length, 10)
   // Each row answers all four columns the requirement asks for.
   for (const m of AUTOMATIC_MESSAGES) {
     assert.ok(m.situation && m.trigger && m.recipient && m.makesClear, m.situation)

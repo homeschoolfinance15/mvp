@@ -26,7 +26,6 @@ import {
   SectionHeader,
   Select,
   Textarea,
-  formatDateTime,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { useLive } from '../../lib/live'
@@ -63,6 +62,19 @@ export default function EventEmails() {
       {(data) => <Emails key={data.event.id} data={data} />}
     </ManagedEventGate>
   )
+}
+
+/** On the event's clock, zone named, like the reminder times above it. */
+function eventTime(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+    timeZoneName: 'short',
+  })
 }
 
 /**
@@ -533,9 +545,9 @@ function Emails({ data }: { data: ManagedEvent }) {
                   </span>
                   <span className="block text-dim">
                     {m.sent_at
-                      ? formatDateTime(m.sent_at)
+                      ? eventTime(m.sent_at, event.timezone)
                       : m.scheduled_for
-                        ? `for ${formatDateTime(m.scheduled_for)}`
+                        ? `for ${eventTime(m.scheduled_for, event.timezone)}`
                         : ''}
                   </span>
                   {m.status === 'skipped' && (
@@ -548,7 +560,10 @@ function Emails({ data }: { data: ManagedEvent }) {
                 <span className="text-xs sm:w-44">
                   <span className="text-muted">
                     {m.sentCount} sent
-                    {m.pendingCount > 0 ? ` · ${m.pendingCount} waiting` : ''}
+                    {/* A cancelled or skipped message is not waiting for anything. */}
+                    {m.pendingCount > 0 && m.status !== 'cancelled' && m.status !== 'skipped'
+                      ? ` · ${m.pendingCount} waiting`
+                      : ''}
                   </span>
                   {m.failedCount > 0 && (
                     <span className="block text-negative">{m.failedCount} failed</span>

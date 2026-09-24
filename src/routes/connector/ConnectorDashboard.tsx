@@ -240,6 +240,8 @@ export function PersonDetail({
       return
     }
     setText('')
+    // Private by default: sharing is chosen per note, never carried over.
+    setShareWithAdmin(false)
     await onChanged()
   }
 
@@ -475,7 +477,9 @@ export function InviteCodes({
       ) : (
         <Panel className="divide-y divide-line">
           {codes.map((code) => {
-            const remaining = code.max_uses - code.use_count
+            // Decision 21. A code can only admit as many as the connector
+            // still has room for, whatever its own limit says.
+            const left = Math.min(code.max_uses - code.use_count, remaining)
             const closed = code.status === 'exhausted' || code.status === 'expired'
             return (
               <div
@@ -486,7 +490,7 @@ export function InviteCodes({
                   <CopyCode code={code.code} />
                   <div className="text-xs text-dim">
                     {code.use_count} of {code.max_uses} used
-                    {code.status === 'active' && remaining > 0 && ` · ${remaining} left`}
+                    {code.status === 'active' && left > 0 && ` · ${left} left`}
                     {' · created '}
                     {formatDate(code.created_at)}
                   </div>
@@ -496,7 +500,7 @@ export function InviteCodes({
                       {code.sent_at && ` · ${formatDate(code.sent_at)}`}
                     </div>
                   )}
-                  {code.status === 'active' && remaining > 0 && (
+                  {code.status === 'active' && left > 0 && (
                     <div className="mt-1 max-w-sm">
                       <SendInvite code={code.code} onSent={onChanged} />
                     </div>

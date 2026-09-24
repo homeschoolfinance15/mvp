@@ -40,7 +40,11 @@ export default function Notes() {
 
   // A note written by a connector about somebody they met appears here as it
   // is written. This page only reads, so there is nothing a reload can take.
-  useLive(['connector_notes', 'connectors', 'profiles'], () => void load())
+  //
+  // The poll is the one that matters: when a connector withdraws a note, the
+  // row stops passing the admin's RLS and Realtime never delivers that UPDATE,
+  // so without it the private text stayed on screen until a refresh.
+  useLive(['connector_notes', 'connectors', 'profiles'], () => void load(), { poll: 10_000 })
 
   const connectorName = useMemo(() => {
     const map: Record<string, string> = {}

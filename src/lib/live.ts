@@ -26,16 +26,27 @@ import { supabase } from './supabase'
  * counts and read-only records are what this is for. An editor keeps its own
  * state and should be told a thing changed, not have the change applied to it.
  *
+ * **Postgres changes are filtered by row-level security.** A reader only hears
+ * about rows they could select — so an attendee never hears about somebody
+ * else's registration (the capacity that just ran out), and an UPDATE that
+ * makes a row invisible to its reader (a connector withdrawing a note from the
+ * admin) is never delivered at all. Screens that depend on rows their reader
+ * cannot see pass `poll`: the loader also runs every `poll` ms while the tab is
+ * visible, and once whenever the tab becomes visible again.
+ *
  * ponytail: one hook, a debounce and a channel. No cache, no store, no
- * reconciliation layer — the loaders already exist and already work.
+ * reconciliation layer — the loaders already exist and already work. The poll
+ * is the ceiling for RLS-hidden changes; a public broadcast would make them
+ * instant if a poll interval ever proves too slow.
  */
 export function useLive(
   tables: string[],
   onChange: () => void,
-  options?: { enabled?: boolean; filter?: string },
+  options?: { enabled?: boolean; filter?: string; poll?: number },
 ): void {
   const enabled = options?.enabled ?? true
   const filter = options?.filter
+  const poll = options?.poll
 
   // The callback changes identity on most renders. Held in a ref so that does
   // not tear the subscription down and build it again on every keystroke
@@ -79,4 +90,17 @@ export function useLive(
       void supabase.removeChannel(channel)
     }
   }, [enabled, key, filter, id])
+
+  useEffect(() => {
+    if (!enabled || !poll) return
+    const tick = () => {
+      if (document.visibilityState === 'visible') latest.current()
+    }
+    const timer = window.setInterval(tick, poll)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [enabled, poll])
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
 import { needsOnboarding, useAuth } from '../../context/AuthProvider'
@@ -109,6 +109,9 @@ export default function Checkout() {
   const { data, loading, failed, reload } = useLoader<Loaded>(load, [slug, profileId])
 
   const [busy, setBusy] = useState(false)
+  // `busy` is state, so two clicks in one frame both see it false. The ref is
+  // read synchronously, so the second click is dropped before it reaches the RPC.
+  const inFlight = useRef(false)
   const [error, setError] = useState('')
   const [waitingSince, setWaitingSince] = useState<number | null>(null)
 
@@ -164,6 +167,21 @@ export default function Checkout() {
   const walkedAway = params.get('cancelled') === '1'
   const processing = !paidUp && cameBack && !walkedAway
 
+  const cancelled = event?.capacity_state === 'cancelled'
+  const finished = event?.capacity_state === 'finished'
+  /*
+   * Whether the screen is offering the button. Any other view — confirmed,
+   * processing, sold out, closed, cancelled — already says in its own words
+   * why there is nothing to press, so an error from the attempt that led there
+   * would only say it a second time (or, after a double click, contradict it).
+   */
+  const offering =
+    event !== null && !cancelled && !paidUp && !processing && !chosenSoldOut &&
+    canRegister(event.capacity_state)
+  useEffect(() => {
+    if (!offering) setError('')
+  }, [offering])
+
   /*
    * Poll for the webhook's verdict. Quietly — a poll that blanks the page
    * every few seconds is worse than no poll — and it slows down rather than
@@ -213,7 +231,10 @@ export default function Checkout() {
    * buying is in the URL, not in state, so there is nothing typed on this page
    * to rebuild underneath them.
    */
-  useLive(['event_orders', 'event_registrations'], () => void reload(true))
+  //
+  // Polled too, for capacity: other people's registrations are hidden from
+  // this reader by RLS, so no change of theirs is ever delivered here.
+  useLive(['event_orders', 'event_registrations'], () => void reload(true), { poll: 15_000 })
 
   if (authLoading || loading) {
     return (
@@ -331,13 +352,15 @@ export default function Checkout() {
    * database is the thing deciding, not this screen.
    */
   async function rsvp() {
-    if (!event) return
+    if (!event || inFlight.current) return
+    inFlight.current = true
     setBusy(true)
     setError('')
     const { error: rpcError } = await supabase.rpc('register_free', {
       p_event: event.id,
       p_ticket_type: chosen?.id ?? null,
     })
+    inFlight.current = false
     setBusy(false)
     if (rpcError) {
       // The RPC raises sentences written to be read — "This event is sold
@@ -390,7 +413,13 @@ export default function Checkout() {
     <EventShell back={{ to: eventLink(event.slug), label: 'Back to the event' }}>
       <div className="mx-auto max-w-2xl">
         <h1 className="display text-3xl">
-          {paidUp ? "You're going" : processing ? 'Completing your payment' : 'Take your place'}
+          {paidUp
+            ? cancelled || finished
+              ? 'Your booking'
+              : "You're going"
+            : processing
+              ? 'Completing your payment'
+              : 'Take your place'}
         </h1>
 
         {/* What they are buying, always in view. EVT-04: no surprises means
@@ -422,15 +451,28 @@ export default function Checkout() {
           </div>
         )}
 
-        {error && (
+        {error && offering && (
           <div className="mt-6">
             <Notice tone="error">{error}</Notice>
           </div>
         )}
 
-        {paidUp ? (
+        {cancelled ? (
+          /* Checked before the place: a host cancelling leaves registrations
+             confirmed, and this screen must not call a place at an event that
+             is not happening "confirmed". */
+          <Panel className="mt-6 px-6 py-7 sm:px-8">
+            <h2 className="text-sm font-medium text-fg">This event has been cancelled</h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              {holdsAPlace
+                ? 'It is not going ahead. Your booking is under Cancelled; any refund due to you is handled by the host.'
+                : 'It is not going ahead. You have not been charged. Pick another event under Browse.'}
+            </p>
+          </Panel>
+        ) : paidUp ? (
           <Confirmed
             event={event}
+            finished={finished}
             free={free}
             ticketId={registration?.event_tickets?.id ?? null}
             page={bookingPage(event, registration)}
@@ -448,7 +490,7 @@ export default function Checkout() {
           <Panel className="mt-6 px-6 py-7 sm:px-8">
             <h2 className="text-sm font-medium text-fg">This ticket has sold out</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              The last one went before you got here. You have not been charged and no place has
+              The last one has gone. You have not been charged and no place has
               been held for you.{' '}
               {types.length > 1
                 ? 'Other tickets for this event may still be available.'
@@ -461,21 +503,17 @@ export default function Checkout() {
           <Panel className="mt-6 px-6 py-7 sm:px-8">
             <h2 className="text-sm font-medium text-fg">
               {event.capacity_state === 'sold_out'
-                ? 'This event sold out before you got here'
+                ? 'This event has sold out'
                 : event.capacity_state === 'closed'
                   ? 'Registration has closed'
-                  : event.capacity_state === 'cancelled'
-                    ? 'This event has been cancelled'
-                    : 'This event has already happened'}
+                  : 'This event has already happened'}
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               {event.capacity_state === 'sold_out'
-                ? 'The last place went while you were on your way to this page. You have not been charged, and no place has been held for you. Places sometimes reopen when somebody cancels.'
+                ? 'The last place has gone. You have not been charged, and no place has been held for you. Places sometimes reopen when somebody cancels.'
                 : event.capacity_state === 'closed'
                   ? 'The organisers have stopped taking new registrations for this event. You have not been charged.'
-                  : event.capacity_state === 'cancelled'
-                    ? 'It is not going ahead. You have not been charged.'
-                    : 'You have not been charged.'}{' '}
+                  : 'You have not been charged.'}{' '}
               Pick another event under Browse.
             </p>
           </Panel>
@@ -634,11 +672,13 @@ function Processing({
 
 function Confirmed({
   event,
+  finished,
   free,
   ticketId,
   page,
 }: {
   event: PublicEvent
+  finished: boolean
   free: boolean
   ticketId: string | null
   page: { title: string; path: string }
@@ -649,7 +689,9 @@ function Confirmed({
         {free ? 'Your place is confirmed.' : 'Your payment went through and your place is confirmed.'}
       </h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
-        We have emailed you the details.{event.attendee_instructions ? '' : ' Everything you need is on your ticket.'}
+        {/* Future tense: the email is queued here and sent by the mailer. */}
+        {finished ? '' : "We're emailing you the details."}
+        {event.attendee_instructions ? '' : ' Everything you need is on your ticket.'}
       </p>
 
       {event.attendee_instructions && (

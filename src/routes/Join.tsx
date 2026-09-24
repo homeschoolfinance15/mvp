@@ -58,6 +58,8 @@ export default function Join() {
   }
 
   const accepted = lookup?.valid ? lookup : null
+  // Signed in, this page is a detour from somewhere; say how to get back.
+  const back = profile ? homePathFor(profile) : undefined
 
   async function check(value: string) {
     setError('')
@@ -123,6 +125,8 @@ export default function Join() {
   if (!accepted) {
     return (
       <AuthLayout
+        back={back}
+        signOut
         eyebrow="By invitation"
         title="Enter your invitation code"
         footer={
@@ -167,6 +171,8 @@ export default function Join() {
 
   return (
     <AuthLayout
+      back={back}
+      signOut
       eyebrow={isConnector ? 'Connector access' : 'Your invitation'}
       title={
         isConnector

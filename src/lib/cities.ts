@@ -34,8 +34,8 @@ export interface CityHit {
   country: string | null
 }
 
-/** Nothing useful comes back from one letter. */
-export const MIN_QUERY = 2
+/** Two letters match half a continent; three is where a lookup narrows. */
+export const MIN_QUERY = 3
 
 function toHit(feature: {
   properties?: Record<string, unknown>

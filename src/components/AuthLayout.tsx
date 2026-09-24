@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Wordmark } from './ui'
 import { useAuth } from '../context/AuthProvider'
 
@@ -9,25 +9,55 @@ export function AuthLayout({
   caption,
   children,
   footer,
+  back,
+  signOut = false,
 }: {
   eyebrow?: string
   title: string
   caption?: ReactNode
   children: ReactNode
   footer?: ReactNode
+  /** Signed in only: where Back goes. */
+  back?: string
+  /** Signed in only: offer a way out of a step somebody cannot finish now. */
+  signOut?: boolean
 }) {
   // Signed in, "/" only redirects back into the app, so the link would loop.
-  const { session } = useAuth()
+  const { session, signOut: endSession } = useAuth()
+  const navigate = useNavigate()
   return (
     <div className="brand-experience auth-page">
       <header className="auth-header brand-container">
         <Link to="/" aria-label="Amazing home">
           <Wordmark />
         </Link>
-        {!session && (
+        {!session ? (
           <Link to="/" className="brand-text-link">
             <span aria-hidden="true">←</span> Back to home
           </Link>
+        ) : (
+          <span className="flex items-center gap-5">
+            {back && (
+              <Link to={back} className="brand-text-link">
+                <span aria-hidden="true">←</span> Back
+              </Link>
+            )}
+            {signOut && (
+              <button
+                type="button"
+                className="brand-text-link"
+                // Sign out first, then leave, as SiteHeader does: leaving
+                // first lands on "/" while the session is live, and Landing
+                // sends a signed-in visitor straight back into the app.
+                onClick={async () => {
+                  await endSession()
+                  navigate('/', { replace: true })
+                }}
+              >
+                Sign out
+              </button>
+            )}
+          </span>
         )}
       </header>
 

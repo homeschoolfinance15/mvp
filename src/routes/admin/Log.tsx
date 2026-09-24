@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
+  Button,
   EmptyState,
-  formatDate,
   Notice,
   Panel,
   Spinner,
@@ -14,6 +14,50 @@ import { byId, loadProfiles } from './shared'
 function verbOf(action: string): string {
   return action.split('.').pop() ?? action
 }
+
+/** What an admin reads instead of a verb from the trigger. */
+const VERB_LABEL: Record<string, string> = {
+  insert: 'Added',
+  update: 'Changed',
+  delete: 'Removed',
+}
+
+/** Table names an admin should not have to decode. The rest fall to plain(). */
+const ENTITY_LABEL: Record<string, string> = {
+  connector_user_links: 'connector member',
+  connector_notes: 'connector note',
+  profile_answers: 'questionnaire answer',
+  profile_reports: 'raised report',
+  peer_feedback: 'feedback on a member',
+  event_invites: 'event invitation',
+  feedback_subjects: 'feedback question',
+  data_subject_erasures: 'account deletion',
+  activity_log: 'log entry',
+}
+
+/** `can_create_events` -> `can create events`. */
+function plain(name: string): string {
+  return name.replace(/[_-]+/g, ' ')
+}
+
+/** `connectors` -> `connector`; a logged row is one row. */
+function entityLabel(entity: string): string {
+  return ENTITY_LABEL[entity] ?? plain(entity).replace(/(ies|s)$/, (m) => (m === 'ies' ? 'y' : ''))
+}
+
+/** Decision 11. A log entry is a moment, so every one carries its time of day. */
+function when(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/** Entries per "Show older". */
+const PAGE = 200
 
 const VERB_TONE: Record<string, string> = {
   insert: 'text-gold',
@@ -31,17 +75,22 @@ export default function Log() {
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  // Decision 11. How many pages are on screen. "Show older" asks for one more,
+  // and the reload fetches them all from the top, so entries written in the
+  // meantime push older ones down rather than duplicating or skipping them.
+  const [pages, setPages] = useState(1)
+  const [more, setMore] = useState(false)
 
   const load = useCallback(async () => {
     setLoadError('')
     const [activityRes, profilesRes] = await Promise.all([
-      // ponytail: newest 200, no pagination. The log is a record to consult,
-      // not a screen to scroll forever; add a range() when someone asks.
+      // ponytail: refetches every shown page on "Show older"; switch to a
+      // keyset range() if someone reads back thousands of entries.
       supabase
         .from('activity_log')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(200),
+        .limit(PAGE * pages),
       loadProfiles(),
     ])
 
@@ -51,7 +100,8 @@ export default function Log() {
     setEntries((activityRes.data as ActivityLogEntry[]) ?? [])
     setProfilesById(byId((profilesRes.data as Profile[]) ?? []))
     setLoading(false)
-  }, [])
+    setMore(false)
+  }, [pages])
 
   useEffect(() => {
     void load()
@@ -87,16 +137,16 @@ export default function Log() {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <div className="min-w-0 text-sm text-fg">
                     <span className={`${VERB_TONE[verb] ?? 'text-muted'} tabular-nums`}>
-                      {verb}
+                      {VERB_LABEL[verb] ?? plain(verb)}
                     </span>{' '}
-                    <span className="text-muted">{entry.entity}</span>
+                    <span className="text-muted">{entityLabel(entry.entity)}</span>
                     {changed.length > 0 && (
-                      <span className="text-dim"> · {changed.join(', ')}</span>
+                      <span className="text-dim"> · {changed.map(plain).join(', ')}</span>
                     )}
                   </div>
                   <div className="text-xs whitespace-nowrap text-dim">
                     {actor?.full_name ?? (entry.actor_id ? 'a removed account' : 'the system')} ·{' '}
-                    {formatDate(entry.created_at)}
+                    {when(entry.created_at)}
                   </div>
                 </div>
 
@@ -114,6 +164,22 @@ export default function Log() {
             )
           })}
         </Panel>
+      )}
+
+      {/* A full last page means there may be more behind it. */}
+      {entries.length === PAGE * pages && (
+        <div className="mt-6 flex justify-center">
+          <Button
+            size="sm"
+            loading={more}
+            onClick={() => {
+              setMore(true)
+              setPages((n) => n + 1)
+            }}
+          >
+            Show older
+          </Button>
+        </div>
       )}
     </>
   )

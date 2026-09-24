@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthProvider'
+import { useLive } from '../lib/live'
 import { errorMessage, loadFailed, supabase } from '../lib/supabase'
-import type { Profile, ProfileReport, ReportStatus } from '../lib/types'
+import { REPORTABLE_FIELDS, type Profile, type ProfileReport, type ReportStatus } from '../lib/types'
 import {
   Button,
   ConfirmModal,
@@ -71,6 +72,8 @@ export function FlagsPanel() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useLive(['profile_reports'], () => void load())
 
   const open = useMemo(() => reports.filter((r) => r.status === 'open'), [reports])
   const settled = useMemo(() => reports.filter((r) => r.status !== 'open'), [reports])
@@ -150,7 +153,7 @@ export function FlagsPanel() {
             ? `It moves to Dealt with as dismissed, with no change made. ${reporter} is told it has been dealt with. It can't be reopened.`
             : `It moves to Dealt with as resolved. ${reporter} is told it has been dealt with. It can't be reopened.`
         })()}
-        confirmLabel={pending?.status === 'dismissed' ? 'Dismiss' : 'Resolved'}
+        confirmLabel={pending?.status === 'dismissed' ? 'Dismiss' : 'Mark resolved'}
         tone="primary"
         busy={busyId !== null}
         onConfirm={() => void resolve()}
@@ -187,10 +190,15 @@ function ReportRow({
     <div className="px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div className="min-w-0 text-sm">
-          <span className={KIND_TONE[report.kind] ?? 'text-muted'}>{report.kind}</span>
+          <span className={`${KIND_TONE[report.kind] ?? 'text-muted'} capitalize`}>{report.kind}</span>
           <span className="text-dim"> about </span>
           <span className="font-medium text-fg">{subject?.full_name ?? 'someone'}</span>
-          {report.field && <span className="text-dim"> · {report.field}</span>}
+          {report.field && (
+            <span className="text-dim">
+              {' '}
+              · {REPORTABLE_FIELDS.find((f) => f.value === report.field)?.label ?? report.field}
+            </span>
+          )}
         </div>
         <div className="text-xs whitespace-nowrap text-dim">
           {reporter?.full_name ?? 'someone'} · {formatDate(report.created_at)}
@@ -227,7 +235,7 @@ function ReportRow({
                 disabled={busy}
                 onClick={() => onResolve(report.id, 'resolved')}
               >
-                Resolved
+                Mark resolved
               </Button>
             </>
           ) : (

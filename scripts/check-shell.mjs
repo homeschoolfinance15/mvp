@@ -44,6 +44,13 @@
  *       homePathFor() and ADMIN_LINKS are lifted out of the source, stripped
  *       of types and run against a synthetic profile of each role, under every
  *       combination of the feature flags.
+ *   (j) exactly one sidebar link is lit on every page a reader's sidebar
+ *       offers, and on the pages that stand in for one (a ticket, a feedback
+ *       form, a hosted event's guests). AppShell's activeLink() and its aliases
+ *       are lifted and run against each role's sidebar. The refusal screens —
+ *       WrongPlace, RequireMember's refusal and "belongs to somebody else" —
+ *       are exempt by name (REFUSALS): they sit at an address that is not the
+ *       reader's, so nothing lit is the truth there (decision 23).
  */
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -301,25 +308,33 @@ function sidebarAddresses(sidebar, profile, features) {
   return tos
 }
 
-/** navLinks() and what it calls, lifted from the source and run as plain JS. */
+/** navLinks(), what it calls and AppShell's activeLink(), lifted from the source and run as plain JS. */
 function loadSidebar() {
   const auth = read('src/context/AuthProvider.tsx')
+  const shell = read('src/components/AppShell.tsx')
+  const list = (source, name) => source.match(new RegExp(`const ${name}\\b[\\s\\S]*?\\r?\\n\\]\\r?\\n`))?.[0]
   const parts = [
-    ...['needsOnboarding', 'isNetworkMember', 'homePathFor'].map((n) => [n, functionText(auth, n)]),
+    ...['needsOnboarding', 'needsQuestionnaire', 'isNetworkMember', 'homePathFor'].map((n) => [n, functionText(auth, n)]),
+    ['questionnaireDone', functionText(read('src/lib/questionnaire.ts'), 'questionnaireDone')],
     ['navLinks', functionText(header, 'navLinks')],
-    ['ADMIN_LINKS', read('src/lib/adminNav.ts').match(/export const ADMIN_LINKS\b[\s\S]*?\r?\n\]\r?\n/)?.[0]],
+    ['ADMIN_LINKS', list(read('src/lib/adminNav.ts'), 'ADMIN_LINKS')],
+    ['ALIASES', list(shell, 'ALIASES')],
+    ['ADMIN_ALIASES', shell.match(/const ADMIN_ALIASES\b.*\r?\n/)?.[0]],
+    ['activeLink', functionText(shell, 'activeLink')],
   ]
   for (const [name, text] of parts) assert.ok(text, `could not find ${name} in the source — update this check`)
   const js = ts.transpileModule(parts.map(([, text]) => text.replace(/^export /, '')).join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText
-  return (features) => new Function('FEATURES', `${js}\nreturn { navLinks, ADMIN_LINKS }`)(features)
+  return (features) => new Function('FEATURES', `${js}\nreturn { navLinks, ADMIN_LINKS, activeLink }`)(features)
 }
 
+const ANSWERED = { completed_at: '2026-01-01' }
 const PROFILES = {
   admin: { role: 'admin', network_member: true, current_profession: null },
   connector: { role: 'connector', network_member: true, current_profession: 'Founder' },
-  member: { role: 'user', network_member: true, current_profession: 'Founder' },
+  member: { role: 'user', network_member: true, current_profession: 'Founder', profile_answers: ANSWERED },
+  'member still answering the questionnaire': { role: 'user', network_member: true, current_profession: 'Founder', profile_answers: null },
   'event-only account': { role: 'user', network_member: false, current_profession: 'Founder' },
   'member still onboarding': { role: 'user', network_member: true, current_profession: null },
   'event-only account still onboarding': { role: 'user', network_member: false, current_profession: null },
@@ -345,6 +360,67 @@ assert.deepEqual(
   sidebarAddresses(sidebar, PROFILES['event-only account'], { feed: true, events: true }),
   'an event-only account still onboarding gets a different sidebar from one that has finished',
 )
+
+// Decision 1. Still answering, a member keeps their events as well.
+{
+  const tos = sidebarAddresses(sidebar, PROFILES['member still answering the questionnaire'], { feed: true, events: true })
+  for (const to of ['/questions', '/events', '/events/mine', '/events/mine/past', '/events/mine/cancelled', '/profile']) {
+    if (!tos.includes(to)) offences.push(`src/components/SiteHeader.tsx: navLinks() no longer gives a member still answering the questionnaire ${to}`)
+  }
+  if (tos.includes('/home')) offences.push('src/components/SiteHeader.tsx: navLinks() offers /home to a member RequireRole holds at /questions')
+}
+
+// (j)
+const EVERYONE = ['admin', 'connector', 'member', 'event-only account', 'member still answering the questionnaire']
+/** Pages with no link of their own, and who reaches them. Each lights one of that reader's links. */
+const STAND_INS = [
+  ['/events/tickets/1', EVERYONE],
+  ['/events/feedback/dinner', EVERYONE],
+  ['/e/dinner', EVERYONE],
+  ['/manage/events/42/guests', ['admin', 'connector']],
+  ['/admin/events/42', ['admin']],
+  ['/connector/stripe/return', ['connector']],
+]
+/**
+ * Decision 23. Refusal screens, exempt by name from "one link lit": the reader
+ * is somewhere that is not theirs, and the sidebar is only the way out.
+ */
+const REFUSALS = [
+  ['connector', '/admin/waitlist', 'WrongPlace'],
+  ['member', '/manage/events', 'WrongPlace'],
+  ['event-only account', '/circle', "RequireMember's refusal"],
+  ['member', '/manage/events/42', 'belongs to somebody else'],
+]
+/** Pages in `pages` ([address, expected link?]) where the sidebar lights nothing, or the wrong link. */
+function unlit(activeLink, tos, admin, pages) {
+  const groups = [{ links: tos.map((to) => ({ to })) }]
+  return pages
+    .filter(([page, expect]) => {
+      const lit = activeLink(page, groups, admin)
+      return lit === null || (expect !== undefined && lit !== expect)
+    })
+    .map(([page]) => page)
+}
+let pagesLit = 0
+{
+  const features = { feed: true, events: true }
+  const { activeLink } = sidebar(features)
+  for (const [who, profile] of Object.entries(PROFILES)) {
+    const tos = sidebarAddresses(sidebar, profile, features)
+    const refused = REFUSALS.filter(([r]) => r === who).map(([, page]) => page)
+    for (const page of refused) {
+      if (tos.includes(page)) offences.push(`scripts/check-shell.mjs: ${page} is exempt as a refusal for the ${who}, but it is in their sidebar — drop the exemption`)
+    }
+    const pages = [
+      ...tos.map((to) => [to, to]),
+      ...STAND_INS.filter(([, whom]) => whom.includes(who)).map(([page]) => [page]),
+    ].filter(([page]) => !refused.includes(page))
+    pagesLit += pages.length
+    for (const page of unlit(activeLink, tos, profile.role === 'admin', pages)) {
+      offences.push(`src/components/AppShell.tsx: the ${who} on ${page} does not see exactly its own link lit`)
+    }
+  }
+}
 
 for (const offence of offences) console.error(`  FAIL  ${offence}`)
 assert.equal(offences.length, 0, `${offences.length} place(s) where a signed-in reader would navigate from the top bar`)
@@ -447,6 +523,15 @@ assert.deepEqual(repeatedAddresses(['/admin/raised', '/connector/raised']), [], 
   assert.deepEqual(sidebarAddresses(fake, { role: 'member' }, {}), ['/admin', '/admin/events'], "the check no longer counts a member's Dashboard leaf")
 }
 
+{
+  const { activeLink } = sidebar({ feed: true, events: true })
+  assert.deepEqual(unlit(activeLink, ['/events'], false, [['/questions', '/questions']]), ['/questions'], 'the check no longer sees a page that lights nothing')
+  assert.deepEqual(unlit(activeLink, ['/events', '/events/mine'], false, [['/events/mine', '/events/mine']]), [], 'the check rejects the longest match')
+  assert.deepEqual(unlit(activeLink, ['/admin/events', '/admin/events/past'], true, [['/admin/events/past', '/admin/events/past']]), [], "the check lights Upcoming on the admin's Past")
+  assert.deepEqual(unlit(activeLink, ['/events', '/events/mine'], false, [['/events/mine', '/events']]), ['/events/mine'], 'the check no longer sees the wrong link lit')
+}
+
+console.log(`ok    exactly one sidebar link lit on ${pagesLit} pages; ${REFUSALS.length} refusal screens exempt by name`)
 console.log(`ok    no signed-in top-bar navigation across ${files.length} source files`)
 console.log('ok    SiteHeader offers publicLinks() to visitors only, never navLinks()')
 console.log('ok    DashboardShell, AdminLayout and signed-in EventShell go through AppShell')
