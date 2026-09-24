@@ -44,6 +44,8 @@
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import { staleChanges, staleSnapshot, updateSubject } from '../_shared/event-update.ts'
+export { staleChanges } from '../_shared/event-update.ts'
 import {
   addressesFor,
   type Db,
@@ -63,6 +65,7 @@ interface Body {
   subject?: string
   body?: string
   changed_details?: Record<string, { from: unknown; to: unknown }>
+  preview_snapshot?: Record<string, unknown>
   audience_count?: number
   reminder_id?: string
   scheduled_for?: string
@@ -91,9 +94,6 @@ async function handle(request: Request): Promise<Response> {
   if (!eventId) return json({ error: 'An event is required.' }, 400)
   if (PERSONAL.includes(kind) && !profileId) {
     return json({ error: 'A recipient is required.' }, 400)
-  }
-  if (kind === 'update' && !String(body?.subject ?? '').trim()) {
-    return json({ error: 'An update needs a subject.' }, 400)
   }
 
   const url = Deno.env.get('SUPABASE_URL')!
@@ -154,7 +154,13 @@ async function handle(request: Request): Promise<Response> {
   // rather than sent stale. Nothing is queued and nothing is lost — they
   // build the preview again against what the event says now.
   if (kind === 'update') {
-    const moved = staleChanges(body.changed_details ?? {}, event)
+    if (!body.preview_snapshot) {
+      return json({ error: 'Build a fresh event preview before sending.', refresh_preview: true }, 409)
+    }
+    const moved = [...new Set([
+      ...staleChanges(body.changed_details ?? {}, event),
+      ...(body.preview_snapshot ? staleSnapshot(body.preview_snapshot, event) : []),
+    ])]
     if (moved.length > 0) {
       return json(
         {
@@ -226,9 +232,10 @@ async function handle(request: Request): Promise<Response> {
       reminder_id: body.reminder_id ?? null,
       scheduled_for: scheduledFor,
       status: 'scheduled',
-      subject: body.subject ?? null,
+      subject: kind === 'update' ? updateSubject(body.subject, event.title) : body.subject ?? null,
       body: body.body ?? null,
       changed_details: body.changed_details ?? null,
+      preview_snapshot: body.preview_snapshot ?? null,
       // The count that goes on the record is the one just resolved, not the
       // one the preview guessed — the preview is what the organiser saw, this
       // is what was actually queued.
@@ -239,6 +246,9 @@ async function handle(request: Request): Promise<Response> {
     .single()
 
   if (messageError || !message) {
+    if (messageError?.code === '23514' && messageError.message.includes('preview')) {
+      return json({ error: messageError.message, refresh_preview: true }, 409)
+    }
     return json({ error: `Could not queue it: ${messageError?.message}` }, 500)
   }
 
@@ -409,25 +419,6 @@ async function addLateRecipient(
  * Returns the fields that have moved on. Pure, so the mailer's self-check can
  * borrow the same reasoning.
  */
-export function staleChanges(
-  changed: Record<string, { from: unknown; to: unknown }>,
-  event: Record<string, unknown>,
-): string[] {
-  return Object.entries(changed)
-    .filter(([field, change]) => {
-      if (!(field in event)) return false
-      return normalise(event[field]) !== normalise(change?.to)
-    })
-    .map(([field]) => field)
-}
-
-/** Timestamps come back from Postgres spelled differently to how they went in. */
-function normalise(value: unknown): string {
-  if (value == null) return ''
-  const text = String(value)
-  const asDate = Date.parse(text)
-  return Number.isNaN(asDate) ? text.trim() : String(asDate)
-}
 
 /* -------------------------------------------------------------------------- */
 /* Send now                                                                    */

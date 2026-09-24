@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-24T23:10:20.759Z",
+  "scope": "Existing local simulated-payment fixtures only",
+  "results": [
+    {
+      "name": "ACC-06 simulated paid and refund history is preserved on network joining",
+      "pass": true,
+      "detail": {
+        "orders": 1,
+        "refunds": 1,
+        "tickets": 1
+      }
+    },
+    {
+      "name": "ACC-06 network joining keeps same paid attendee account and onboarding",
+      "pass": true
+    }
+  ]
+}

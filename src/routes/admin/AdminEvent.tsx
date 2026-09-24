@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DashboardShell } from '../../components/DashboardShell'
+import { FeedbackAccess } from '../../components/FeedbackAccess'
 import {
   Button,
   EmptyState,
@@ -45,7 +46,8 @@ import { reminderLabel } from '../manage/rules'
  * an ordinary question about it. So everything the platform holds about this
  * event is on this page — details, hosts, registrations, attendance, ticket
  * types, payments, fees, refunds, cancellations, tickets, check-ins, emails
- * and every piece of feedback — and it is read-only. This is the record, not
+ * and every piece of feedback — as a read-only record. The separate personal
+ * feedback panel also lets a present host record their own attendance. This is the record, not
  * a second organiser console; changes are made where they are made.
  *
  * ORG-15. Event records are platform data. An administrator reads them because
@@ -517,6 +519,7 @@ export default function AdminEvent() {
 
   return (
     <DashboardShell title={event.title}>
+      <FeedbackAccess event={event} />
       <div className="flex flex-wrap items-center gap-4">
         <Link
           to="/admin/events"
@@ -527,8 +530,7 @@ export default function AdminEvent() {
         <EventStatusBadge event={event} />
         {/* ORG-14 says this page is where an administrator sees everything
             without hunting; it did not follow that it should be a dead end.
-            The caption promises "read-only: not a second place to change it",
-            and that is only a kindness if there is a first place to go — until
+            Event editing belongs on the management page. Until
             this link there was none, and the way to edit an event you had just
             opened was to type its other address. */}
         <Link

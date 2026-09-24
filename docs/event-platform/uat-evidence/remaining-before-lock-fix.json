@@ -1,0 +1,496 @@
+{
+  "at": "2026-09-24T22:48:37.622Z",
+  "scope": "Local real database and dispatcher; captured provider requests, no real delivery or Stripe",
+  "results": [
+    {
+      "name": "ACC-06 joining network preserves account, onboarding and current ticket",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-06 joining network preserves original profile answers",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-06 ORG-15 new admin sees feedback still attached to same person",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 joining a network does not unlock submitted feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-15 replacing administrator preserves event and guest records",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 former administrator loses review-reading access",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-14 ORG-15 replacement admin can edit existing event after creator demotion",
+      "pass": false,
+      "detail": {
+        "status": 403,
+        "error": "new row violates row-level security policy for table \"events\""
+      }
+    },
+    {
+      "name": "ORG-05 named host can be separated from event-management permissions",
+      "pass": false,
+      "detail": {
+        "editAccepted": true,
+        "communicationsReadable": true,
+        "note": "Adding only an event_hosts row granted management; no separate assignment was made."
+      }
+    },
+    {
+      "name": "ORG-05 cohost still cannot read confidential feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist public submission is not publicly readable",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist assignment and redemption preserve questionnaire",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist does not create an event booking",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-08 provider failure is recorded without erasing tickets",
+      "pass": true,
+      "detail": {
+        "claimed": 1,
+        "sent": 0,
+        "failed": 2,
+        "messages": [
+          {
+            "message_id": "bf9f6b0a-512b-4917-9e6d-3761838ab68d",
+            "status": "failed",
+            "sent": 0,
+            "failed": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "EML-08 retry recovers failed recipients and never resends successes",
+      "pass": true,
+      "detail": {
+        "retried": {
+          "claimed": 1,
+          "sent": 2,
+          "failed": 0,
+          "messages": [
+            {
+              "message_id": "bf9f6b0a-512b-4917-9e6d-3761838ab68d",
+              "status": "sent",
+              "sent": 2,
+              "failed": 0
+            }
+          ]
+        },
+        "repeated": {
+          "claimed": 0,
+          "sent": 0,
+          "failed": 0,
+          "messages": []
+        }
+      }
+    },
+    {
+      "name": "EML-09 feedback requests do not contain submitted answers",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-05 recipient addresses are separate",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-05 EML-07 reminder rechecks cancellation and uses current address",
+      "pass": true,
+      "detail": {
+        "claimed": 1,
+        "sent": 1,
+        "failed": 0,
+        "messages": [
+          {
+            "message_id": "c35d3bae-6600-4e1a-96c0-af4decf9b7ff",
+            "status": "sent",
+            "sent": 1,
+            "failed": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "EML-09 anonymous caller cannot dispatch email",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-10 100 simultaneous free claims cannot exceed 100 total places",
+      "pass": true,
+      "detail": {
+        "success": 99,
+        "durationMs": 950,
+        "existingPlaces": 1
+      }
+    },
+    {
+      "name": "QLT-10 50 concurrent distinct-ticket check-ins return known outcomes",
+      "pass": false,
+      "detail": {
+        "durationMs": 17056,
+        "count": 50,
+        "failures": [
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 500,
+            "data": {
+              "code": "57014",
+              "details": null,
+              "hint": null,
+              "message": "canceling statement due to statement timeout"
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          },
+          {
+            "ok": false,
+            "status": 504,
+            "data": {
+              "code": "PGRST003",
+              "details": null,
+              "hint": null,
+              "message": "Timed out acquiring connection from connection pool."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

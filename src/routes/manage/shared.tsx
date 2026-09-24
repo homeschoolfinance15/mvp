@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { DashboardShell } from '../../components/DashboardShell'
+import { FeedbackAccess } from '../../components/FeedbackAccess'
 import { LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { loadFailed, supabase } from '../../lib/supabase'
@@ -146,6 +147,7 @@ export function ManageShell({
         links: SUB_TABS.map((t) => ({ to: t.path(event.id), label: t.label })),
       }}
     >
+      <FeedbackAccess event={event} />
       {children}
     </DashboardShell>
   )

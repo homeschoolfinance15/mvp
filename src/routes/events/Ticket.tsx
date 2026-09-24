@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { useSidebarCurrent } from '../../components/AppShell'
+import { FeedbackAccess } from '../../components/FeedbackAccess'
 import { CopyCode, LoadFailed, Notice, Panel, Spinner } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import {
@@ -138,6 +139,7 @@ export default function Ticket() {
   return (
     <EventShell back={{ to: page.path, label: page.title }}>
       <div className="mx-auto max-w-md space-y-6">
+        <FeedbackAccess event={event} />
         {!usable && (
           <Notice tone="error">
             <strong>

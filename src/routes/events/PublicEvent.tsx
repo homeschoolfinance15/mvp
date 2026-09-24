@@ -8,6 +8,7 @@ import {
   Spinner,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
+import { FeedbackAccess } from '../../components/FeedbackAccess'
 import {
   canRegister,
   eventLink,
@@ -378,6 +379,8 @@ export default function PublicEvent() {
         {/* ------------------------------------------------------------------ */}
         {/* Taking part                                                        */}
         {/* ------------------------------------------------------------------ */}
+
+        <FeedbackAccess event={event} />
 
         {/* Nothing to offer and nothing booked (finished, cancelled): no empty
             panel with a heading over nothing. */}

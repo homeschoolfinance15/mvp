@@ -44,6 +44,14 @@ export type NotifiableField = keyof typeof NOTIFIABLE_FIELDS
 
 export type ChangedDetails = Record<string, { from: unknown; to: unknown }>
 
+/** All structured facts in an update preview, including unchanged ones. */
+export function eventUpdateSnapshot(event: Partial<EventRecord>): Record<string, unknown> {
+  return Object.fromEntries(
+    ['title', 'slug', 'status', 'starts_at', 'ends_at', 'timezone', 'venue_name', 'address', 'location', 'attendee_instructions']
+      .map((field) => [field, event[field as keyof EventRecord] ?? null]),
+  )
+}
+
 /** An empty box and a box that was never filled are the same thing to a reader. */
 function normalise(value: unknown): string {
   if (value === null || value === undefined) return ''

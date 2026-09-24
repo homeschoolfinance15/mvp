@@ -1,0 +1,881 @@
+{
+  "at": "2026-09-24T23:00:15.426Z",
+  "scope": "Real application handlers and local database with simulated Stripe; no real Stripe evidence",
+  "results": [
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_2e4925928fe95e70f82dc316\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] Stripe-Account header — sent null, expected null"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] line items — [{\"name\":\"qap-mug4v13r S1 admin GBP — Standard\",\"unit_amount\":\"2500\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] currency on every line — [\"gbp\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] metadata + client_reference_id name the order — {\"client_reference_id\":\"ad0d4188-8aef-4ad8-931a-efd72d623005\",\"metadata\":{\"order_id\":\"ad0d4188-8aef-4ad8-931a-efd72d623005\",\"event_id\":\"0d307b57-fc5f-4d32-a59f-b4ea333394b8\",\"profile_id\":\"5eab1a7e-40dc-436c-babe-f8a4675ae2a2\",\"registration_id\":\"b7777c0c-9ef2-4d70-a98a-a72e36b49b2b\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] response amount/fee/currency — {\"amount_cents\":2500,\"fee_cents\":0,\"currency\":\"gbp\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s1-admin-gbp-578c9e?paid=1&session_id=cs_test_sim_2e4925928fe95e70f82dc316\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":null,\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"ad0d4188-8aef-4ad8-931a-efd72d623005\",\"status\":\"paid\",\"amount_cents\":2500,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":null,\"stripe_checkout_session_id\":\"cs_test_sim_2e4925928fe95e70f82dc316\",\"stripe_payment_intent_id\":\"pi_sim_73b7a24efaf0d3c3193211a9\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S1] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_c9fe72054da02e49882dc9b2\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] Stripe-Account header — sent acct_qapmug4v13r, expected acct_qapmug4v13r"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] line items — [{\"name\":\"qap-mug4v13r S2 connector GBP — Standard\",\"unit_amount\":\"4000\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] currency on every line — [\"gbp\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] metadata + client_reference_id name the order — {\"client_reference_id\":\"6da7fbc9-655e-4b7b-8005-fdc4cc8b8d03\",\"metadata\":{\"order_id\":\"6da7fbc9-655e-4b7b-8005-fdc4cc8b8d03\",\"event_id\":\"8a0d7bd3-f929-4bf0-b0dd-8104864e1201\",\"profile_id\":\"7a096495-5003-48c4-9697-f6aec949b18b\",\"registration_id\":\"3125f20e-478b-492f-b35f-736e9c972478\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] response amount/fee/currency — {\"amount_cents\":4000,\"fee_cents\":0,\"currency\":\"gbp\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s2-connector-gbp-d33a68?paid=1&session_id=cs_test_sim_c9fe72054da02e49882dc9b2\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":\"acct_qapmug4v13r\",\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"6da7fbc9-655e-4b7b-8005-fdc4cc8b8d03\",\"status\":\"paid\",\"amount_cents\":4000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_c9fe72054da02e49882dc9b2\",\"stripe_payment_intent_id\":\"pi_sim_cc482370e5697d2b1f6848ac\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_b82202c9020233c55b53c614\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] Stripe-Account header — sent acct_qapmug4v13r, expected acct_qapmug4v13r"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] line items — [{\"name\":\"qap-mug4v13r S4 connector EUR — Standard\",\"unit_amount\":\"3000\",\"currency\":\"eur\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] currency on every line — [\"eur\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] metadata + client_reference_id name the order — {\"client_reference_id\":\"b34afbdd-592c-4a7f-a914-fce9c38bfe0d\",\"metadata\":{\"order_id\":\"b34afbdd-592c-4a7f-a914-fce9c38bfe0d\",\"event_id\":\"5bb4d756-21e9-4db1-9e80-3949de608b25\",\"profile_id\":\"3c91a819-37fa-4ee1-8b50-929f01465ccf\",\"registration_id\":\"2d5699f6-160f-4d53-b2c8-15070708332a\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] response amount/fee/currency — {\"amount_cents\":3000,\"fee_cents\":0,\"currency\":\"eur\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s4-connector-eur-2cd37c?paid=1&session_id=cs_test_sim_b82202c9020233c55b53c614\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":\"acct_qapmug4v13r\",\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"b34afbdd-592c-4a7f-a914-fce9c38bfe0d\",\"status\":\"paid\",\"amount_cents\":3000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"eur\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_b82202c9020233c55b53c614\",\"stripe_payment_intent_id\":\"pi_sim_719ffd2e7e6487548c4bda2c\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S4] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_12f9589ec5a7202859c25114\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] Stripe-Account header — sent null, expected null"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] line items — [{\"name\":\"qap-mug4v13r S5 admin USD — Standard\",\"unit_amount\":\"5000\",\"currency\":\"usd\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] currency on every line — [\"usd\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] metadata + client_reference_id name the order — {\"client_reference_id\":\"6fabf798-5662-4c0c-a598-d60ec5938945\",\"metadata\":{\"order_id\":\"6fabf798-5662-4c0c-a598-d60ec5938945\",\"event_id\":\"9ed45217-837d-4037-9ee6-6ba70cdb8318\",\"profile_id\":\"6ba3dd66-149c-49cb-b25b-d5a1f56c0c70\",\"registration_id\":\"3b13e9b6-336e-4074-afd9-afde93e348a6\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] response amount/fee/currency — {\"amount_cents\":5000,\"fee_cents\":0,\"currency\":\"usd\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s5-admin-usd-7b84ea?paid=1&session_id=cs_test_sim_12f9589ec5a7202859c25114\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":null,\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"6fabf798-5662-4c0c-a598-d60ec5938945\",\"status\":\"paid\",\"amount_cents\":5000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"usd\",\"stripe_account_id\":null,\"stripe_checkout_session_id\":\"cs_test_sim_12f9589ec5a7202859c25114\",\"stripe_payment_intent_id\":\"pi_sim_3c98bf4b51e9c50ea98cc049\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S5] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_ced65e215057ae27cdb29ec9\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] Stripe-Account header — sent acct_qapmug4v13r, expected acct_qapmug4v13r"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] line items — [{\"name\":\"qap-mug4v13r S2 connector GBP — Standard\",\"unit_amount\":\"4000\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] currency on every line — [\"gbp\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] metadata + client_reference_id name the order — {\"client_reference_id\":\"8becaed2-0012-42f1-8d82-bc9ceb885a1b\",\"metadata\":{\"order_id\":\"8becaed2-0012-42f1-8d82-bc9ceb885a1b\",\"event_id\":\"8a0d7bd3-f929-4bf0-b0dd-8104864e1201\",\"profile_id\":\"5970d3df-63ec-4ea5-afb8-093f27b7b411\",\"registration_id\":\"1fcdd0c1-3de9-4841-b907-be09e45dca55\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] response amount/fee/currency — {\"amount_cents\":4000,\"fee_cents\":0,\"currency\":\"gbp\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s2-connector-gbp-d33a68?paid=1&session_id=cs_test_sim_ced65e215057ae27cdb29ec9\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":\"acct_qapmug4v13r\",\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"8becaed2-0012-42f1-8d82-bc9ceb885a1b\",\"status\":\"paid\",\"amount_cents\":4000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_ced65e215057ae27cdb29ec9\",\"stripe_payment_intent_id\":\"pi_sim_57fd91fa41a396cee996871d\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2b] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_639f11b4ff9af3d64e33b5f9\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] Stripe-Account header — sent acct_qapmug4v13r, expected acct_qapmug4v13r"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] line items — [{\"name\":\"qap-mug4v13r S2 connector GBP — Standard\",\"unit_amount\":\"4000\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] currency on every line — [\"gbp\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] metadata + client_reference_id name the order — {\"client_reference_id\":\"5c903b5f-48da-488d-85c0-b371b84486ef\",\"metadata\":{\"order_id\":\"5c903b5f-48da-488d-85c0-b371b84486ef\",\"event_id\":\"8a0d7bd3-f929-4bf0-b0dd-8104864e1201\",\"profile_id\":\"1bebc703-f635-40f1-93cb-6f1a13abe765\",\"registration_id\":\"ded9c72e-c882-4096-aee5-29b0baec70e8\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] response amount/fee/currency — {\"amount_cents\":4000,\"fee_cents\":0,\"currency\":\"gbp\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s2-connector-gbp-d33a68?paid=1&session_id=cs_test_sim_639f11b4ff9af3d64e33b5f9\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":\"acct_qapmug4v13r\",\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"5c903b5f-48da-488d-85c0-b371b84486ef\",\"status\":\"paid\",\"amount_cents\":4000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_639f11b4ff9af3d64e33b5f9\",\"stripe_payment_intent_id\":\"pi_sim_c221150c376fff13b263d967\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2c] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] stripe-checkout 200 with a sim session url — {\"status\":200,\"url\":\"http://localhost:12111/pay/cs_test_sim_de1d5d52215f55bd151747c9\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] one session-create request captured — [\"POST /v1/checkout/sessions\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] Stripe-Account header — sent acct_qapmug4v13r, expected acct_qapmug4v13r"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] line items — [{\"name\":\"qap-mug4v13r S2 connector GBP — Standard\",\"unit_amount\":\"4000\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] currency on every line — [\"gbp\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] no application_fee_amount / transfer_data — [\"metadata\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] metadata + client_reference_id name the order — {\"client_reference_id\":\"9c9ede15-3e06-408b-aa9c-38d0910cecb9\",\"metadata\":{\"order_id\":\"9c9ede15-3e06-408b-aa9c-38d0910cecb9\",\"event_id\":\"8a0d7bd3-f929-4bf0-b0dd-8104864e1201\",\"profile_id\":\"b1673ca3-b1b3-4639-beb6-b7ba189a0158\",\"registration_id\":\"41ab0d29-19fd-4185-84f9-2dc3ae63f39c\"}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] response amount/fee/currency — {\"amount_cents\":4000,\"fee_cents\":0,\"currency\":\"gbp\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] before pay: order pending, registration pending hold, no ticket — {\"order\":\"pending\",\"reg\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] pay: 303 to success_url, webhook delivered 200 — {\"status\":303,\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s2-connector-gbp-d33a68?paid=1&session_id=cs_test_sim_de1d5d52215f55bd151747c9\",\"webhook\":{\"type\":\"checkout.session.completed\",\"account\":\"acct_qapmug4v13r\",\"status\":200}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] order paid with frozen account, amount, currency, app fee 0 — {\"id\":\"9c9ede15-3e06-408b-aa9c-38d0910cecb9\",\"status\":\"paid\",\"amount_cents\":4000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_de1d5d52215f55bd151747c9\",\"stripe_payment_intent_id\":\"pi_sim_f0041099fba5be36bc63e6b5\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S2d] registration confirmed, one ticket, exactly one message (payment) — {\"reg\":[\"confirmed\"],\"tickets\":1,\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S6] three replays all acknowledged 200 — [200,200,200]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S6] still one paid order, one confirmed registration, one ticket, exactly one message (payment) — {\"orders\":[\"paid\"],\"tickets\":1,\"messages\":1}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S7] hold took the last place; a second buyer was refused sold_out with no Stripe call — {\"cap0\":{\"capacity\":1,\"confirmed\":0,\"remaining\":1,\"state\":\"open\"},\"capHeld\":{\"capacity\":1,\"confirmed\":0,\"remaining\":0,\"state\":\"sold_out\"},\"blocked\":{\"status\":409,\"reason\":\"sold_out\",\"stripe_calls\":0}}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S7] expired webhook 200 -> order failed, registration expired, no ticket — {\"webhook\":200,\"order\":\"failed\",\"reg\":\"expired\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S7] place is back on sale — {\"capacity\":1,\"confirmed\":0,\"remaining\":1,\"state\":\"open\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S8] Decline -> 303 to cancel_url, expired webhook 200, order failed, registration expired, no ticket — {\"redirect\":\"http://localhost:5173/events/checkout/qap-mug4v13r-s1-admin-gbp-578c9e?cancelled=1\",\"webhook\":\"checkout.session.expired\",\"order\":\"failed\",\"reg\":\"expired\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S8] completed with payment_status=unpaid does NOT mark paid or issue a ticket — {\"order\":\"pending\",\"tickets\":0,\"webhook\":200}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S8] async_payment_failed -> order failed, place released — {\"webhook\":200,\"order\":\"failed\",\"regs\":[\"expired\",\"expired\"]}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S9] exactly one 200 and one 409 sold_out — [{\"status\":200},{\"status\":409,\"reason\":\"sold_out\"}]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S9] only one open Stripe session exists for the event — {\"open_sessions\":1,\"creates_seen\":2}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S9] winner confirmed with a ticket; loser has no order and no registration — {\"winner\":\"m5\",\"loser\":\"g5\",\"ws\":[\"paid\"],\"lo\":0}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S9] event now sold out — {\"capacity\":1,\"confirmed\":1,\"remaining\":0,\"state\":\"sold_out\"}"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S16] unsigned 400, wrong secret 400, tampered body 400, 1h-old timestamp 400 — [\"400 {\\\"error\\\":\\\"Unsigned.\\\"}\",\"400 {\\\"error\\\":\\\"Bad signature: No signatures found matching the ex\",\"400 {\\\"error\\\":\\\"Bad signature: No signatures found matching the ex\",\"400 {\\\"error\\\":\\\"Bad signature: Timestamp outside the tolerance zon\"]"
+    },
+    {
+      "batch": "scen1",
+      "pass": true,
+      "detail": "PASS [S16] no writes: order still pending, no ticket, no message — {\"order\":\"pending\",\"tickets\":0}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] event-refund 200 processing, amount 4000, remaining 0, registration_unchanged — {\"refund_id\":\"7ba8e065-7c87-46cc-bffa-64571cc2de00\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_92e086f551b42cf225d46679\",\"amount_cents\":4000,\"currency\":\"gbp\",\"remaining_cents\":0,\"registration_unchanged\":true}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] Stripe refund on the order account with the order PI and full amount — {\"stripe_account\":\"acct_qapmug4v13r\",\"body\":{\"payment_intent\":\"pi_sim_cc482370e5697d2b1f6848ac\",\"amount\":\"4000\",\"metadata\":{\"refund_id\":\"7ba8e065-7c87-46cc-bffa-64571cc2de00\",\"order_id\":\"6da7fbc9-655e-4b7b-8005-fdc4cc8b8d03\",\"event_id\":\"8a0d7bd3-f929-4bf0-b0dd-8104864e1201\"}},\"status\":200}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] refund row processing with stripe id, order still paid — {\"mid\":[{\"id\":\"7ba8e065-7c87-46cc-bffa-64571cc2de00\",\"amount_cents\":4000,\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_92e086f551b42cf225d46679\",\"failure_message\":null}],\"order\":\"paid\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] refund.updated (Connect, account set) -> 200; refund completed; order refunded — {\"webhook\":{\"event_id\":\"evt_sim_cbf562103ac9fa444196253e\",\"status\":200,\"response\":\"{\\\"received\\\":true}\"},\"refund\":\"completed\",\"order\":\"refunded\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] registration still confirmed, ticket not revoked (refund is not cancellation) — {\"reg\":[\"confirmed\"],\"tickets\":[{\"id\":\"0413da0e-a2cc-4f2a-af33-a69e55d9517a\",\"registration_id\":\"3125f20e-478b-492f-b35f-736e9c972478\",\"revoked\":false}]}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] refund messages queued (processing + completed) — [{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"},{\"kind\":\"refund\",\"subject\":\"Your refund is on its way\",\"status\":\"scheduled\"},{\"kind\":\"refund\",\"subject\":\"Your refund has gone through\",\"status\":\"scheduled\"}]"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] refund again after full refund -> 409, no Stripe call — {\"status\":409,\"body\":{\"error\":\"There is no payment on this order to refund — it is refunded.\"},\"stripe\":0}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S10] buyer cannot call event-refund on their own order -> 403 — {\"status\":403,\"body\":{\"error\":\"That is not yours to refund.\"}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] first partial 1500: 200 processing, Stripe amount 1500 on connector account, remaining 2500 — {\"status\":200,\"body\":{\"refund_id\":\"020a46ca-3409-4f7e-ad96-5ed70669be25\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_56d5c5d67ca3ab6530c387d1\",\"amount_cents\":1500,\"currency\":\"gbp\",\"remaining_cents\":2500,\"registration_unchanged\":true},\"sent\":\"1500\",\"acct\":\"acct_qapmug4v13r\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] a second partial while the first is processing -> 409 refund_in_progress, no Stripe call — {\"status\":409,\"body\":{\"error\":\"That refund is already in hand.\",\"reason\":\"refund_in_progress\",\"refund_id\":\"020a46ca-3409-4f7e-ad96-5ed70669be25\",\"status\":\"processing\"}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] after first settles: refund completed, order partially_refunded — {\"refunds\":[{\"id\":\"020a46ca-3409-4f7e-ad96-5ed70669be25\",\"amount_cents\":1500,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_56d5c5d67ca3ab6530c387d1\",\"failure_message\":null}],\"order\":\"partially_refunded\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] over-refund 3000 of remaining 2500 -> 400, no Stripe call — {\"status\":400,\"body\":{\"error\":\"That is more than is left on this order — 2500 minor units remain.\"}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] second partial 2500 (the remainder) -> 200 and a Stripe refund — {\"status\":200,\"body\":{\"refund_id\":\"92896b71-5086-4ca7-84d0-eb1014b84822\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_bc94ee968a40284009248897\",\"amount_cents\":2500,\"currency\":\"gbp\",\"remaining_cents\":0,\"registration_unchanged\":true},\"stripe_calls\":[\"POST /v1/refunds 200\"]}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] \"everything left\" (no amount) while the remainder is already in flight -> 409 refund_in_progress, no Stripe call — {\"status\":409,\"body\":{\"error\":\"That refund is already in hand.\",\"reason\":\"refund_in_progress\",\"refund_id\":\"92896b71-5086-4ca7-84d0-eb1014b84822\",\"status\":\"processing\"},\"stripe_calls\":0}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11] order reaches refunded with completed refunds summing 4000 — {\"order\":\"refunded\",\"refunds\":[{\"id\":\"020a46ca-3409-4f7e-ad96-5ed70669be25\",\"amount_cents\":1500,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_56d5c5d67ca3ab6530c387d1\",\"failure_message\":null},{\"id\":\"92896b71-5086-4ca7-84d0-eb1014b84822\",\"amount_cents\":2500,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_bc94ee968a40284009248897\",\"failure_message\":null}]}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11b] first partial 1000: 200, remaining 2000 — {\"status\":200,\"body\":{\"refund_id\":\"315936ef-9f27-4338-8231-8b2a2e0e4b51\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_c49e1d344adc46f449e8e81d\",\"amount_cents\":1000,\"currency\":\"eur\",\"remaining_cents\":2000,\"registration_unchanged\":true}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11b] no amount after a settled partial -> 200 refunding exactly the 2000 left, in EUR, on the connector account — {\"status\":200,\"body\":{\"refund_id\":\"89103eb7-2963-440a-ba4b-e5bfed2ea291\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_f07e43b1102928ea4eeacbb7\",\"amount_cents\":2000,\"currency\":\"eur\",\"remaining_cents\":0,\"registration_unchanged\":true},\"sent\":\"2000\",\"acct\":\"acct_qapmug4v13r\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11b] order refunded, completed refunds sum to the order amount 3000 — {\"order\":\"refunded\",\"refunds\":[{\"id\":\"315936ef-9f27-4338-8231-8b2a2e0e4b51\",\"amount_cents\":1000,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_c49e1d344adc46f449e8e81d\",\"failure_message\":null},{\"id\":\"89103eb7-2963-440a-ba4b-e5bfed2ea291\",\"amount_cents\":2000,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_f07e43b1102928ea4eeacbb7\",\"failure_message\":null}]}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S11b] anything further -> 409, no Stripe call — {\"status\":409,\"body\":{\"error\":\"There is no payment on this order to refund — it is refunded.\"}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] host and admin click together: one 200, one 409 refund_in_progress — [{\"s\":200,\"b\":{\"refund_id\":\"0fdce33a-6d5d-40fe-94c3-9db10f697410\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_0822a057b5845e53b5f2cbcd\",\"amount_cents\":4000,\"currency\":\"gbp\",\"remaining_cents\":0,\"registration_unchanged\":true}},{\"s\":409,\"b\":{\"error\":\"That refund is already in hand.\",\"reason\":\"refund_in_progress\",\"refund_id\":\"0fdce33a-6d5d-40fe-94c3-9db10f697410\",\"status\":\"processing\"}}]"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] exactly one Stripe refund request — [{\"acct\":\"acct_qapmug4v13r\",\"amount\":\"4000\",\"idem\":\"refund:0fdce33a-6d5d-40fe-94c3-9db10f697410\"}]"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] a third click while processing -> 409, no Stripe call — {\"status\":409,\"body\":{\"error\":\"That refund is already in hand.\",\"reason\":\"refund_in_progress\",\"refund_id\":\"0fdce33a-6d5d-40fe-94c3-9db10f697410\",\"status\":\"processing\"}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] Stripe fails the refund -> refund row failed, order still paid — {\"refunds\":[{\"id\":\"0fdce33a-6d5d-40fe-94c3-9db10f697410\",\"amount_cents\":4000,\"status\":\"failed\",\"stripe_refund_id\":\"re_sim_0822a057b5845e53b5f2cbcd\",\"failure_message\":\"expired_or_canceled_card\"}],\"order\":\"paid\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] after a failed refund a retry is allowed (one new Stripe refund) — {\"status\":200,\"body\":{\"refund_id\":\"7446a6b3-2b9d-4e6b-892e-f3ed83f9a251\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_48673ce9d6b26d4da2751ab4\",\"amount_cents\":4000,\"currency\":\"gbp\",\"remaining_cents\":0,\"registration_unchanged\":true}}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S12] retry completes -> order refunded — {\"refunds\":[{\"id\":\"0fdce33a-6d5d-40fe-94c3-9db10f697410\",\"amount_cents\":4000,\"status\":\"failed\",\"stripe_refund_id\":\"re_sim_0822a057b5845e53b5f2cbcd\",\"failure_message\":\"expired_or_canceled_card\"},{\"id\":\"7446a6b3-2b9d-4e6b-892e-f3ed83f9a251\",\"amount_cents\":4000,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_48673ce9d6b26d4da2751ab4\",\"failure_message\":null}],\"order\":\"refunded\"}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S15] host cancel (same PATCH as EventEditor.tsx:696) succeeds — {\"status\":200}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S15] cancelled notice queued — [{\"kind\":\"cancelled\",\"status\":\"scheduled\"}]"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S15] OBSERVED: paid order stays paid, no refund row, no Stripe refund request (nothing refunds automatically) — {\"order\":\"paid\",\"refunds\":0,\"stripe_calls\":0}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S15] OBSERVED: open checkout session is not expired at Stripe on cancel — []"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S15] payment into a cancelled event is not turned into a live place without a refund flag — {\"webhook\":200,\"order\":\"paid\",\"reg\":[\"pending\"],\"tickets\":[],\"refunds\":[{\"id\":\"81977751-abab-4ef0-9a96-19120da3342c\",\"amount_cents\":2000,\"status\":\"needs_attention\",\"stripe_refund_id\":null,\"reason\":\"Paid, but the place could not be confirmed\"}]}"
+    },
+    {
+      "batch": "scen2",
+      "pass": true,
+      "detail": "PASS [S9b] capacity 1 never ends with 2 confirmed places / 2 tickets and no refund flag — {\"capLapsed\":{\"capacity\":1,\"confirmed\":0,\"remaining\":1,\"state\":\"open\"},\"a\":{\"status\":200,\"session\":\"cs_test_sim_1291a61af456a4abe1df4bfa\"},\"b\":{\"status\":200,\"session\":\"cs_test_sim_b76455e93ca542b7b8dc7a94\"},\"webhook_a\":200,\"webhook_b\":200,\"confirmed\":[{\"profile_id\":\"6ba3dd66-149c-49cb-b25b-d5a1f56c0c70\",\"status\":\"confirmed\"}],\"tickets\":1,\"needs\":[{\"status\":\"needs_attention\",\"reason\":\"Paid, but the place could not be confirmed\"}],\"orders\":[{\"profile_id\":\"6ba3dd66-149c-49cb-b25b-d5a1f56c0c70\",\"status\":\"paid\",\"amount_cents\":1000},{\"profile_id\":\"3c91a819-37fa-4ee1-8b50-929f01465ccf\",\"status\":\"paid\",\"amount_cents\":1000}],\"capacity\":{\"capacity\":1,\"confirmed\":1,\"remaining\":0,\"state\":\"sold_out\"}}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] both deliveries were lost (receiver not 2xx) — [{\"event_id\":\"evt_sim_339955269bfc3494fa06996d\",\"status\":503,\"response\":\"{\\\"error\\\":\\\"UAT simulated outage\\\"}\"},{\"event_id\":\"evt_sim_d79b732e293083f766915bf5\",\"status\":503,\"response\":\"{\\\"error\\\":\\\"UAT simulated outage\\\"}\"}]"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] Stripe says paid, our orders still pending, no ticket — {\"conn\":\"pending\",\"plat\":\"pending\"}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] retry after lapsed hold -> 409 payment_confirming, asked Stripe on the connector account, no new session — {\"status\":409,\"reason\":\"payment_confirming\",\"calls\":[\"GET /v1/checkout/sessions/cs_test_sim_591e0f0b82ab3f90a87885c7 acct=acct_qapmug4v13r\"]}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] stripe-reconcile 200 and confirmed >= 2 — {\"swept\":16,\"confirmed\":2,\"failed\":0,\"still_open\":1,\"refunds_swept\":0,\"refunds_moved\":0,\"fees_swept\":66,\"errors\":13}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] reconcile read each session on the account that took it — {\"conn\":\"acct_qapmug4v13r\",\"plat\":null}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] both orders paid with PI, registrations confirmed, one ticket each — {\"conn\":{\"orders\":[{\"id\":\"ff409484-b8cc-45b7-b0b8-688bffd17653\",\"status\":\"paid\",\"amount_cents\":4000,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_591e0f0b82ab3f90a87885c7\",\"stripe_payment_intent_id\":\"pi_sim_d90fbf94b12a965495e801ac\",\"has_paid_at\":true}],\"registrations\":[{\"id\":\"e476fb8f-39fb-4812-9169-1dba82996cff\",\"status\":\"confirmed\",\"held\":false}],\"tickets\":[{\"id\":\"676bc987-6fdc-44b8-ae91-8536ca5e9649\",\"registration_id\":\"e476fb8f-39fb-4812-9169-1dba82996cff\",\"revoked\":false}],\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}],\"refunds\":[]},\"plat\":{\"orders\":[{\"id\":\"7f1b0efd-f733-42d5-b3ef-1904ad5c2995\",\"status\":\"paid\",\"amount_cents\":2500,\"fee_cents\":0,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":null,\"stripe_checkout_session_id\":\"cs_test_sim_0b4dc4a3938b2bfaa8e015d9\",\"stripe_payment_intent_id\":\"pi_sim_6e924ca7a4f17383d62c7e02\",\"has_paid_at\":true}],\"registrations\":[{\"id\":\"224d72ec-6d2d-4d0a-bcaa-c2ba33452f85\",\"status\":\"confirmed\",\"held\":false}],\"tickets\":[{\"id\":\"c06afb8c-2ed9-4f29-845f-e21593ce2fa8\",\"registration_id\":\"224d72ec-6d2d-4d0a-bcaa-c2ba33452f85\",\"revoked\":false}],\"messages\":[{\"kind\":\"payment\",\"subject\":\"Your place is confirmed\",\"status\":\"scheduled\"}],\"refunds\":[]}}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] late original delivery after reconcile -> 200, still one ticket — {\"webhook\":200,\"tickets\":1}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S14] reconcile without service key / admin token -> 401 — 401"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S3] checkout 200: amount 4200, fee 200, gbp — {\"url\":\"http://localhost:12111/pay/cs_test_sim_d4506a8dfd72c63862912580\",\"session_id\":\"cs_test_sim_d4506a8dfd72c63862912580\",\"order_id\":\"b162d1bd-bf1a-443b-a4de-a3cca57c0c3c\",\"registration_id\":\"d48902b9-6087-438c-ad8a-934c0456ebf0\",\"hold_expires_at\":\"2026-09-24T23:32:00.165+00:00\",\"amount_cents\":4200,\"fee_cents\":200,\"currency\":\"gbp\",\"order_status\":\"pending\"}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S3] two line items: ticket 4000 + \"Booking fee\" 200, both gbp, qty 1 — [{\"name\":\"qap-mug4v13r S3 connector GBP fee — Standard\",\"unit_amount\":\"4000\",\"currency\":\"gbp\",\"qty\":\"1\"},{\"name\":\"Booking fee\",\"unit_amount\":\"200\",\"currency\":\"gbp\",\"qty\":\"1\"}]"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S3] charged on connector account; no application_fee_amount / transfer_data — {\"stripe_account\":\"acct_qapmug4v13r\",\"pid\":[\"metadata\"]}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S3] paid: order amount 4200, fee_cents 200, application_fee_cents 0, account frozen — {\"id\":\"b162d1bd-bf1a-443b-a4de-a3cca57c0c3c\",\"status\":\"paid\",\"amount_cents\":4200,\"fee_cents\":200,\"application_fee_cents\":0,\"currency\":\"gbp\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_checkout_session_id\":\"cs_test_sim_d4506a8dfd72c63862912580\",\"stripe_payment_intent_id\":\"pi_sim_9fc3f4b753c6842092652e91\",\"has_paid_at\":true}"
+    },
+    {
+      "batch": "scen3c",
+      "pass": true,
+      "detail": "PASS [S3] sim ledger: gross 4200 on connector account, platform application fee 0 — {\"kind\":\"charge\",\"session\":\"cs_test_sim_d4506a8dfd72c63862912580\",\"payment_intent\":\"pi_sim_9fc3f4b753c6842092652e91\",\"charged_on\":\"acct_qapmug4v13r\",\"direct_charge\":true,\"currency\":\"gbp\",\"gross\":4200,\"lines\":[{\"name\":\"qap-mug4v13r S3 connector GBP fee — Standard\",\"unit_amount\":4000,\"quantity\":1,\"amount_total\":4000},{\"name\":\"Booking fee\",\"unit_amount\":200,\"quantity\":1,\"amount_total\":200}],\"stripe_fee\":83,\"stripe_fee_basis\":\"1.5% + 20p (standard UK card) — ASSUMPTION\",\"stripe_fee_paid_by\":\"acct_qapmug4v13r\",\"application_fee_to_platform\":0,\"transfer_data\":null,\"net_to_receiver\":4117}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] account.updated (restricted) -> connector restricted, charges off — {\"webhook\":200,\"connector\":{\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_account_status\":\"restricted\",\"stripe_charges_enabled\":false,\"stripe_payouts_enabled\":true}}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] new sale on restricted connector refused 409, no Stripe session created — {\"status\":409,\"reason\":\"restricted\",\"calls\":[]}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] disconnect 200 -> status disconnected, stripe_account_id kept, deauthorize sent to sim — {\"body\":{\"connector_id\":\"5a48e3c3-194a-41a7-8efd-77a4dbc2da4a\",\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_account_status\":\"disconnected\",\"stripe_charges_enabled\":false,\"stripe_payouts_enabled\":false,\"existing_orders_unchanged\":true},\"connector\":{\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_account_status\":\"disconnected\",\"stripe_charges_enabled\":false,\"stripe_payouts_enabled\":false},\"calls\":[\"POST /oauth/deauthorize\"]}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] a later account.updated does not put a disconnected connector back on sale — {\"stripe_account_id\":\"acct_qapmug4v13r\",\"stripe_account_status\":\"disconnected\",\"stripe_charges_enabled\":false,\"stripe_payouts_enabled\":false}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] refund after disconnect: 200, Stripe-Account is the order stored account — {\"status\":200,\"body\":{\"refund_id\":\"2e830145-7a12-49e0-8504-2cb2ce2664b0\",\"status\":\"processing\",\"stripe_refund_id\":\"re_sim_b56b7d4b38f2c0de61fbbfb3\",\"amount_cents\":4000,\"currency\":\"gbp\",\"remaining_cents\":0,\"registration_unchanged\":true},\"stripe_account\":\"acct_qapmug4v13r\"}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S13] refund completes, order refunded, place kept — {\"order\":\"refunded\",\"refunds\":[{\"id\":\"2e830145-7a12-49e0-8504-2cb2ce2664b0\",\"amount_cents\":4000,\"status\":\"completed\",\"stripe_refund_id\":\"re_sim_b56b7d4b38f2c0de61fbbfb3\",\"reason\":null}]}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s1: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":5000,\"feesCents\":116,\"netCents\":4884,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":2,\"refundedOrders\":0,\"currency\":\"gbp\"},\"gross\":5000,\"refunded\":0,\"charges\":2}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s1: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":4884,\"screen_fees_line\":116,\"ledger_net\":4884,\"stripe_fee_assumed\":116}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s2: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":20000,\"feesCents\":400,\"netCents\":3600,\"feesPending\":0,\"refundedCents\":16000,\"paidOrders\":5,\"refundedOrders\":4,\"currency\":\"gbp\"},\"gross\":20000,\"refunded\":16000,\"charges\":5}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s2: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":3600,\"screen_fees_line\":400,\"ledger_net\":3600,\"stripe_fee_assumed\":400}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s3: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":4200,\"feesCents\":83,\"netCents\":4117,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":1,\"refundedOrders\":0,\"currency\":\"gbp\"},\"gross\":4200,\"refunded\":0,\"charges\":1}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s3: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":4117,\"screen_fees_line\":83,\"ledger_net\":4117,\"stripe_fee_assumed\":83}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s4: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":3000,\"feesCents\":70,\"netCents\":-70,\"feesPending\":0,\"refundedCents\":3000,\"paidOrders\":1,\"refundedOrders\":1,\"currency\":\"eur\"},\"gross\":3000,\"refunded\":3000,\"charges\":1}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s4: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":-70,\"screen_fees_line\":70,\"ledger_net\":-70,\"stripe_fee_assumed\":70}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s5: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":5000,\"feesCents\":175,\"netCents\":4825,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":1,\"refundedOrders\":0,\"currency\":\"usd\"},\"gross\":5000,\"refunded\":0,\"charges\":1}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s5: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":4825,\"screen_fees_line\":175,\"ledger_net\":4825,\"stripe_fee_assumed\":175}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s9: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":1000,\"feesCents\":35,\"netCents\":965,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":1,\"refundedOrders\":0,\"currency\":\"gbp\"},\"gross\":1000,\"refunded\":0,\"charges\":1}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s9: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":965,\"screen_fees_line\":35,\"ledger_net\":965,\"stripe_fee_assumed\":35}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s15: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":4000,\"feesCents\":100,\"netCents\":3900,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":2,\"refundedOrders\":0,\"currency\":\"gbp\"},\"gross\":4000,\"refunded\":0,\"charges\":2}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s15: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":3900,\"screen_fees_line\":100,\"ledger_net\":3900,\"stripe_fee_assumed\":100}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s9b: screen gross/refunded/paid-orders match the ledger — {\"screen\":{\"grossCents\":2000,\"feesCents\":70,\"netCents\":1930,\"feesPending\":0,\"refundedCents\":0,\"paidOrders\":2,\"refundedOrders\":0,\"currency\":\"gbp\"},\"gross\":2000,\"refunded\":0,\"charges\":2}"
+    },
+    {
+      "batch": "scen4",
+      "pass": true,
+      "detail": "PASS [S17] s9b: screen \"Net receipts\" equals what the receiver actually nets (ledger, assumed Stripe fee) — {\"screen_net\":1930,\"screen_fees_line\":70,\"ledger_net\":1930,\"stripe_fee_assumed\":70}"
+    },
+    {
+      "batch": "scen5",
+      "pass": true,
+      "detail": "PASS [X1] payment_intent.payment_failed for a pending Checkout order is matched (order has no PI id yet) — {\"webhook\":200,\"order\":{\"status\":\"failed\",\"stripe_payment_intent_id\":null}}"
+    },
+    {
+      "batch": "scen5",
+      "pass": true,
+      "detail": "PASS [X2] a paid session for 1 USD cent does not confirm a 2500 GBP order — {\"webhook\":200,\"order\":{\"status\":\"failed\",\"amount_cents\":2500,\"currency\":\"gbp\",\"stripe_checkout_session_id\":\"cs_test_sim_a10d014177356dbb0f63d532\",\"stripe_payment_intent_id\":null},\"tickets\":0}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18a] every paid order records the fee Stripe booked, in its currency — {\"orders\":15,\"wrong\":[]}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18a] covers platform and connected accounts in gbp, eur and usd — {\"platform\":3,\"connected\":12,\"currencies\":[\"eur\",\"gbp\",\"usd\"]}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18a] an order with no charge Stripe booked has no fee invented for it — []"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18b] processing payment: order pending, no fee recorded — {\"status\":\"pending\",\"fee\":null}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18b] async_payment_succeeded: order paid with the booked fee (platform account) — {\"webhook\":{\"event_id\":\"evt_sim_519ba18468eef8974e1c0c6e\",\"status\":200,\"response\":\"{\\\"received\\\":true}\"},\"after\":{\"status\":\"paid\",\"pi\":\"pi_sim_17d7d21f53ac0aa710159270\",\"fee\":59,\"fee_cur\":\"gbp\"},\"booked\":59}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18c] stripe-reconcile 200 and reports the fee sweep — {\"swept\":3,\"confirmed\":0,\"failed\":0,\"still_open\":0,\"refunds_swept\":0,\"refunds_moved\":0,\"fees_swept\":66,\"errors\":3}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18c] platform and connected orders both get their fee back, exactly — [{\"id\":\"ad0d4188-8aef-4ad8-931a-efd72d623005\",\"fee\":58,\"fee_cur\":\"gbp\",\"want\":58,\"platform\":true},{\"id\":\"ff409484-b8cc-45b7-b0b8-688bffd17653\",\"fee\":80,\"fee_cur\":\"gbp\",\"want\":80,\"platform\":false}]"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18d] a recorded fee is left alone by the sweep — {\"before\":58,\"now\":1}"
+    },
+    {
+      "batch": "scen6",
+      "pass": true,
+      "detail": "PASS [S18e] replayed checkout.session.completed: 200, fee untouched — {\"webhook\":{\"event_id\":\"evt_sim_cb559a2c56889879e5da80ab\",\"status\":200,\"response\":\"{\\\"received\\\":true}\"},\"now\":2}"
+    }
+  ]
+}

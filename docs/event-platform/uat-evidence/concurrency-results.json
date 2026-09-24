@@ -1,0 +1,129 @@
+{
+  "at": "2026-09-24T23:09:34.387Z",
+  "scope": "Local free registration only; not a production performance certification",
+  "results": [
+    {
+      "name": "ORG-03 ORG-03A BUY-05 31 concurrent registrations across two categories issue 30 places",
+      "pass": true,
+      "detail": {
+        "wins": 30,
+        "elapsedMs": 422,
+        "rejections": [
+          "This event is sold out."
+        ]
+      }
+    },
+    {
+      "name": "ORG-03A capacity30 is sold out with zero remaining",
+      "pass": true,
+      "detail": {
+        "event_id": "848db5d9-24e1-4b9d-8e1e-8e7a324970f3",
+        "slug": "uat-load-1790291342770",
+        "capacity": 30,
+        "confirmed": 30,
+        "remaining": 0,
+        "state": "sold_out"
+      }
+    },
+    {
+      "name": "BUY-10 exactly 30 tickets issued",
+      "pass": true,
+      "detail": {
+        "tickets": 30
+      }
+    },
+    {
+      "name": "ATT-03 20 concurrent scans record exactly one arrival",
+      "pass": true,
+      "detail": [
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "ok",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already",
+        "already"
+      ]
+    },
+    {
+      "name": "ATT-05 one attendance row after scan race",
+      "pass": true,
+      "detail": {
+        "rows": 1
+      }
+    },
+    {
+      "name": "ORG-03A cancellation reopens one place",
+      "pass": true,
+      "detail": {
+        "remaining": 1,
+        "state": "open"
+      }
+    },
+    {
+      "name": "FDB-06 FDB-15 earlier reschedule and corrected attendance retain initial feedback request",
+      "pass": true,
+      "detail": [
+        {
+          "id": "5c0ff2aa-ae50-40fe-8e32-11e50b425704",
+          "status": "scheduled",
+          "sent_at": null,
+          "scheduled_for": "2026-09-24T22:09:20.057+00:00"
+        }
+      ]
+    },
+    {
+      "name": "FDB-06 late correction queues one initial request without resending prior recipients",
+      "pass": true,
+      "detail": [
+        {
+          "profile_id": "401a4728-d59c-4148-baf6-7d89ad814484",
+          "status": "sent"
+        },
+        {
+          "profile_id": "faf1d5e2-46aa-44cc-b9f1-ca26f875d7b1",
+          "status": "sent"
+        },
+        {
+          "profile_id": "ffef1bd1-0b1c-4263-ba30-5c50c17f1cec",
+          "status": "scheduled"
+        }
+      ]
+    },
+    {
+      "name": "FDB-15 repeat corrections reuse one feedback message",
+      "pass": true,
+      "detail": {
+        "messages": 1
+      }
+    },
+    {
+      "name": "FDB-15 changed feedback delay preserves the future opening time",
+      "pass": true,
+      "detail": {
+        "scheduled_for": "2026-09-25T00:09:20.057+00:00",
+        "status": "scheduled"
+      }
+    },
+    {
+      "name": "FDB-06 correction during dispatch remains scheduled for the next sweep",
+      "pass": true,
+      "detail": {
+        "status": "scheduled"
+      }
+    }
+  ]
+}

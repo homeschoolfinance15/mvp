@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { EventUpdateModal } from './EventUpdateModal'
 import {
   Button,
   EmptyState,
@@ -25,11 +26,10 @@ import {
   Panel,
   SectionHeader,
   Select,
-  Textarea,
 } from '../../components/ui'
 import { useAuth } from '../../context/AuthProvider'
 import { useLive } from '../../lib/live'
-import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
+import { errorMessage, loadFailed, supabase } from '../../lib/supabase'
 import { eventWhen, type EventMessage, type EventRecord } from '../../lib/events'
 import {
   AUTOMATIC_MESSAGES,
@@ -596,7 +596,7 @@ function Emails({ data }: { data: ManagedEvent }) {
 
       <ReminderPreview event={event} reminder={previewing} onClose={() => setPreviewing(null)} />
 
-      <UpdateModal
+      <EventUpdateModal
         open={updating}
         eventId={event.id}
         onClose={() => setUpdating(false)}
@@ -604,10 +604,6 @@ function Emails({ data }: { data: ManagedEvent }) {
           setUpdating(false)
           setOutcome(message)
           await load()
-        }}
-        onProblem={(message) => {
-          setUpdating(false)
-          setProblem(message)
         }}
       />
     </ManageShell>
@@ -664,107 +660,6 @@ function ReminderPreview({
       <div className="mt-7">
         <Button className="w-full" onClick={onClose}>
           Close
-        </Button>
-      </div>
-    </Modal>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
-/* EML-08 — telling attendees something, later                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The standing version of the notification offered by the editor.
- *
- * ORG-10: somebody who saved a change without telling anybody comes here to
- * put it right. It carries no `changed_details`, because by now the change is
- * whatever the event already says — this is the organiser's own words about
- * an event people have registered for.
- */
-function UpdateModal({
-  open,
-  eventId,
-  onClose,
-  onSent,
-  onProblem,
-}: {
-  open: boolean
-  eventId: string
-  onClose: () => void
-  onSent: (message: string) => Promise<void>
-  onProblem: (message: string) => void
-}) {
-  const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function send() {
-    setBusy(true)
-    const { data, error } = await supabase.functions.invoke('event-email', {
-      body: {
-        kind: 'update',
-        event_id: eventId,
-        subject: subject.trim() || null,
-        body: body.trim(),
-        send_now: true,
-      },
-    })
-    setBusy(false)
-    if (error) {
-      onProblem(`Nothing was sent: ${await functionError(error)}`)
-      return
-    }
-    /*
-     * The reply's count, not the one the screen guessed. And `audience_count:
-     * 0` with a null message id is a 200, not a failure: an event nobody has
-     * registered for yet has nobody to write to, which is a fact rather than
-     * a fault. `dispatched: false` is not surfaced either — the message is
-     * queued and the schedule takes it within a few minutes.
-     */
-    const count = (data as { audience_count?: number } | null)?.audience_count ?? 0
-    setSubject('')
-    setBody('')
-    await onSent(
-      count === 0
-        ? 'There is nobody to notify yet — no one has a confirmed place on this event. Nothing was sent.'
-        : `Queued for ${count} ${count === 1 ? 'person' : 'people'}.`,
-    )
-  }
-
-  return (
-    <Modal open={open} title="Send an update to attendees" onClose={busy ? () => {} : onClose}>
-      <p className="text-sm leading-relaxed text-muted">
-        Goes to everybody with a confirmed place, one copy each — they never see who else is on the
-        list. It is recorded against your name.
-      </p>
-
-      <div className="mt-5 space-y-5">
-        <Field label="Subject" hint="Optional. The event's title is used when this is blank.">
-          <Textarea rows={1} value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </Field>
-        <Field label="What you want to say">
-          <Textarea
-            rows={5}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="We've moved next door — same street, bigger room. Everything else is unchanged."
-          />
-        </Field>
-      </div>
-
-      <div className="mt-7 flex gap-3">
-        <Button className="flex-1" onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          className="flex-1"
-          loading={busy}
-          disabled={!body.trim()}
-          onClick={() => void send()}
-        >
-          Send it
         </Button>
       </div>
     </Modal>

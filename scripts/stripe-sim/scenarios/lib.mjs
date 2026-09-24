@@ -6,12 +6,14 @@ import { fileURLToPath } from 'node:url'
 // Results, state and the simulator's request log land here (git-ignored).
 export const DIR = fileURLToPath(new globalThis.URL('../out', import.meta.url))
 fs.mkdirSync(DIR, { recursive: true })
-export const URL = 'http://127.0.0.1:54321'
-export const SIM = 'http://localhost:12111'
+export const URL = process.env.UAT_PAYMENT_URL ?? 'http://127.0.0.1:54321'
+if (!/^http:\/\/(127\.0\.0\.1|localhost):(54321|5489)$/.test(URL)) throw Error('Payment scenarios are local only')
+export const SIM = process.env.UAT_SIM_URL ?? 'http://localhost:12111'
+if (!/^http:\/\/(127\.0\.0\.1|localhost):(12111|12112)$/.test(SIM)) throw Error('Simulator must be local')
 export const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
 export const SERVICE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'
 export const PW = 'QaTest-2026!'
-export const LOG = `${DIR}/stripe-requests.jsonl`
+export const LOG = process.env.UAT_SIM_LOG ?? `${DIR}/stripe-requests.jsonl`
 
 const H = (t) => ({ apikey: ANON, Authorization: `Bearer ${t ?? ANON}`, 'Content-Type': 'application/json' })
 const SH = { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'application/json', Prefer: 'return=representation' }

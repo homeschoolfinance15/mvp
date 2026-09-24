@@ -1,0 +1,231 @@
+{
+  "at": "2026-09-24T23:08:04.152Z",
+  "scope": "local current working tree",
+  "results": [
+    {
+      "name": "EML-01 EML-11 publication automatically schedules feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-02 adding reminder creates saved schedule",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-02 disabling reminders cancels unsent reminders",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-02 disabling reminders preserves feedback request",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-02 re-enabling restores future reminders",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-06 rescheduling moves unsent reminders",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-15 rescheduling moves feedback opening email",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-09 non-host cannot read organizer email settings",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EVT-01 public event readable without login",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-01 mobile public page has no horizontal overflow",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-07 signup keeps the required onboarding screen open",
+      "pass": true,
+      "detail": "Destination: http://127.0.0.1:5187/onboarding"
+    },
+    {
+      "name": "ACC-01 ACC-07 browser signup and onboarding return to selected checkout",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-02 browser signup creates no network membership",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-03 BUY-12 login preserves event checkout destination",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "BUY-02 browser free registration confirms one place",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "BUY-10 browser ticket displays selected option",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-08 browser shows both exact event questions",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-14 visibility explanation shown before submission",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-04 event slider supports keyboard",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-06 verified guest can submit through actual RPC",
+      "pass": true,
+      "detail": "HTTP 204"
+    },
+    {
+      "name": "FDB-09 FDB-12 non-admin cannot read submitted answers through RPC",
+      "pass": true,
+      "detail": "HTTP 200; returned 0 answers"
+    },
+    {
+      "name": "FDB-12 submission offers confirmation, not answer readback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 FDB-12 non-admin browser does not redisplay submitted response",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 another attendee cannot retrieve author answers with own RPC",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 non-admin data export excludes submitted feedback",
+      "pass": true,
+      "detail": "HTTP 200; own submitted event answer present: false"
+    },
+    {
+      "name": "FDB-09 peer feedback also stays out of account exports",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-16 original question accepts its original answer",
+      "pass": true,
+      "detail": "HTTP 204"
+    },
+    {
+      "name": "FDB-16 original question meaning remains attached to saved answer",
+      "pass": true,
+      "detail": "question PATCH HTTP 400; historical wording UAT original wording"
+    },
+    {
+      "name": "FDB-16 inactive questions cannot receive new responses",
+      "pass": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "FDB-16 a new question version can be created",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-14 FDB-11 admin-host browser reads submitted event feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-16 organizer email controls render",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-03 later send-update flow includes preview and recipient count",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-03 later preview retains previous and current saved address",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-04 stale browser preview refused without losing explanation",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-03 subject labelled optional is accepted by endpoint",
+      "pass": true,
+      "detail": "HTTP 200; {\"message_id\":\"256b5740-c3f2-42b2-ab22-6453e2686f7b\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:07:53.341Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+    },
+    {
+      "name": "EML-03 queued subject matches default preview and contains latest changes",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-04 database rejects stale snapshot at queue insertion",
+      "pass": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "name": "ATT-01 scanner capability recorded",
+      "pass": true,
+      "detail": "BarcodeDetector available: false"
+    },
+    {
+      "name": "ATT-01 unsupported camera browser explains typed-code fallback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-10 interrupted check-in never shows false success",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ATT-03 QLT-10 restored connection retries without duplicate attendance",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-07 corrected guest visible in browser guest list",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-10 editor save-and-notify accepts its complete preview and default subject",
+      "pass": true,
+      "detail": "HTTP 200; {\"message_id\":\"b9bd9c9a-8ffc-46e9-87bf-ef0287d68aca\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:08:01.997Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+    },
+    {
+      "name": "QLT-02 tested browser journeys have no uncaught JS errors",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

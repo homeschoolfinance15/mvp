@@ -37,6 +37,7 @@
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import { staleChanges, staleSnapshot } from '../_shared/event-update.ts'
 import {
   type Db,
   type MessageKind,
@@ -112,6 +113,7 @@ interface EventRow {
   timezone: string | null
   status: string | null
   currency: string | null
+  feedback_opens_after_minutes?: number
 }
 
 interface MessageRow {
@@ -124,6 +126,7 @@ interface MessageRow {
   subject: string | null
   body: string | null
   changed_details: Record<string, { from: unknown; to: unknown }> | null
+  preview_snapshot?: Record<string, unknown> | null
 }
 
 interface RecipientRow {
@@ -211,7 +214,7 @@ async function claim(db: Db, now: Date, only: string): Promise<MessageRow[]> {
   if (only) query = query.eq('id', only)
 
   const { data, error } = await query.select(
-    'id, event_id, kind, reminder_id, scheduled_for, subject, body, changed_details',
+    'id, event_id, kind, reminder_id, scheduled_for, subject, body, changed_details, preview_snapshot',
   )
   if (error) throw new Error(`Could not claim messages: ${error.message}`)
   return (data ?? []) as unknown as MessageRow[]
@@ -226,7 +229,7 @@ async function dispatch(db: Db, message: MessageRow, now: Date, resendKey: strin
     .from('events')
     .select(
       'id, host_id, title, slug, description, location, venue_name, address,' +
-        ' attendee_instructions, starts_at, ends_at, timezone, status, currency',
+        ' attendee_instructions, starts_at, ends_at, timezone, status, currency, feedback_opens_after_minutes',
     )
     .eq('id', message.event_id)
     .maybeSingle()
@@ -253,6 +256,14 @@ async function dispatch(db: Db, message: MessageRow, now: Date, resendKey: strin
   // Narrowed once, here, rather than cast at each use. Casting per use is how
   // host_id came to be read off a value that could still have been an error.
   const event = row as unknown as EventRow
+
+  // A reschedule may race a claim. Keep the initial request pending until its
+  // full configured opening time, rather than discarding it as a stale reminder.
+  const feedbackDue = new Date(event.ends_at ?? event.starts_at).getTime() + (event.feedback_opens_after_minutes ?? 0) * 60_000
+  if (message.kind === 'feedback_open' && event.status !== 'cancelled' && now.getTime() < feedbackDue) {
+    await db.from('event_messages').update({ status: 'scheduled', scheduled_for: new Date(feedbackDue).toISOString() }).eq('id', message.id)
+    return { message_id: message.id, status: 'deferred', sent: 0, failed: 0 }
+  }
 
   const reason = skipReason(message, event, now)
   if (reason) {
@@ -456,8 +467,15 @@ export function skipReason(message: MessageRow, event: EventRow, now: Date): str
     return 'The event had already started — a late reminder is not sent.'
   }
 
-  if (message.kind === 'feedback_open' && ends && now < ends) {
+  if (message.kind === 'feedback_open' && now.getTime() < (ends ?? starts).getTime() + (event.feedback_opens_after_minutes ?? 0) * 60_000) {
     return 'The event now ends later — feedback is not open yet.'
+  }
+
+  if (message.kind === 'update' && (
+    staleChanges(message.changed_details ?? {}, event as unknown as Record<string, unknown>).length > 0 ||
+    (message.preview_snapshot && staleSnapshot(message.preview_snapshot, event as unknown as Record<string, unknown>).length > 0)
+  )) {
+    return 'The event changed after this update was previewed. Build a fresh preview before sending.'
   }
 
   return null
@@ -851,7 +869,7 @@ const WRITE: Record<MessageKind, (p: Person, d: Detail, m: MessageRow) => Copy> 
       ...(m.body ? [m.body] : [`Something about ${d.title} has changed.`]),
       'Your place still stands — nothing is needed from you.',
     ],
-    facts: [...changedFacts(m), ...coordinates(d)],
+    facts: [...changedFacts(m), ...coordinates(d), ...(d.instructions ? [['Instructions', d.instructions] as [string, string]] : [])],
     cta: 'See the event',
     link: d.link,
   }),
@@ -1181,6 +1199,15 @@ function demo(): void {
     currency: 'gbp',
   }
   const reminder = { id: 'm1', event_id: 'e1', kind: 'reminder', reminder_id: 'r1' } as MessageRow
+
+  ok(
+    skipReason({ ...reminder, kind: 'feedback_open' }, { ...event, feedback_opens_after_minutes: 120 }, new Date('2026-03-12T23:00:00Z')) !== null,
+    'FDB-15 feedback waits for the configured delay, not just the event end',
+  )
+  ok(
+    skipReason({ ...reminder, kind: 'update', changed_details: { address: { from: 'Old', to: 'Stale' } } }, { ...event, address: 'Latest' }, new Date('2026-03-12T18:00:00Z')) !== null,
+    'EML-04 a queued update with outdated saved details is not sent',
+  )
 
   ok(
     skipReason(reminder, event, new Date('2026-03-12T18:00:00Z')) === null,

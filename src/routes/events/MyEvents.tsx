@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { FeedbackAccess } from '../../components/FeedbackAccess'
 import {
   Button,
   ConfirmModal,
@@ -307,16 +308,6 @@ function BookingCard({
   const finished = new Date(event.ends_at ?? event.starts_at).getTime() < Date.now()
   const where = eventWhere(event)
 
-  /* FDB-15. Feedback opens a set time after the event ends, not the moment the
-     last person leaves the room. */
-  // FDB-06. An event with no end time still finished; falling back to the
-  // start is what `finished` above already does, and feedback eligibility must
-  // not quietly never open for the events a host left open-ended.
-  const feedbackOpensAt =
-    new Date(event.ends_at ?? event.starts_at).getTime() +
-    event.feedback_opens_after_minutes * 60_000
-  const feedbackOpen = attended && !cancelled && Date.now() >= feedbackOpensAt
-
   /**
    * BUY-08. Giving up a place. The RPC frees it for somebody else and revokes
    * the ticket; it does not move money, and this dialog says so rather than
@@ -436,14 +427,6 @@ function BookingCard({
           </Link>
         )}
 
-        {/* FDB-13. A way into the feedback flow, and nothing about what anyone
-            said — submitted feedback never appears on an attendee's screen. */}
-        {feedbackOpen && (
-          <Link to={`/events/feedback/${encodeURIComponent(event.slug)}`}>
-            <Button size="sm">Share your feedback</Button>
-          </Link>
-        )}
-
         {/* You can only give up a place you still hold, at an event that has
             not happened. ATT-7: cancel_registration refuses it afterwards too,
             so the button goes and the reason takes its place. */}
@@ -463,6 +446,8 @@ function BookingCard({
           </p>
         )}
       </div>
+
+      <FeedbackAccess event={event} attended={attended} />
 
       <ConfirmModal
         open={confirming}

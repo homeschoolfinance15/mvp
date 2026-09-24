@@ -1,0 +1,209 @@
+{
+  "at": "2026-09-24T23:02:08.568Z",
+  "scope": "Local real database and dispatcher; captured provider requests, no real delivery or Stripe",
+  "results": [
+    {
+      "name": "ACC-06 joining network preserves account, onboarding and current ticket",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-06 joining network preserves original profile answers",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ACC-06 ORG-15 new admin sees feedback still attached to same person",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 joining a network does not unlock submitted feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-15 replacing administrator preserves event and guest records",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "FDB-09 former administrator loses review-reading access",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-14 ORG-15 replacement admin can edit existing event after creator demotion",
+      "pass": false,
+      "detail": {
+        "status": 403,
+        "error": "new row violates row-level security policy for table \"events\""
+      }
+    },
+    {
+      "name": "ORG-05 named host can be separated from event-management permissions",
+      "pass": false,
+      "detail": {
+        "editAccepted": true,
+        "communicationsReadable": true,
+        "note": "Adding only an event_hosts row granted management; no separate assignment was made."
+      }
+    },
+    {
+      "name": "ORG-05 cohost still cannot read confidential feedback",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist public submission is not publicly readable",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist assignment and redemption preserve questionnaire",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Network waitlist does not create an event booking",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-07 legacy RSVP backfill preserves ticket and timestamp without inventing payment or attendance",
+      "pass": true,
+      "detail": {
+        "registrations": 1,
+        "tickets": 1,
+        "orders": 0,
+        "attendance": 0,
+        "original_rsvp": 1,
+        "timestamp_preserved": true
+      }
+    },
+    {
+      "name": "EML-08 provider failure is recorded without erasing tickets",
+      "pass": true,
+      "detail": {
+        "claimed": 1,
+        "sent": 0,
+        "failed": 2,
+        "messages": [
+          {
+            "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+            "status": "failed",
+            "sent": 0,
+            "failed": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "EML-08 retry recovers failed recipients and never resends successes",
+      "pass": true,
+      "detail": {
+        "retried": {
+          "claimed": 1,
+          "sent": 2,
+          "failed": 0,
+          "messages": [
+            {
+              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "status": "sent",
+              "sent": 2,
+              "failed": 0
+            }
+          ]
+        },
+        "repeated": {
+          "claimed": 0,
+          "sent": 0,
+          "failed": 0,
+          "messages": []
+        }
+      }
+    },
+    {
+      "name": "EML-09 feedback requests do not contain submitted answers",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-05 recipient addresses are separate",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "EML-08 FDB-06 mixed successful and failed recipient history retries only the new failure",
+      "pass": true,
+      "detail": {
+        "lateFailure": {
+          "claimed": 1,
+          "sent": 0,
+          "failed": 1,
+          "messages": [
+            {
+              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "status": "failed",
+              "sent": 0,
+              "failed": 1
+            }
+          ]
+        },
+        "lateRetry": {
+          "claimed": 1,
+          "sent": 1,
+          "failed": 0,
+          "messages": [
+            {
+              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "status": "sent",
+              "sent": 1,
+              "failed": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EML-05 EML-07 reminder rechecks cancellation and uses current address",
+      "pass": true,
+      "detail": {
+        "claimed": 1,
+        "sent": 1,
+        "failed": 0,
+        "messages": [
+          {
+            "message_id": "84041ea8-0648-47cb-8e31-59907fa65cfb",
+            "status": "sent",
+            "sent": 1,
+            "failed": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "EML-09 anonymous caller cannot dispatch email",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "QLT-10 100 simultaneous free claims cannot exceed 100 total places",
+      "pass": true,
+      "detail": {
+        "success": 99,
+        "durationMs": 822,
+        "existingPlaces": 1
+      }
+    },
+    {
+      "name": "QLT-10 50 concurrent distinct-ticket check-ins return known outcomes",
+      "pass": true,
+      "detail": {
+        "durationMs": 336,
+        "count": 50,
+        "failures": []
+      }
+    }
+  ]
+}

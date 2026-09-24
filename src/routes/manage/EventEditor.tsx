@@ -43,6 +43,7 @@ import {
   NOTIFIABLE_FIELDS,
   browserTimeZone,
   changedDetails,
+  eventUpdateSnapshot,
   fromZonedInput,
   lockedSentence,
   paymentRecipientSentence,
@@ -1316,8 +1317,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             body: {
               kind: 'update',
               event_id: event.id,
+              subject: `${columns.title ?? event.title} — the details have changed`,
               body: note.trim() || null,
               changed_details: announcing,
+              preview_snapshot: eventUpdateSnapshot({ ...event, ...columns }),
               send_now: true,
             },
           })
