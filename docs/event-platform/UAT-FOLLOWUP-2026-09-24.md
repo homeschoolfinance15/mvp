@@ -1,7 +1,7 @@
 # Remaining-gap acceptance tests — 24 September 2026
 
-**Release update:** the original repairs are now deployed. R1 and R2 have follow-up
-fixes passing local integration checks; those follow-up fixes are not yet deployed.
+**Release update:** the original repairs and the R1/R2 follow-up fixes are now
+deployed. Release `2aac733` passed deployment checks and live frontend smoke checks.
 See [release status](RELEASE-2026-09-24.md). The findings below retain the original
 audit context; updated `remaining-results.json` contains the follow-up run.
 
