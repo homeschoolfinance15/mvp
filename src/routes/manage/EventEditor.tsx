@@ -1041,6 +1041,9 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
               onPick={({ name, address }) =>
                 setDraft((d) => ({ ...d, venue_name: name, address }))
               }
+              // ponytail: country from the currency; EUR spans too many to pick one,
+              // so it searches the world. A per-event country field if hosts need it.
+              region={({ usd: 'us', gbp: 'gb' } as Record<string, string>)[draft.currency]}
               placeholder="The Clove Club"
             />
           </Field>

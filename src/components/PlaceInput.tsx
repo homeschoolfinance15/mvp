@@ -33,11 +33,14 @@ export function PlaceInput({
   value,
   onChange,
   onPick,
+  region,
   ...rest
 }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & {
   value: string
   onChange: (value: string) => void
   onPick: (place: PickedPlace) => void
+  /** Two-letter country to search in. Without one Google searches the world. */
+  region?: string
 }) {
   const listId = useId()
   const [predictions, setPredictions] = useState<Prediction[]>([])
@@ -60,7 +63,11 @@ export function PlaceInput({
           method: 'POST',
           signal: controller.signal,
           headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': KEY },
-          body: JSON.stringify({ input: value, sessionToken: session.current }),
+          body: JSON.stringify({
+            input: value,
+            sessionToken: session.current,
+            ...(region ? { includedRegionCodes: [region] } : {}),
+          }),
         })
         if (!res.ok) return setPredictions([])
         const body = (await res.json()) as {
@@ -91,7 +98,7 @@ export function PlaceInput({
       clearTimeout(timer)
       controller.abort()
     }
-  }, [value])
+  }, [value, region])
 
   async function pick(p: Prediction) {
     setOpen(false)
