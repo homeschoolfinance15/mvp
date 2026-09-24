@@ -1237,6 +1237,7 @@ function demo(): void {
     subject: null,
     scheduled_for: null,
     changed_details: null,
+    reminder_id: null,
   })
   const wholeEmail = JSON.stringify(feedback).toLowerCase()
   ok(
@@ -1255,6 +1256,7 @@ function demo(): void {
     body: 'Sorry, we had to shuffle things a bit.',
     scheduled_for: null,
     changed_details: { venue_name: { from: 'The Standard', to: 'The Hoxton' } },
+    reminder_id: null,
   })
   ok(
     update.facts.some(([l, v]) => l === 'Venue' && v === 'The Hoxton (was The Standard)'),
