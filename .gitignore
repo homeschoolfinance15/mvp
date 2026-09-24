@@ -33,3 +33,6 @@ supabase/.branches
 
 # Local operator notes — hosting credentials, never committed
 .local/
+
+# Local Stripe simulation output
+scripts/stripe-sim/out/

@@ -26,13 +26,14 @@ import http from 'node:http'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT ?? 12111)
 const PUBLIC_BASE = process.env.SIM_PUBLIC_BASE ?? `http://localhost:${PORT}`
 const WEBHOOK_URL = process.env.WEBHOOK_URL ?? 'http://127.0.0.1:54321/functions/v1/stripe-webhook'
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_local_sim'
 const LOG = process.env.SIM_LOG ??
-  'C:/Users/srima/AppData/Local/Temp/claude/C--Dev-Code-Repo-Amazing-AI-mvp/8867e1cc-d376-480c-a101-9d90bcc40d94/scratchpad/pay/stripe-requests.jsonl'
+  fileURLToPath(new URL('./out/stripe-requests.jsonl', import.meta.url))
 const PLATFORM = process.env.SIM_PLATFORM_ACCOUNT ?? 'acct_sim_platform'
 const API_VERSION = '2025-02-24.acacia' // informational only; echoed on events
 

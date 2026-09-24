@@ -22,7 +22,7 @@ Env (all optional):
 | `PORT` | `12111` |
 | `WEBHOOK_URL` | `http://127.0.0.1:54321/functions/v1/stripe-webhook` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_local_sim` (must match the functions' env) |
-| `SIM_LOG` | `<session scratchpad>/pay/stripe-requests.jsonl` |
+| `SIM_LOG` | `scripts/stripe-sim/out/stripe-requests.jsonl` (git-ignored) |
 | `SIM_PUBLIC_BASE` | `http://localhost:$PORT` (base of the session `url`) |
 | `SIM_PLATFORM_ACCOUNT` | `acct_sim_platform` |
 
@@ -83,3 +83,28 @@ sends none, so 0).
 Every request and webhook delivery is appended to `SIM_LOG` as JSON lines
 (`kind`, `method`, `path`, `stripe_account`, `idempotency_key`, parsed `body`,
 `status`; webhooks log `type`, `account`, and the receiver's response).
+
+## Scenarios: the whole payment flow, end to end
+
+```sh
+supabase start                                   # Docker must be running
+bash scripts/stripe-sim/scenarios/run-all.sh     # ~3 min, prints pass/fail per batch
+```
+
+It starts the simulator and `supabase functions serve` itself, builds a fresh
+cast (admin, connector, members, guests) and events through the real RPCs,
+then runs six batches in the order they depend on. Results, state and the
+money table (`ledger.md`) land in `scripts/stripe-sim/out/`.
+
+| Batch | Covers |
+| --- | --- |
+| `scen1` | Paid checkout on the platform and a connector account, GBP/EUR/USD, webhook replays, hold expiry, decline, last-place race, bad signatures |
+| `scen2` | Full, partial and remainder refunds, a cancelled event, a lapsed hold resold |
+| `scen3a`–`c` | Webhook deliveries lost while functions are down, then recovered by retry and `stripe-reconcile`; the booking fee (`env.sim.fee500`) |
+| `scen4` | Refunds after the account is restricted or disconnected; Results figures against the ledger |
+| `scen5` | `payment_failed` on a pending order; a paid session for the wrong amount |
+| `scen6` | Stripe's fee recorded per order, delayed methods, reconcile backfill, no overwrite |
+
+Local only: it uses the Supabase CLI's public demo keys and writes to the
+local database. It stops the edge runtime container between batches.
+
