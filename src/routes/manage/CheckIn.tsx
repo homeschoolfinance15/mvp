@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Button, Field, Input, Notice, Panel, Spinner } from '../../components/ui'
+import QRCode from 'qrcode'
+import { Button, Field, Input, Modal, Notice, Panel, Spinner } from '../../components/ui'
 import { useLive } from '../../lib/live'
-import { supabase } from '../../lib/supabase'
-import type { CheckInResult, EventAttendance } from '../../lib/events'
+import { errorMessage, supabase } from '../../lib/supabase'
+import {
+  eventLink,
+  type CapacityInfo,
+  type CheckInResult,
+  type EventAttendance,
+  type EventRecord,
+  type TicketType,
+} from '../../lib/events'
 import { outsideEventDay } from './rules'
 import { ManagedEventGate, ManageShell, useManagedEvent } from './shared'
 
@@ -603,6 +611,15 @@ export default function CheckIn() {
           </form>
         </Panel>
 
+        {result.state === 'ready' && (
+          <DoorSales
+            event={event}
+            tickets={result.data.tickets}
+            capacity={result.data.capacity}
+            onChanged={reload}
+          />
+        )}
+
         <section>
           <h2 className="eyebrow mb-3">Arrivals</h2>
           {arrived === 0 ? (
@@ -651,5 +668,134 @@ export default function CheckIn() {
         </section>
       </main>
     </div>
+  )
+}
+
+/**
+ * Walk-ins. Nobody is sold a ticket by hand here: the code is the event page,
+ * so somebody at the door buys on their own phone through the same checkout as
+ * everyone else — refunds and Results work as for any sale — and is checked in
+ * by scanning the ticket they were just given. Adding places lives here too,
+ * because a sold-out door is where that decision gets made.
+ */
+function DoorSales({
+  event,
+  tickets,
+  capacity,
+  onChanged,
+}: {
+  event: EventRecord
+  tickets: TicketType[]
+  capacity: CapacityInfo | null
+  onChanged: () => Promise<void>
+}) {
+  const [showCode, setShowCode] = useState(false)
+  const [more, setMore] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState('')
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const url = `${window.location.origin}${eventLink(event.slug)}`
+
+  useEffect(() => {
+    if (!showCode || !canvas.current) return
+    // Pure black on white at a fixed size, as on the ticket: it has to scan
+    // from a phone held at arm's length.
+    void QRCode.toCanvas(canvas.current, url, {
+      width: 320,
+      margin: 1,
+      color: { dark: '#000000', light: '#ffffff' },
+    })
+  }, [showCode, url])
+
+  if (event.status !== 'published') return null
+
+  const onSale = tickets.filter((t) => t.is_active)
+  // Raising the event's places does nothing for an option that has its own
+  // limit, so when every option has one the steward is sent to raise those.
+  const everyOptionCapped = onSale.length > 0 && onSale.every((t) => t.quantity !== null)
+
+  async function addPlaces(e: FormEvent) {
+    e.preventDefault()
+    const n = Number(more)
+    if (!Number.isInteger(n) || n < 1 || event.capacity === null) return
+    setBusy(true)
+    setProblem('')
+    const { error } = await supabase
+      .from('events')
+      .update({ capacity: event.capacity + n })
+      .eq('id', event.id)
+    setBusy(false)
+    if (error) {
+      setProblem(errorMessage(error))
+      return
+    }
+    setMore('')
+    await onChanged()
+  }
+
+  return (
+    <Panel className="mb-6 px-5 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="eyebrow">Selling at the door</h2>
+          <p className="mt-1 text-sm text-fg">
+            {event.capacity === null
+              ? 'No limit on places.'
+              : capacity?.remaining === 0
+                ? 'Sold out. Add places to sell at the door.'
+                : `${capacity?.remaining ?? '?'} of ${event.capacity} places left.`}
+          </p>
+        </div>
+        <Button onClick={() => setShowCode(true)}>Show the code to pay</Button>
+      </div>
+
+      {event.registration_closed && (
+        <div className="mt-4">
+          <Notice tone="warning">
+            Registration is closed, so nobody can buy. Untick Close registration now in Details.
+          </Notice>
+        </div>
+      )}
+
+      {event.capacity !== null && (
+        <form onSubmit={addPlaces} className="mt-4 flex items-end gap-3">
+          <Field label="Add places">
+            <Input
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={more}
+              onChange={(e) => setMore(e.target.value)}
+              className="w-28"
+            />
+          </Field>
+          <Button type="submit" loading={busy} disabled={!(Number(more) >= 1)} className="mb-[1px]">
+            Add
+          </Button>
+        </form>
+      )}
+      {everyOptionCapped && event.capacity !== null && (
+        <p className="mt-2 text-xs text-dim">
+          Every ticket option has its own limit, so raise one of those in Details too.
+        </p>
+      )}
+      {problem && (
+        <div className="mt-3">
+          <Notice tone="error">{problem}</Notice>
+        </div>
+      )}
+
+      <Modal open={showCode} title="Scan to buy a ticket" onClose={() => setShowCode(false)}>
+        <canvas
+          ref={canvas}
+          role="img"
+          aria-label="QR code for this event's page"
+          className="mx-auto h-[320px] w-[320px] max-w-full rounded-[4px] border border-line bg-white"
+        />
+        <p className="mt-4 text-center text-sm text-muted">
+          Pay on your phone, then show us the ticket you get.
+        </p>
+      </Modal>
+    </Panel>
   )
 }
