@@ -82,6 +82,7 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import { signState, STATE_MINUTES, verifyState } from './state.ts'
 
@@ -165,7 +166,7 @@ Deno.serve(async (request: Request) => {
   const stateSecret =
     Deno.env.get('STRIPE_CONNECT_STATE_SECRET') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-  const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient() })
+  const stripe = stripeClient(stripeKey)
 
   try {
     switch (action) {

@@ -413,6 +413,24 @@ echo 'STRIPE_SECRET_KEY=sk_test_...' >> supabase/functions/.env
 supabase functions serve stripe-webhook --no-verify-jwt --env-file supabase/functions/.env
 ```
 
+### 6.1a Without Stripe at all: the local simulator
+
+Every function builds its client through `supabase/functions/_shared/stripe.ts`
+(`stripeClient(key)`). When the function env sets `STRIPE_API_BASE` (e.g.
+`http://host.docker.internal:12111`), every Stripe request — including
+`stripe.oauth.*`, which names `connect.stripe.com` per call — is sent to that
+origin instead, where `scripts/stripe-sim/server.mjs` answers it and signs
+webhooks back to the local `stripe-webhook`. See `scripts/stripe-sim/README.md`.
+
+**Production never sets `STRIPE_API_BASE`.** Unset, the client is byte-for-byte
+the one each function built before. Do not add it to `supabase secrets`.
+
+The simulator proves our side of the contract — what we send, what we write
+when Stripe answers — not Stripe's behaviour. Everything in §8/§11 that is
+marked unverified stays unverified until a real test-mode run. The browser
+redirect to `https://connect.stripe.com/oauth/authorize` is built in
+`stripe-connect` itself and is not rerouted.
+
 ### 6.2 What `stripe trigger` can and cannot prove
 
 Read this before trusting a green run.

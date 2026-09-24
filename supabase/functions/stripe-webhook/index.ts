@@ -68,26 +68,15 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import {
+  applyRefund,
   confirmPaidOrder,
   failPendingOrder,
-  queueMessage,
   type Db,
   type OrderRow,
 } from '../_shared/order-state.ts'
-
-/**
- * BUY-08. The one place a Stripe refund status becomes ours. `completed` is
- * reachable from `succeeded` and from nothing else.
- */
-const REFUND_STATUS: Record<string, string> = {
-  succeeded: 'completed',
-  pending: 'processing',
-  failed: 'failed',
-  canceled: 'failed',
-  requires_action: 'needs_attention',
-}
 
 Deno.serve(async (request: Request) => {
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
@@ -110,7 +99,7 @@ Deno.serve(async (request: Request) => {
   const signature = request.headers.get('stripe-signature')
   if (!signature) return json({ error: 'Unsigned.' }, 400)
 
-  const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient() })
+  const stripe = stripeClient(stripeKey)
 
   // The raw body, byte for byte — the signature is over what was sent, so it
   // must not be parsed and re-serialised on the way here.
@@ -173,9 +162,12 @@ Deno.serve(async (request: Request) => {
         break
 
       case 'payment_intent.payment_failed':
+        // A Checkout order has no intent id until it is paid, so the order id
+        // stripe-checkout put on payment_intent_data.metadata is what finds it.
         await onNotPaid(db, account, {
           sessionId: null,
           paymentIntentId: (event.data.object as Stripe.PaymentIntent).id,
+          orderId: (event.data.object as Stripe.PaymentIntent).metadata?.order_id ?? null,
         })
         break
 
@@ -243,6 +235,46 @@ async function onCompleted(
     return
   }
 
+  // What was paid has to be what the order says, on the session the order
+  // opened. The order-id fallback in findOrder will match any session that
+  // carries our id, and a connector holds their own account's keys, so a
+  // session for 1 cent in another currency can name a real order. Confirming
+  // that would issue a ticket for money that never moved, and overwrite the
+  // real session id so the real payment could no longer be matched. So it is
+  // not confirmed: the order stays pending and a human is told.
+  const mismatch =
+    session.amount_total !== Number(order.amount_cents)
+      ? `amount ${session.amount_total} ${session.currency} against ${order.amount_cents} ${order.currency}`
+      : session.currency !== order.currency
+        ? `currency ${session.currency} against ${order.currency}`
+        : order.stripe_checkout_session_id && order.stripe_checkout_session_id !== session.id
+          ? `session ${session.id} is not the order's own ${order.stripe_checkout_session_id}`
+          : null
+  if (mismatch) {
+    console.error(`stripe-webhook: paid session ${session.id} does not match order ${order.id}: ${mismatch}`)
+    // Once per session, however often Stripe redelivers it.
+    const { data: seen } = await db
+      .from('event_refunds')
+      .select('id')
+      .eq('order_id', order.id)
+      .like('failure_message', `%${session.id}%`)
+      .limit(1)
+      .maybeSingle()
+    if (!seen && (session.amount_total ?? 0) > 0) {
+      const { error } = await db.from('event_refunds').insert({
+        order_id: order.id,
+        amount_cents: session.amount_total,
+        status: 'needs_attention',
+        reason: 'Paid session does not match the order',
+        failure_message:
+          `Stripe session ${session.id} on account ${account ?? 'platform'} was paid, but ${mismatch}. ` +
+          'The order was not confirmed. Refund that payment in Stripe.',
+      })
+      if (error) throw new Error(`could not record mismatched session ${session.id}: ${error.message}`)
+    }
+    return
+  }
+
   // The transition itself lives in _shared/order-state.ts, because this is no
   // longer the only thing that can cause it — stripe-reconcile runs the same
   // confirmation for an order whose delivery never arrived (PAYMENTS.md §9).
@@ -266,7 +298,7 @@ async function onCompleted(
 async function onNotPaid(
   db: Db,
   account: string | null,
-  ref: { sessionId: string | null; paymentIntentId: string | null },
+  ref: { sessionId: string | null; paymentIntentId: string | null; orderId?: string | null },
 ): Promise<void> {
   const order = await findOrder(db, account, ref)
   if (!order) return
@@ -280,83 +312,10 @@ async function onNotPaid(
 /* -------------------------------------------------------------------------- */
 
 async function onRefund(db: Db, account: string | null, refund: Stripe.Refund): Promise<void> {
-  const mapped = REFUND_STATUS[refund.status ?? ''] ?? 'needs_attention'
-
   const row = await refundRow(db, account, refund)
   if (!row) return
-
-  // Changed, or not. `.neq` means a redelivery of a status we already hold
-  // updates nothing, so the message below is queued once per real change.
-  const { data: moved, error } = await db
-    .from('event_refunds')
-    .update({
-      status: mapped,
-      stripe_refund_id: refund.id,
-      failure_message: refund.failure_reason ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', row.id)
-    .neq('status', mapped)
-    .select('id, order_id, amount_cents')
-    .maybeSingle()
-  if (error) throw new Error(`could not update refund ${row.id}: ${error.message}`)
-  if (!moved) return
-
-  const { data: order } = await db
-    .from('event_orders')
-    .select('id, event_id, profile_id, amount_cents, currency, status')
-    .eq('id', moved.order_id)
-    .maybeSingle()
-  if (!order) return
-
-  if (mapped === 'completed') {
-    // Whether the order is refunded or partly refunded is arithmetic over the
-    // refunds that actually completed — nothing requested or processing counts.
-    const { data: done } = await db
-      .from('event_refunds')
-      .select('amount_cents')
-      .eq('order_id', order.id)
-      .eq('status', 'completed')
-    const returned = ((done ?? []) as { amount_cents: number }[]).reduce(
-      (sum, r) => sum + r.amount_cents,
-      0,
-    )
-    await db
-      .from('event_orders')
-      .update({
-        status: returned >= Number(order.amount_cents) ? 'refunded' : 'partially_refunded',
-      })
-      .eq('id', order.id)
-  }
-
-  // BUY-08. The message says what happened to the money and nothing about
-  // whether they are still coming — those are two separate facts, and a
-  // refund is not a cancellation.
-  const amount = money(Number(moved.amount_cents), String(order.currency ?? 'gbp'))
-  await queueMessage(String(order.event_id), String(order.profile_id), {
-    kind: 'refund',
-    subject: mapped === 'completed' ? 'Your refund has gone through' : 'About your refund',
-    body:
-      mapped === 'completed'
-        ? `Your refund of ${amount} has been sent back to the card you paid with. ` +
-          'Your bank may take a few days to show it.'
-        : `Your refund of ${amount} is ${REFUND_WORDS[mapped] ?? mapped}.`,
-  })
-}
-
-/** Plain words for a state, never a status string shown raw to somebody. */
-const REFUND_WORDS: Record<string, string> = {
-  processing: 'being processed',
-  failed: 'could not be completed — we are looking into it',
-  needs_attention: 'being looked at by hand',
-}
-
-/** EVT-04. Minor units become money at the last possible moment, never before. */
-function money(cents: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
-    style: 'currency',
-    currency: currency.toUpperCase(),
-  }).format(cents / 100)
+  // Shared with stripe-reconcile, which re-reads refunds whose delivery was lost.
+  await applyRefund(db, row.id, refund)
 }
 
 /**
@@ -460,12 +419,16 @@ async function onAccountUpdated(db: Db, account: Stripe.Account): Promise<void> 
 /* Shared                                                                      */
 /* -------------------------------------------------------------------------- */
 
+interface MatchedOrder extends OrderRow {
+  currency: string
+  stripe_checkout_session_id: string | null
+}
+
 async function findOrder(
   db: Db,
   account: string | null,
   ref: { sessionId?: string | null; paymentIntentId?: string | null; orderId?: string | null },
-): Promise<OrderRow | null> {
-  const columns = 'id, registration_id, amount_cents, status'
+): Promise<MatchedOrder | null> {
   // Session id first: it is what BUY-04 keys on, and it is set before Stripe is
   // ever told about the order. The others are for the case where the checkout
   // call was interrupted between creating the session and writing its id down.
@@ -480,12 +443,15 @@ async function findOrder(
     // have to be the same account or this delivery is not about this order.
     // `.is(..., null)` rather than `.eq(..., null)` because a platform-account
     // order holds SQL null, and null is not equal to anything, including null.
-    const query = db.from('event_orders').select(columns).eq(column, value)
+    const query = db
+      .from('event_orders')
+      .select('id, registration_id, amount_cents, status, currency, stripe_checkout_session_id')
+      .eq(column, value)
     const { data } = await (account
       ? query.eq('stripe_account_id', account)
       : query.is('stripe_account_id', null)
     ).maybeSingle()
-    if (data) return data as OrderRow
+    if (data) return data as MatchedOrder
   }
   return null
 }

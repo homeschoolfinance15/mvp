@@ -42,6 +42,7 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 /** BUY-08. Accepted by Stripe is not the same as back in somebody's account. */
@@ -223,7 +224,7 @@ Deno.serve(async (request: Request) => {
         .from('event_refunds')
         .select('id, status, amount_cents')
         .eq('order_id', order.id)
-        .in('status', ['requested', 'processing', 'completed'])
+        .in('status', ['requested', 'processing'])
         .maybeSingle()
       return json(
         {
@@ -241,7 +242,7 @@ Deno.serve(async (request: Request) => {
 
   // ---- 2. Stripe -----------------------------------------------------------
 
-  const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient() })
+  const stripe = stripeClient(stripeKey)
 
   // CONTRACT §7.2, and the reason that column exists. Money goes back out of
   // the account it came into, read off the **order** — never recomputed from

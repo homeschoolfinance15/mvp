@@ -29,7 +29,7 @@
 // is the single most useful thing on the screen.
 // ============================================================================
 
-import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 /** The eight deliveries stripe-webhook acts on (PAYMENTS.md §2.5). */
@@ -114,7 +114,7 @@ Deno.serve(async (request: Request) => {
   } = { checked: false, found: false, status: null, missing_events: [], error: null }
 
   if (secretKey) {
-    const stripe = new Stripe(secretKey, { httpClient: Stripe.createFetchHttpClient() })
+    const stripe = stripeClient(secretKey)
 
     try {
       const me = await stripe.accounts.retrieve()

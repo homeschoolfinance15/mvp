@@ -9,7 +9,7 @@
 // no ticket, and nobody was told.
 //
 // What it does, every few minutes: take the `event_orders` that are still
-// `pending`, are older than the twenty-minute hold, and carry a Checkout
+// `pending`, are older than the hold, and carry a Checkout
 // session id; re-read each session on its own `stripe_account_id`; confirm the
 // ones Stripe says are paid and fail the ones Stripe says expired. That is
 // exactly the question `stripe-checkout` asks about a single order when an
@@ -45,14 +45,15 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
-import { confirmPaidOrder, failPendingOrder } from '../_shared/order-state.ts'
+import { applyRefund, confirmPaidOrder, failPendingOrder } from '../_shared/order-state.ts'
 
 /**
  * BUY-06's hold. An order younger than this is somebody's live checkout and
  * asking Stripe about it would be asking before there is anything to know.
  */
-const HOLD_MINUTES = 20
+const HOLD_MINUTES = 32
 
 /**
  * One Stripe call per order, so the batch is bounded. At one sweep every five
@@ -143,7 +144,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const orders = (rows ?? []) as PendingOrder[]
-  const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient() })
+  const stripe = stripeClient(stripeKey)
 
   let confirmed = 0
   let failed = 0
@@ -202,8 +203,52 @@ Deno.serve(async (request: Request) => {
     }
   }
 
-  const summary = { swept: orders.length, confirmed, failed, still_open: stillOpen, errors }
-  if (confirmed > 0 || errors > 0) console.error(`stripe-reconcile: ${JSON.stringify(summary)}`)
+  // Refunds whose refund.updated never landed. Without this a refund stays
+  // `processing` for ever, the order never reads refunded, and the Results
+  // page understates what went back. Re-read on the account that took the
+  // money, then moved exactly as the webhook would have moved it.
+  const { data: stuck } = await db
+    .from('event_refunds')
+    .select('id, stripe_refund_id, event_orders(stripe_account_id)')
+    .eq('status', 'processing')
+    .not('stripe_refund_id', 'is', null)
+    .lt('updated_at', cutoff)
+    .order('updated_at', { ascending: true })
+    .limit(limit)
+
+  let refundsMoved = 0
+  for (const row of (stuck ?? []) as unknown as {
+    id: string
+    stripe_refund_id: string
+    event_orders: { stripe_account_id: string | null } | null
+  }[]) {
+    try {
+      const account = row.event_orders?.stripe_account_id
+      const refund = await stripe.refunds.retrieve(
+        row.stripe_refund_id,
+        account ? { stripeAccount: account } : {},
+      )
+      if (refund.status !== 'pending') {
+        await applyRefund(db, row.id, refund)
+        refundsMoved++
+      }
+    } catch (error) {
+      errors++
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`stripe-reconcile: refund ${row.id}: ${message}`)
+    }
+  }
+
+  const summary = {
+    swept: orders.length,
+    confirmed,
+    failed,
+    still_open: stillOpen,
+    refunds_swept: (stuck ?? []).length,
+    refunds_moved: refundsMoved,
+    errors,
+  }
+  if (confirmed > 0 || refundsMoved > 0 || errors > 0) console.error(`stripe-reconcile: ${JSON.stringify(summary)}`)
   return json(summary, 200)
 })
 

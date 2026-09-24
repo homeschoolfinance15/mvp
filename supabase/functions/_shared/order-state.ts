@@ -20,6 +20,7 @@
 // to keep in step, and the one that drifted would be the one nobody watches.
 // ============================================================================
 
+import type Stripe from 'npm:stripe@18'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 /**
@@ -123,11 +124,13 @@ export async function confirmPaidOrder(
 
   // EML-01. Queued, not sent — event-mailer is the only thing that sends, and
   // it re-checks eligibility at send time.
-  // ponytail: one message, the confirmation, which carries the ticket. Stripe
-  // already emails its own receipt; a second `payment` message would be us
-  // telling somebody twice that they paid.
+  // One message, `payment`, which carries the amount and the ticket. It has
+  // to be `payment`: event-email suppresses a `confirmation` for anybody with
+  // a paid order (EML-01, "one purchase, one email"), and this order is paid
+  // by now, so a `confirmation` here was silently dropped and a paying buyer
+  // heard nothing.
   await queueMessage(String(confirmed.event_id), String(confirmed.profile_id), {
-    kind: 'confirmation',
+    kind: 'payment',
     subject: 'Your place is confirmed',
     body: 'Your payment went through and your ticket is ready.',
   })
@@ -158,6 +161,101 @@ export async function failPendingOrder(db: Db, order: OrderRow): Promise<void> {
     .update({ status: 'expired', hold_expires_at: null })
     .eq('id', order.registration_id)
     .eq('status', 'pending')
+}
+
+/**
+ * BUY-08. The one place a Stripe refund status becomes ours. `completed` is
+ * reachable from `succeeded` and from nothing else.
+ */
+const REFUND_STATUS: Record<string, string> = {
+  succeeded: 'completed',
+  pending: 'processing',
+  failed: 'failed',
+  canceled: 'failed',
+  requires_action: 'needs_attention',
+}
+
+/**
+ * A refund row moves to whatever Stripe now says. Two callers: stripe-webhook
+ * on refund.updated, and stripe-reconcile for a refund whose delivery was lost
+ * and would otherwise sit `processing` for ever.
+ *
+ * Changed, or not. `.neq` means a redelivery of a status we already hold
+ * updates nothing, so the message below is queued once per real change.
+ */
+export async function applyRefund(db: Db, rowId: string, refund: Stripe.Refund): Promise<void> {
+  const mapped = REFUND_STATUS[refund.status ?? ''] ?? 'needs_attention'
+
+  const { data: moved, error } = await db
+    .from('event_refunds')
+    .update({
+      status: mapped,
+      stripe_refund_id: refund.id,
+      failure_message: refund.failure_reason ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', rowId)
+    .neq('status', mapped)
+    .select('id, order_id, amount_cents')
+    .maybeSingle()
+  if (error) throw new Error(`could not update refund ${rowId}: ${error.message}`)
+  if (!moved) return
+
+  const { data: order } = await db
+    .from('event_orders')
+    .select('id, event_id, profile_id, amount_cents, currency, status')
+    .eq('id', moved.order_id)
+    .maybeSingle()
+  if (!order) return
+
+  if (mapped === 'completed') {
+    // Whether the order is refunded or partly refunded is arithmetic over the
+    // refunds that actually completed — nothing requested or processing counts.
+    const { data: done } = await db
+      .from('event_refunds')
+      .select('amount_cents')
+      .eq('order_id', order.id)
+      .eq('status', 'completed')
+    const returned = ((done ?? []) as { amount_cents: number }[]).reduce(
+      (sum, r) => sum + r.amount_cents,
+      0,
+    )
+    await db
+      .from('event_orders')
+      .update({
+        status: returned >= Number(order.amount_cents) ? 'refunded' : 'partially_refunded',
+      })
+      .eq('id', order.id)
+  }
+
+  // BUY-08. The message says what happened to the money and nothing about
+  // whether they are still coming — those are two separate facts, and a
+  // refund is not a cancellation.
+  const amount = money(Number(moved.amount_cents), String(order.currency ?? 'gbp'))
+  await queueMessage(String(order.event_id), String(order.profile_id), {
+    kind: 'refund',
+    subject: mapped === 'completed' ? 'Your refund has gone through' : 'About your refund',
+    body:
+      mapped === 'completed'
+        ? `Your refund of ${amount} has been sent back to the card you paid with. ` +
+          'Your bank may take a few days to show it.'
+        : `Your refund of ${amount} is ${REFUND_WORDS[mapped] ?? mapped}.`,
+  })
+}
+
+/** Plain words for a state, never a status string shown raw to somebody. */
+const REFUND_WORDS: Record<string, string> = {
+  processing: 'being processed',
+  failed: 'could not be completed — we are looking into it',
+  needs_attention: 'being looked at by hand',
+}
+
+/** EVT-04. Minor units become money at the last possible moment, never before. */
+function money(cents: number, currency: string): string {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: currency.toUpperCase(),
+  }).format(cents / 100)
 }
 
 /**

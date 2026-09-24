@@ -116,17 +116,19 @@ function statusMap(source: string, name: string): Record<string, string> {
   return map
 }
 
-const webhookMap = statusMap(sources['stripe-webhook'], 'REFUND_STATUS')
+// REFUND_STATUS lives in order-state's applyRefund, shared by stripe-webhook
+// and stripe-reconcile — both read Stripe's own answer, so either may write it.
+const webhookMap = statusMap(sources['order-state'], 'REFUND_STATUS')
 const refundMap = statusMap(sources['event-refund'], 'ON_ACCEPTANCE')
 
 check(
-  "stripe-webhook writes 'completed' for 'succeeded' and nothing else",
+  "applyRefund writes 'completed' for 'succeeded' and nothing else",
   Object.entries(webhookMap).filter(([, v]) => v === 'completed').map(([k]) => k).join() === 'succeeded',
   JSON.stringify(webhookMap),
 )
 check(
-  "event-refund never writes 'completed' — only the webhook may",
-  !Object.values(refundMap).includes('completed'),
+  "event-refund never writes 'completed' — only Stripe's answer may",
+  !Object.values(refundMap).includes('completed') && !/applyRefund/.test(sources['event-refund']),
   JSON.stringify(refundMap),
 )
 check(

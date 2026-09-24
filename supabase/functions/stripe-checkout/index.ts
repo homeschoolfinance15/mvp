@@ -3,7 +3,7 @@
 //
 // Two things happen here and they happen in this order, deliberately:
 //
-//   1. a `pending` event_registrations row holds the place for 20 minutes
+//   1. a `pending` event_registrations row holds the place for 32 minutes
 //      (BUY-06), so the person filling in a card is not racing the person who
 //      loaded the page a second later;
 //   2. an event_orders row records the intent to charge, and only then does
@@ -78,6 +78,7 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
+import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 const SITE = (Deno.env.get('SITE_URL') ?? 'https://goamazing.ai').replace(/\/+$/, '')
@@ -94,15 +95,16 @@ const SITE = (Deno.env.get('SITE_URL') ?? 'https://goamazing.ai').replace(/\/+$/
 const clientOfOurs = (url: string, key: string) => createClient(url, key)
 type Db = ReturnType<typeof clientOfOurs>
 
-/** BUY-06. Long enough to find a card, short enough that a place comes back. */
-const HOLD_MINUTES = 20
-
 /**
- * Stripe will not expire a session sooner than 30 minutes from now, which is
- * the closest it can get to our 20-minute hold. The hold is ours to enforce;
- * this only stops an abandoned session lingering for Stripe's default day.
+ * BUY-06. Long enough to find a card, short enough that a place comes back.
+ *
+ * The hold must outlive the Stripe session. Stripe will not expire a session
+ * sooner than 30 minutes after it is created, and a hold that lapsed while its
+ * session was still payable let the place be re-sold and then paid for twice
+ * (oversold). So the session closes a minute before the hold does (its
+ * `expires_at` below), and a lapsed hold always means a closed session.
  */
-const SESSION_MINUTES = 30
+const HOLD_MINUTES = 32
 
 /**
  * EVT-04. Basis points added on top of the ticket price and shown to the
@@ -388,7 +390,7 @@ Deno.serve(async (request: Request) => {
     }
   }
 
-  const stripe = new Stripe(stripeKey, { httpClient: Stripe.createFetchHttpClient() })
+  const stripe = stripeClient(stripeKey)
 
   // ---- hold the place (BUY-06) -------------------------------------------
 
@@ -410,7 +412,7 @@ Deno.serve(async (request: Request) => {
     //
     // A lapsed hold normally means somebody wandered off. But it also happens
     // when they paid and our webhook could not be delivered — the money moved,
-    // the order is still `pending`, and twenty minutes went by. If we retired
+    // the order is still `pending`, and the hold ran out. If we retired
     // that row we would build a new registration, a new idempotency key and a
     // new Checkout session, and the same person could pay for the same place
     // twice. Postgres cannot see this; only Stripe knows whether that session
@@ -572,7 +574,7 @@ Deno.serve(async (request: Request) => {
         profile_id: me,
         registration_id: registration.id,
         amount_cents: total,
-        fee_cents: fee > 0 ? fee : null,
+        fee_cents: fee,
         currency,
         status: 'pending',
         idempotency_key: idempotencyKey,
@@ -635,7 +637,7 @@ Deno.serve(async (request: Request) => {
 
   // The same key that made the order row unique is what makes the Stripe call
   // replay rather than repeat. Stripe holds it for 24 hours, which outlives
-  // every refresh, retry and double click a 20-minute hold can contain.
+  // every refresh, retry and double click a 32-minute hold can contain.
   const options: Stripe.RequestOptions = { idempotencyKey }
   if (stripeAccount) options.stripeAccount = stripeAccount
 
@@ -654,7 +656,13 @@ Deno.serve(async (request: Request) => {
         // ponytail: adding commission later is this one parameter plus a
         // non-zero application_fee_cents, not a re-architecture.
         payment_intent_data: { metadata: reference },
-        expires_at: Math.floor(Date.now() / 1000) + SESSION_MINUTES * 60,
+        // A minute before the hold lapses (BUY-06, D3), and derived from the
+        // hold rather than from now: a retry replays the same idempotency key,
+        // and Stripe refuses a replayed key whose parameters differ.
+        // ponytail: switching ticket A -> B -> A reuses A's key with a new hold,
+        // which Stripe would refuse; key on the hold too if that matters.
+        expires_at:
+          Math.floor(Date.parse(registration.hold_expires_at ?? holdUntil) / 1000) - 60,
         success_url: `${checkoutUrl}?paid=1&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${checkoutUrl}?cancelled=1`,
       },
