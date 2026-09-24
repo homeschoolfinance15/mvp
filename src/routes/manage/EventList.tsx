@@ -79,7 +79,7 @@ export default function EventList({ bucket = 'upcoming' }: { bucket?: HostingBuc
     // A connector's own co-hosted events. An admin skips this: they see all.
     const cohostRes = isAdmin
       ? null
-      : await supabase.from('event_hosts').select('event_id').eq('profile_id', profile.id)
+      : await supabase.from('event_hosts').select('event_id').eq('profile_id', profile.id).eq('can_manage', true)
 
     let eventQuery = supabase.from('events').select('*').order('starts_at', { ascending: false })
     if (!isAdmin) {

@@ -343,6 +343,7 @@ check('host cannot make a member a co-host', !memberAsHost.ok, `${memberAsHost.s
 const addDaniel = await write(connector.token, 'POST', 'event_hosts', {
   event_id: eventId,
   profile_id: daniel.id,
+  can_manage: true,
 })
 check('host can add a connector as co-host', addDaniel.ok, `${addDaniel.status}`)
 

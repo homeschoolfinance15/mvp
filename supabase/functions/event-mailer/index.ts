@@ -841,10 +841,7 @@ const WRITE: Record<MessageKind, (p: Person, d: Detail, m: MessageRow) => Copy> 
   }),
 
   // Not in EML-01, and deliberately so — see event-email's note on the kind.
-  // The voice is the original event-email's `cohost` copy, unchanged, because
-  // it was already right. Only the link moved: a cohost is sent to the
-  // management screen rather than the public page, since managing it is the
-  // thing they have just been given.
+  // A hosting credit does not itself assign event-management permissions.
   cohost: (p, d) => ({
     subject: `You are hosting ${d.title}`,
     body: [
@@ -852,11 +849,11 @@ const WRITE: Record<MessageKind, (p: Person, d: Detail, m: MessageRow) => Copy> 
       d.host
         ? `${d.host} has asked you to host ${d.title} with them.`
         : `You have been asked to host ${d.title}.`,
-      'You can edit it, invite people and see who is coming, the same as they can.',
+      'You are listed as a host. The event manager can separately give you access to manage this event.',
     ],
     facts: coordinates(d),
     cta: 'Open the event',
-    link: d.manageLink,
+    link: d.link,
   }),
 
   // EML-03/04. The organiser's own explanation sits above, and what actually
@@ -1346,8 +1343,8 @@ function demo(): void {
     'a new cohost is told they are hosting, and by whom',
   )
   ok(
-    cohost.link === detail.manageLink,
-    'a cohost is sent to the management screen, not the public page',
+    cohost.link === detail.link,
+    'a named cohost receives the event page without a promise of management access',
   )
 
   // Removed as a cohost before the message went out — EML-07 covers this the

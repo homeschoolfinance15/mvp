@@ -1,5 +1,10 @@
 # Remaining-gap acceptance tests — 24 September 2026
 
+**Release update:** the original repairs are now deployed. R1 and R2 have follow-up
+fixes passing local integration checks; those follow-up fixes are not yet deployed.
+See [release status](RELEASE-2026-09-24.md). The findings below retain the original
+audit context; updated `remaining-results.json` contains the follow-up run.
+
 **Verdict: local coverage improved substantially; full release acceptance remains open.** Two requirement violations are confirmed. Real Stripe, inbox delivery, deployed scheduling and physical-phone scanning are not certified.
 
 This follows the original [acceptance audit](UAT-2026-09-24.md) against the user's [requirements](REQUIREMENTS.md). The repository changed during testing: the completed runs spanned changes through `8cd3613`, with existing uncommitted feedback repairs. At final review, HEAD had moved to `08aef8b` and additional door-sales UI changes were present; those later changes were not covered by the completed runs. This is a local working-tree assessment, not a frozen release-commit or production audit.

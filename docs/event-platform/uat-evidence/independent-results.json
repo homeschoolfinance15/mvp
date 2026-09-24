@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-24T23:08:04.152Z",
+  "at": "2026-09-24T23:45:00.681Z",
   "scope": "local current working tree",
   "results": [
     {
@@ -180,7 +180,7 @@
     {
       "name": "EML-03 subject labelled optional is accepted by endpoint",
       "pass": true,
-      "detail": "HTTP 200; {\"message_id\":\"256b5740-c3f2-42b2-ab22-6453e2686f7b\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:07:53.341Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+      "detail": "HTTP 200; {\"message_id\":\"0035f5af-a7cd-4d81-9a5a-a35d858f3557\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:44:46.243Z\",\"status\":\"scheduled\",\"dispatched\":false}"
     },
     {
       "name": "EML-03 queued subject matches default preview and contains latest changes",
@@ -218,9 +218,24 @@
       "detail": ""
     },
     {
+      "name": "ORG-05 browser shows newly named host without management",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-05 browser saves explicit management assignment",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-05 browser revokes management while retaining hosting credit",
+      "pass": true,
+      "detail": ""
+    },
+    {
       "name": "ORG-10 editor save-and-notify accepts its complete preview and default subject",
       "pass": true,
-      "detail": "HTTP 200; {\"message_id\":\"b9bd9c9a-8ffc-46e9-87bf-ef0287d68aca\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:08:01.997Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+      "detail": "HTTP 200; {\"message_id\":\"19616f9e-9dc7-499f-82e2-2b9126017fe4\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:44:57.466Z\",\"status\":\"scheduled\",\"dispatched\":false}"
     },
     {
       "name": "QLT-02 tested browser journeys have no uncaught JS errors",

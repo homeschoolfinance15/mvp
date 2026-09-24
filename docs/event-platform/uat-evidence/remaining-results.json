@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-24T23:02:08.568Z",
+  "at": "2026-09-24T23:40:03.291Z",
   "scope": "Local real database and dispatcher; captured provider requests, no real delivery or Stripe",
   "results": [
     {
@@ -34,20 +34,35 @@
     },
     {
       "name": "ORG-14 ORG-15 replacement admin can edit existing event after creator demotion",
-      "pass": false,
+      "pass": true,
       "detail": {
-        "status": 403,
-        "error": "new row violates row-level security policy for table \"events\""
+        "status": 200
       }
     },
     {
       "name": "ORG-05 named host can be separated from event-management permissions",
-      "pass": false,
-      "detail": {
-        "editAccepted": true,
-        "communicationsReadable": true,
-        "note": "Adding only an event_hosts row granted management; no separate assignment was made."
-      }
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-05 named host cannot grant themselves management",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-05 explicitly assigned manager can edit and read communications",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-01C creation permission removal preserves assigned management",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ORG-05 revoking management preserves named host but removes access",
+      "pass": true,
+      "detail": ""
     },
     {
       "name": "ORG-05 cohost still cannot read confidential feedback",
@@ -90,7 +105,7 @@
         "failed": 2,
         "messages": [
           {
-            "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+            "message_id": "5725ceb0-a027-4330-a9dd-58e55f20b43b",
             "status": "failed",
             "sent": 0,
             "failed": 2
@@ -108,7 +123,7 @@
           "failed": 0,
           "messages": [
             {
-              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "message_id": "5725ceb0-a027-4330-a9dd-58e55f20b43b",
               "status": "sent",
               "sent": 2,
               "failed": 0
@@ -143,7 +158,7 @@
           "failed": 1,
           "messages": [
             {
-              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "message_id": "5725ceb0-a027-4330-a9dd-58e55f20b43b",
               "status": "failed",
               "sent": 0,
               "failed": 1
@@ -156,7 +171,7 @@
           "failed": 0,
           "messages": [
             {
-              "message_id": "74ae2773-a01a-4c7a-9f5f-719a5d83d3e6",
+              "message_id": "5725ceb0-a027-4330-a9dd-58e55f20b43b",
               "status": "sent",
               "sent": 1,
               "failed": 0
@@ -174,7 +189,7 @@
         "failed": 0,
         "messages": [
           {
-            "message_id": "84041ea8-0648-47cb-8e31-59907fa65cfb",
+            "message_id": "97dc2589-4d17-4ad4-8a54-92b5bd8d95f9",
             "status": "sent",
             "sent": 1,
             "failed": 0
@@ -192,7 +207,7 @@
       "pass": true,
       "detail": {
         "success": 99,
-        "durationMs": 822,
+        "durationMs": 2361,
         "existingPlaces": 1
       }
     },
@@ -200,7 +215,7 @@
       "name": "QLT-10 50 concurrent distinct-ticket check-ins return known outcomes",
       "pass": true,
       "detail": {
-        "durationMs": 336,
+        "durationMs": 1043,
         "count": 50,
         "failures": []
       }

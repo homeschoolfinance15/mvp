@@ -27,8 +27,10 @@ import type { CapacityInfo, EventRecord, EventStatus, TicketType } from '../../l
 export interface ManagedEvent {
   event: EventRecord
   tickets: TicketType[]
-  /** Creator plus co-hosts — what `hosts_event()` answers in the database. */
+  /** Everyone named on the hosting team, including display-only cohosts. */
   hostIds: string[]
+  /** Creator plus cohosts explicitly assigned event management. */
+  managerIds: string[]
   /** Null when the capacity function is unavailable; the screen degrades. */
   capacity: CapacityInfo | null
 }
@@ -57,7 +59,7 @@ export function useManagedEvent(eventId: string | undefined) {
         .select('*')
         .eq('event_id', eventId)
         .order('position', { ascending: true }),
-      supabase.from('event_hosts').select('profile_id').eq('event_id', eventId),
+      supabase.from('event_hosts').select('profile_id, can_manage').eq('event_id', eventId),
       supabase.rpc('event_capacity_state', { p_event: eventId }),
     ])
 
@@ -74,6 +76,13 @@ export function useManagedEvent(eventId: string | undefined) {
     }
 
     const event = eventRes.data as EventRecord
+    if (hostRes.error) {
+      loadFailed(hostRes.error, 'event permissions')
+      setResult({ state: 'failed' })
+      return
+    }
+    const cohosts = (hostRes.data ?? []) as Array<{ profile_id: string; can_manage: boolean }>
+    const managerIds = [event.host_id, ...cohosts.filter(h => h.can_manage).map(h => h.profile_id)]
     const hostIds = [
       ...new Set([
         event.host_id,
@@ -83,7 +92,7 @@ export function useManagedEvent(eventId: string | undefined) {
 
     // ORG-06 / EML-09. A connector host sees their own events. Another
     // connector's event is not theirs to read, edit or email about.
-    if (profile.role !== 'admin' && !hostIds.includes(profile.id)) {
+    if (profile.role !== 'admin' && !managerIds.includes(profile.id)) {
       setResult({ state: 'denied' })
       return
     }
@@ -98,6 +107,7 @@ export function useManagedEvent(eventId: string | undefined) {
         event,
         tickets: (ticketRes.data as TicketType[]) ?? [],
         hostIds,
+        managerIds,
         capacity: capacityRes.error ? null : ((capacityRow as CapacityInfo) ?? null),
       },
     })

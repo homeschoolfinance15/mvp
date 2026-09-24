@@ -59,11 +59,18 @@ try {
   const replacementEdit = await db(`events?id=eq.${ev.id}`, replacement.token, 'PATCH', { venue_name: 'Replacement admin venue' })
   check('ORG-14 ORG-15 replacement admin can edit existing event after creator demotion', replacementEdit.ok && replacementEdit.data?.length === 1, { status: replacementEdit.status, error: replacementEdit.data?.message })
   execFileSync('docker', ['exec', '-i', 'supabase_db_amazing', 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], { input: `begin; select set_config('amazing.claiming_connector','on',true); update profiles set role='admin' where id='${admin.id}'; commit;`, stdio: ['pipe', 'ignore', 'pipe'] })
-  // Demonstrate the permission gap through the real authenticated API.
+  // Verify named hosts and assigned event managers through authenticated APIs.
   must(await db('event_hosts', replacement.token, 'POST', { event_id: ev.id, profile_id: cohost.id }))
   const edit = await db(`events?id=eq.${ev.id}`, cohost.token, 'PATCH', { venue_name: 'Cohost changed venue' })
   const settings = await db(`event_email_settings?event_id=eq.${ev.id}`, cohost.token)
-  check('ORG-05 named host can be separated from event-management permissions', !(edit.ok && edit.data?.length) && !settings.data?.length, { editAccepted: edit.ok && edit.data?.length === 1, communicationsReadable: settings.data?.length === 1, note: 'Adding only an event_hosts row granted management; no separate assignment was made.' })
+  check('ORG-05 named host can be separated from event-management permissions', !(edit.ok && edit.data?.length) && !settings.data?.length)
+  check('ORG-05 named host cannot grant themselves management', !(await rpc('set_event_host_management', cohost.token, { p_event: ev.id, p_profile: cohost.id, p_can_manage: true })).ok)
+  must(await rpc('set_event_host_management', replacement.token, { p_event: ev.id, p_profile: cohost.id, p_can_manage: true }))
+  check('ORG-05 explicitly assigned manager can edit and read communications', must(await db(`events?id=eq.${ev.id}`, cohost.token, 'PATCH', { venue_name: 'Assigned manager venue' })).length === 1 && must(await db(`event_email_settings?event_id=eq.${ev.id}`, cohost.token)).length === 1)
+  must(await db(`connectors?id=eq.${conn.id}`, replacement.token, 'PATCH', { can_create_events: false }))
+  check('ORG-01C creation permission removal preserves assigned management', must(await rpc('hosts_event', cohost.token, { p_event: ev.id })) === true)
+  must(await rpc('set_event_host_management', replacement.token, { p_event: ev.id, p_profile: cohost.id, p_can_manage: false }))
+  check('ORG-05 revoking management preserves named host but removes access', must(await rpc('hosts_event', cohost.token, { p_event: ev.id })) === false && must(await db(`event_hosts?event_id=eq.${ev.id}&profile_id=eq.${cohost.id}`, replacement.token)).length === 1)
   check('ORG-05 cohost still cannot read confidential feedback', must(await db(`event_feedback?event_id=eq.${ev.id}`, cohost.token)).length === 0)
   // Public network waitlist remains separate from event registration.
   const wEmail = `${tag}-waitlist@acceptance.invalid`

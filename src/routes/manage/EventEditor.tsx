@@ -820,8 +820,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     await reload()
     setOutcome(
       mailError
-        ? `They are now a cohost, but we could not email them about it: ${await functionError(mailError)} They can still run the event — tell them, or remove and add them again to retry.`
-        : 'They are now a cohost, and have been emailed to say so.',
+        ? `They are now a named cohost, but their invitation could not be queued: ${await functionError(mailError)} Event management has not been granted.`
+        : 'They are now a named cohost and their invitation is queued. Turn on event management separately if they need it.',
     )
   }
 
@@ -832,6 +832,18 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
       .delete()
       .eq('event_id', event.id)
       .eq('profile_id', profileId)
+    if (error) {
+      setProblem(errorMessage(error))
+      return
+    }
+    await reload()
+  }
+
+  async function setHostManagement(profileId: string, canManage: boolean) {
+    setProblem('')
+    const { error } = await supabase.rpc('set_event_host_management', {
+      p_event: event.id, p_profile: profileId, p_can_manage: canManage,
+    })
     if (error) {
       setProblem(errorMessage(error))
       return
@@ -1254,6 +1266,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           meId={profile?.id ?? ''}
           onAdd={addHost}
           onRemove={removeHost}
+          managerIds={data.managerIds}
+          onManagementChange={setHostManagement}
         />
 
         <Section title="Refunds and feedback">
@@ -1819,12 +1833,16 @@ function HostPanel({
   meId,
   onAdd,
   onRemove,
+  managerIds,
+  onManagementChange,
 }: {
   hosts: Array<{ id: string; name: string; role: string }>
   creatorId: string
   meId: string
   onAdd: (id: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
+  managerIds: string[]
+  onManagementChange: (id: string, canManage: boolean) => Promise<void>
 }) {
   const [candidates, setCandidates] = useState<
     Array<{ id: string; full_name: string; role: string; current_profession: string | null; email: string }>
@@ -1855,8 +1873,9 @@ function HostPanel({
       <SectionHeader title="Hosting team" />
       <Panel className="space-y-5 px-6 py-6">
         <Explainer>
-          Anyone you add here can edit this event, invite people, check them in and email its
-          attendees.
+          Adding a host lists their name on the event. Turn on event management separately
+          to let them edit details, manage guests and invitations, check people in, send
+          emails and handle refunds for this event. Reviews remain visible only to administrators.
         </Explainer>
 
         <ul className="divide-y divide-line">
@@ -1867,8 +1886,24 @@ function HostPanel({
                 {h.id === meId && <span className="text-dim"> — you</span>}
               </span>
               <span className="text-xs text-dim">
-                {h.id === creatorId ? 'Created this event; receives the money' : 'Cohost'}
+                {h.id === creatorId ? 'Event creator' : h.role === 'admin' ? 'Administrator access' : managerIds.includes(h.id) ? 'Event manager' : 'Named host only'}
               </span>
+              {h.id !== creatorId && h.role !== 'admin' && (
+                <label className="flex items-center gap-2 text-xs text-fg">
+                  <input
+                    type="checkbox"
+                    aria-label={`Allow ${h.name} to manage this event`}
+                    checked={managerIds.includes(h.id)}
+                    disabled={busy}
+                    onChange={async e => {
+                      setBusy(true)
+                      try { await onManagementChange(h.id, e.target.checked) }
+                      finally { setBusy(false) }
+                    }}
+                  />
+                  Can manage this event
+                </label>
+              )}
               {h.id !== creatorId && (
                 <button
                   type="button"
