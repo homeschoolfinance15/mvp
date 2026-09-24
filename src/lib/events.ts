@@ -466,6 +466,19 @@ export function eventWhere(
   return parts.length ? parts.join(', ') : event.location
 }
 
+/**
+ * Google Maps' own search URL for wherever the event is, venue and address
+ * together. No API key: it is a link, and Maps does the searching.
+ */
+export function mapsLink(
+  event: Pick<EventRecord, 'venue_name' | 'address' | 'location'>,
+): string | null {
+  const where = eventWhere(event)
+  return where
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(where.replace(/\s+/g, ' '))}`
+    : null
+}
+
 /** EVT-01. The link a host sends to anyone, account or no account. */
 export function eventLink(slug: string): string {
   return `/e/${encodeURIComponent(slug)}`

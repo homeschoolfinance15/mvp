@@ -19,7 +19,7 @@
  * No database, no secrets, no network.
  */
 import { readFileSync } from 'node:fs'
-import { attendanceAndMoney, money, priceLabel } from '../src/lib/events.ts'
+import { attendanceAndMoney, mapsLink, money, priceLabel } from '../src/lib/events.ts'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 
@@ -80,6 +80,9 @@ check(
 
 check('EVT-04  minor units format with their currency', money(2500, 'gbp') === '£25.00', money(2500, 'gbp'))
 check('EVT-04  US dollars read as $, not US$ (USD is the default currency)', money(2500, 'usd') === '$25.00', money(2500, 'usd'))
+const maps = mapsLink({ venue_name: 'corgis cafe', address: '12 main st\nsuite 5', location: null })
+check('EVT-03  the Google Maps link searches venue and address, line breaks as spaces, letters intact', maps === 'https://www.google.com/maps/search/?api=1&query=corgis%20cafe%2C%2012%20main%20st%20suite%205', maps)
+check('EVT-03  no venue and no address, no map link', mapsLink({ venue_name: null, address: null, location: null }) === null)
 check(
   'EVT-04  a zero-priced ticket reads as Free, not as £0.00',
   priceLabel({ price_cents: 0, currency: 'gbp' }) === 'Free',

@@ -8,6 +8,7 @@ import {
   CAPACITY_WORDS,
   eventWhen,
   eventWhere,
+  mapsLink,
   type CapacityState,
   type PublicEvent,
   type PublicEventRow,
@@ -205,6 +206,16 @@ export function WhenWhere({ event }: { event: PublicEventRow }) {
         <div>
           <dt className="eyebrow">Where</dt>
           <dd className="mt-1 whitespace-pre-wrap text-fg">{where}</dd>
+          <dd className="mt-1">
+            <a
+              href={mapsLink(event)!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted underline underline-offset-4 hover:text-fg"
+            >
+              Open in Google Maps
+            </a>
+          </dd>
         </div>
       )}
     </dl>

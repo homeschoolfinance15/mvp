@@ -31,6 +31,7 @@ import {
   StatTile,
   Textarea,
 } from '../../components/ui'
+import { PlaceInput, placesEnabled } from '../../components/PlaceInput'
 import { useAuth } from '../../context/AuthProvider'
 import { errorMessage, functionError, loadFailed, supabase } from '../../lib/supabase'
 import { useLive } from '../../lib/live'
@@ -994,15 +995,21 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             </Explainer>
           )}
 
-          <Field label="Venue">
-            <Input
+          <Field
+            label="Venue"
+            hint={placesEnabled ? "Start typing the place's name, then pick it to fill in the address." : undefined}
+          >
+            <PlaceInput
               value={draft.venue_name}
-              onChange={(e) => setDraft({ ...draft, venue_name: e.target.value })}
+              onChange={(venue_name) => setDraft((d) => ({ ...d, venue_name }))}
+              onPick={({ name, address }) =>
+                setDraft((d) => ({ ...d, venue_name: name, address }))
+              }
               placeholder="The Clove Club"
             />
           </Field>
 
-          <Field label="Address">
+          <Field label="Address" hint="Edit it if the venue's entrance is somewhere else.">
             <Textarea
               rows={2}
               value={draft.address}
