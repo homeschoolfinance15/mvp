@@ -83,6 +83,11 @@ Both are committed as defaults in `src/lib/supabase.ts` on purpose, so a build
 succeeds from anywhere. Depending on build-time secrets is what left the first
 production deploy rendering a blank page.
 
+The Google Maps key for venue search (`src/components/PlaceInput.tsx`) is committed
+the same way. It is safe only because Google Cloud restricts it to the
+`goamazing.ai` referrers and to Places API (New); keep those restrictions if the
+key is ever rotated. `VITE_GOOGLE_MAPS_API_KEY` overrides it for a local build.
+
 Do **not** set the `FTP_*` secrets. See "Two deployment systems" below.
 
 ### 3. Apply the migrations, before any frontend change

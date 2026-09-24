@@ -13,7 +13,12 @@ import { Input } from './ui'
  * it replaces.
  */
 
-const KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined
+// Committed as a default for the same reason as the Supabase key in
+// lib/supabase.ts: Hostinger builds with no environment settings. It is a
+// browser key and ships in the bundle regardless; Google Cloud restricts it to
+// goamazing.ai referrers and to Places API (New), which is what protects it.
+const DEFAULT_KEY = 'AIzaSyDk9Bp71jLqdznvfXdlPEhktWCcHWGwbrI'
+const KEY = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || DEFAULT_KEY
 /** Whether venue search is switched on for this build. */
 export const placesEnabled = Boolean(KEY)
 const API = 'https://places.googleapis.com/v1'
