@@ -118,6 +118,8 @@ interface MessageRow {
   id: string
   event_id: string
   kind: MessageKind
+  /** The reminder time a 'reminder' was scheduled for; null once that time is removed. */
+  reminder_id: string | null
   scheduled_for: string | null
   subject: string | null
   body: string | null
@@ -209,7 +211,7 @@ async function claim(db: Db, now: Date, only: string): Promise<MessageRow[]> {
   if (only) query = query.eq('id', only)
 
   const { data, error } = await query.select(
-    'id, event_id, kind, scheduled_for, subject, body, changed_details',
+    'id, event_id, kind, reminder_id, scheduled_for, subject, body, changed_details',
   )
   if (error) throw new Error(`Could not claim messages: ${error.message}`)
   return (data ?? []) as unknown as MessageRow[]
@@ -442,6 +444,12 @@ export function skipReason(message: MessageRow, event: EventRow, now: Date): str
       return 'The event was cancelled before this went out.'
     }
     return null
+  }
+
+  // Its reminder time was removed (the foreign key nulls it). Nobody asked for
+  // this one any more.
+  if (message.kind === 'reminder' && message.reminder_id == null) {
+    return 'This reminder time was removed before it went out.'
   }
 
   if (message.kind === 'reminder' && now >= starts) {
@@ -1172,11 +1180,15 @@ function demo(): void {
     status: 'published',
     currency: 'gbp',
   }
-  const reminder = { id: 'm1', event_id: 'e1', kind: 'reminder' } as MessageRow
+  const reminder = { id: 'm1', event_id: 'e1', kind: 'reminder', reminder_id: 'r1' } as MessageRow
 
   ok(
     skipReason(reminder, event, new Date('2026-03-12T18:00:00Z')) === null,
     'EML-06 a reminder an hour before the event is sent',
+  )
+  ok(
+    skipReason({ ...reminder, reminder_id: null }, event, new Date('2026-03-12T18:00:00Z')) !== null,
+    'a reminder whose time was removed is skipped, not sent',
   )
   ok(
     skipReason(reminder, event, new Date('2026-03-12T19:30:00Z')) !== null,

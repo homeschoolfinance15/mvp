@@ -164,10 +164,11 @@ Profile and post text is sent to Anthropic when recommendations run. That is a
 subprocessor disclosure, and it belongs in the privacy policy.
 
 What somebody types into the city field reaches Photon, an open geocoder run
-by komoot, one debounced request at a time while they type. It is a city
-lookup and nothing more: only city-level layers are requested, so a street
-address cannot come back even if one is typed, and no account or profile
-identifier is sent with the query. It is still a subprocessor and belongs in
+by komoot, one debounced request at a time once three characters are typed.
+It is there so a city is spelled one way and people can be matched by it, and
+it is a city lookup and nothing more: only city-level layers are requested, so
+a street address cannot come back even if one is typed, and no account or
+profile identifier is sent with the query. It is still a subprocessor and belongs in
 the same disclosure. Self-hosting Photon removes it entirely, and the only
 change would be a URL in `src/lib/cities.ts`.
 

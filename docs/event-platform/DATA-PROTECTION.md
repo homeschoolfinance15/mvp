@@ -29,8 +29,9 @@ automatically seven years after the erasure, by a scheduled job.
 **What we do.** When a paying attendee closes their account, we delete them.
 Their profile, their registrations and their tickets go. Their **orders and
 their attendance records survive**, with the person replaced by a stable
-pseudonym such as *Former attendee 8F2A*. Seven years later a scheduled job
-destroys those too.
+pseudonym such as *Deleted account 8F2A* (erasures registered before
+24 September 2026 keep the older *Former attendee 8F2A*). Seven years later a
+scheduled job destroys those too.
 
 **Why we keep the order.** Art. 17(3)(b) disapplies the right to erasure where
 processing is necessary for compliance with a legal obligation, and s.388
@@ -201,6 +202,25 @@ data has been lost in the meantime.
 **Partly answered since (§4a).** A person who chooses *delete the account and
 everything in it* has asked for exactly this, so their notes go. The question
 above now applies only to the default choice, *delete the account*.
+
+---
+
+## 6. City lookup: Photon (komoot)
+
+The city field on the waitlist form and in the profile questions suggests
+places from Photon, an open geocoder run by komoot (photon.komoot.io). It is a
+processor for this one purpose.
+
+- **What is sent.** The text typed into the field, and nothing else: no
+  account, profile or event identifier. Only city-level results are asked
+  for, so a street address cannot come back even if one is typed.
+- **When.** While somebody types, once they have typed three characters,
+  one request per pause of about a third of a second. Picking a suggestion
+  sends nothing further.
+- **Why.** So a city is spelled one way and people can be matched by it. The field says, under it, that what is typed goes to Photon.
+
+Self-hosting Photon removes the processor; the only change is the URL in
+`src/lib/cities.ts`.
 
 ---
 
