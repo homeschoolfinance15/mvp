@@ -47,7 +47,7 @@
 import Stripe from 'npm:stripe@18'
 import { stripeClient } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
-import { applyRefund, confirmPaidOrder, failPendingOrder } from '../_shared/order-state.ts'
+import { applyRefund, confirmPaidOrder, failPendingOrder, recordStripeFee } from '../_shared/order-state.ts'
 
 /**
  * BUY-06's hold. An order younger than this is somebody's live checkout and
@@ -239,6 +239,26 @@ Deno.serve(async (request: Request) => {
     }
   }
 
+  // ORG-13. Paid orders whose Stripe fee is not yet known: one confirmed here
+  // above, a delayed method that had no balance transaction when it landed, or
+  // a read that failed. recordStripeFee never throws and only fills a null.
+  const { data: feeless } = await db
+    .from('event_orders')
+    .select('id, stripe_payment_intent_id, stripe_account_id')
+    .in('status', ['paid', 'partially_refunded', 'refunded'])
+    .is('stripe_fee_cents', null)
+    .not('stripe_payment_intent_id', 'is', null)
+    // Newest first, last 30 days: an order whose fee can never be read (its
+    // account disconnected) must not hold the head of the queue for ever.
+    // ponytail: a stuck order is simply retried until it ages out; add a
+    // per-order attempt count if these ever need a human.
+    .gte('paid_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
+    .order('paid_at', { ascending: false })
+    .limit(limit)
+  for (const o of feeless ?? []) {
+    await recordStripeFee(db, stripe, o.id, o.stripe_payment_intent_id, o.stripe_account_id)
+  }
+
   const summary = {
     swept: orders.length,
     confirmed,
@@ -246,6 +266,7 @@ Deno.serve(async (request: Request) => {
     still_open: stillOpen,
     refunds_swept: (stuck ?? []).length,
     refunds_moved: refundsMoved,
+    fees_swept: (feeless ?? []).length,
     errors,
   }
   if (confirmed > 0 || refundsMoved > 0 || errors > 0) console.error(`stripe-reconcile: ${JSON.stringify(summary)}`)

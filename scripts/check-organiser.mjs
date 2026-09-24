@@ -85,10 +85,12 @@ check('EML-06 a reminder whose moment has gone is skipped, never sent late', () 
 /* -------------------------------------------------------------------------- */
 
 check('ORG-13 gross, fees and refunds stay three separate figures', () => {
+  // fee_cents is the booking fee: part of what the attendee paid, kept by the
+  // receiver. stripe_fee_cents is what Stripe took. Only the second comes off.
   const orders = [
-    { id: 'a', amount_cents: 5000, fee_cents: 175, currency: 'gbp', status: 'paid' },
-    { id: 'b', amount_cents: 5000, fee_cents: 175, currency: 'gbp', status: 'refunded' },
-    { id: 'c', amount_cents: 5000, fee_cents: 175, currency: 'gbp', status: 'pending' },
+    { id: 'a', amount_cents: 5000, fee_cents: 175, stripe_fee_cents: 95, stripe_fee_currency: 'gbp', currency: 'gbp', status: 'paid' },
+    { id: 'b', amount_cents: 5000, fee_cents: 175, stripe_fee_cents: 95, stripe_fee_currency: 'gbp', currency: 'gbp', status: 'refunded' },
+    { id: 'c', amount_cents: 5000, fee_cents: 175, stripe_fee_cents: null, stripe_fee_currency: null, currency: 'gbp', status: 'pending' },
   ]
   const refunds = [
     { order_id: 'b', amount_cents: 5000, status: 'completed' },
@@ -99,11 +101,37 @@ check('ORG-13 gross, fees and refunds stay three separate figures', () => {
   // The pending order never took any money, so it is in none of the figures.
   assert.equal(r.paidOrders, 2)
   assert.equal(r.grossCents, 10000)
-  assert.equal(r.feesCents, 350)
+  assert.equal(r.feesCents, 190, "Stripe's fee, never the booking fee")
   // A requested refund is a promise, not money that has gone back.
   assert.equal(r.refundedCents, 5000)
-  assert.equal(r.netCents, 10000 - 350 - 5000)
+  // Stripe keeps its fee on a refund, so the refunded order's fee still counts.
+  assert.equal(r.netCents, 10000 - 190 - 5000)
   assert.equal(r.refundedOrders, 1)
+  assert.equal(r.feesPending, 0)
+})
+
+check('ORG-13 a Stripe fee not yet known is counted as pending, never as zero taken', () => {
+  const orders = [
+    { id: 'a', amount_cents: 2500, fee_cents: 0, stripe_fee_cents: 58, stripe_fee_currency: 'gbp', currency: 'gbp', status: 'paid' },
+    { id: 'b', amount_cents: 2500, fee_cents: 0, stripe_fee_cents: null, stripe_fee_currency: null, currency: 'gbp', status: 'paid' },
+  ]
+  const r = receipts(orders, [], 'gbp')
+  assert.equal(r.feesCents, 58)
+  assert.equal(r.netCents, 5000 - 58)
+  assert.equal(r.feesPending, 1)
+})
+
+check('ORG-13 a fee settled in another currency is not netted off in the wrong unit', () => {
+  // A EUR sale settling into a GBP balance is charged its fee in GBP.
+  const orders = [
+    { id: 'a', amount_cents: 3000, fee_cents: 0, stripe_fee_cents: 60, stripe_fee_currency: 'gbp', currency: 'eur', status: 'paid' },
+    { id: 'b', amount_cents: 3000, fee_cents: 0, stripe_fee_cents: 70, stripe_fee_currency: 'eur', currency: 'eur', status: 'paid' },
+  ]
+  const r = receipts(orders, [], 'eur')
+  assert.equal(r.currency, 'eur')
+  assert.equal(r.feesCents, 70)
+  assert.equal(r.netCents, 6000 - 70)
+  assert.equal(r.feesPending, 1)
 })
 
 check('ORG-13 an event that charged nothing reports nothing taken', () => {
@@ -111,6 +139,7 @@ check('ORG-13 an event that charged nothing reports nothing taken', () => {
   assert.equal(r.grossCents, 0)
   assert.equal(r.netCents, 0)
   assert.equal(r.currency, 'gbp')
+  assert.equal(r.feesPending, 0)
 })
 
 /* -------------------------------------------------------------------------- */

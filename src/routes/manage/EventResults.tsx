@@ -217,7 +217,7 @@ function Results({ data }: { data: ManagedEvent }) {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatTile label="Tickets sold" value={r.paidOrders} />
               <StatTile label="Gross taken" value={money(r.grossCents, r.currency)} />
-              <StatTile label="Fees" value={money(r.feesCents, r.currency)} />
+              <StatTile label="Stripe fees" value={money(r.feesCents, r.currency)} />
               <StatTile label="Refunded" value={money(r.refundedCents, r.currency)} />
             </div>
 
@@ -227,6 +227,12 @@ function Results({ data }: { data: ManagedEvent }) {
                   {money(r.netCents, r.currency)}
                 </span>
               </Fact>
+              {r.feesPending > 0 && (
+                <p className="mt-2 text-sm text-muted">
+                  Stripe has not reported its fee on {r.feesPending}{' '}
+                  {r.feesPending === 1 ? 'order' : 'orders'} yet. Check again later.
+                </p>
+              )}
             </Panel>
           </>
         )}

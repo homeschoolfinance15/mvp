@@ -12,7 +12,7 @@ functions only reach it when `STRIPE_API_BASE` is set (see
 
 ```sh
 node scripts/stripe-sim/server.mjs          # listens on 0.0.0.0:12111
-node scripts/stripe-sim/selftest.mjs        # 29 checks, uses port 12199
+node scripts/stripe-sim/selftest.mjs        # 30 checks, uses port 12199
 ```
 
 Env (all optional):

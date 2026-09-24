@@ -304,7 +304,16 @@ async function stripeApi(method, route, p, acct) {
   }
   if (method === 'GET' && (m = route.match(/^\/v1\/payment_intents\/([^/]+)$/))) {
     const pi = own(intents, m[1], acct)
-    return pi ? { status: 200, body: pi.obj } : missing('payment_intent', m[1])
+    if (!pi) return missing('payment_intent', m[1])
+    // expand[]=latest_charge.balance_transaction, as recordStripeFee asks. A
+    // charge has a balance transaction only once it has succeeded; the fee is
+    // the same assumed figure the ledger books, settled in the charge currency.
+    if ([p.expand ?? []].flat().includes('latest_charge.balance_transaction')) {
+      const fee = pi.obj.status === 'succeeded' ? stripeFee(pi.obj.amount, pi.obj.currency) : null
+      const txn = fee == null ? null : { id: `txn_${pi.obj.latest_charge}`, object: 'balance_transaction', amount: pi.obj.amount, currency: pi.obj.currency, fee, net: pi.obj.amount - fee }
+      return { status: 200, body: { ...pi.obj, latest_charge: { id: pi.obj.latest_charge, object: 'charge', balance_transaction: txn } } }
+    }
+    return { status: 200, body: pi.obj }
   }
   if (method === 'GET' && route === '/v1/account') return { status: 200, body: accounts.get(acct) ?? account(acct) }
   if (method === 'GET' && (m = route.match(/^\/v1\/accounts\/([^/]+)$/))) {

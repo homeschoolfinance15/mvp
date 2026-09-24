@@ -186,6 +186,9 @@ export interface EventOrder {
   registration_id: string | null
   amount_cents: number
   fee_cents: number | null
+  /** ORG-13. What Stripe kept, in stripe_fee_currency. Null until read. */
+  stripe_fee_cents: number | null
+  stripe_fee_currency: string | null
   currency: string
   status: OrderStatus
   stripe_checkout_session_id: string | null

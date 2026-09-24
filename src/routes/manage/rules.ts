@@ -256,9 +256,12 @@ export function reminderWillSkip(startsAt: string, minutesBefore: number, now = 
 export interface Receipts {
   /** Money charged, before anything is taken off. Never "profit" (ORG-13). */
   grossCents: number
+  /** Stripe's processing fees, off the balance transactions. */
   feesCents: number
-  /** Gross, less fees, less money already returned. Still not profit. */
+  /** Gross, less Stripe's fees, less money already returned. Still not profit. */
   netCents: number
+  /** Paid orders whose Stripe fee is not known in this currency yet. */
+  feesPending: number
   refundedCents: number
   paidOrders: number
   refundedOrders: number
@@ -280,7 +283,13 @@ export function receipts(
     (o) => o.status === 'paid' || o.status === 'refunded' || o.status === 'partially_refunded',
   )
   const grossCents = counted.reduce((sum, o) => sum + o.amount_cents, 0)
-  const feesCents = counted.reduce((sum, o) => sum + (o.fee_cents ?? 0), 0)
+  const currency = counted[0]?.currency ?? fallbackCurrency
+  // Stripe's fee, not our booking fee: fee_cents is part of what the attendee
+  // paid and stays with the receiver, so it is in gross and never taken off.
+  // A fee settled in another currency cannot be netted off this one, so it
+  // counts as not known rather than being added in the wrong unit.
+  const known = counted.filter((o) => o.stripe_fee_cents != null && o.stripe_fee_currency === currency)
+  const feesCents = known.reduce((sum, o) => sum + (o.stripe_fee_cents ?? 0), 0)
 
   // Only money that actually went back. A requested refund is a promise, and
   // showing it as returned would understate what is still owed.
@@ -291,10 +300,11 @@ export function receipts(
     grossCents,
     feesCents,
     netCents: grossCents - feesCents - refundedCents,
+    feesPending: counted.length - known.length,
     refundedCents,
     paidOrders: counted.length,
     refundedOrders: new Set(returned.map((r) => r.order_id)).size,
-    currency: counted[0]?.currency ?? fallbackCurrency,
+    currency,
   }
 }
 

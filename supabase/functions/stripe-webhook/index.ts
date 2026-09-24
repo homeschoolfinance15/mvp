@@ -73,6 +73,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import {
   applyRefund,
   confirmPaidOrder,
+  recordStripeFee,
   failPendingOrder,
   type Db,
   type OrderRow,
@@ -144,7 +145,7 @@ Deno.serve(async (request: Request) => {
       // succeeding, failed the same work as a card failing.
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded':
-        await onCompleted(db, account, event.data.object as Stripe.Checkout.Session)
+        await onCompleted(db, stripe, account, event.data.object as Stripe.Checkout.Session)
         break
 
       case 'checkout.session.async_payment_failed':
@@ -201,6 +202,7 @@ Deno.serve(async (request: Request) => {
 
 async function onCompleted(
   db: Db,
+  stripe: Stripe,
   account: string | null,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
@@ -284,6 +286,7 @@ async function onCompleted(
     sessionId: session.id,
     paymentIntentId: intentId(session.payment_intent),
   })
+  await recordStripeFee(db, stripe, order.id, intentId(session.payment_intent), account)
 }
 
 /* -------------------------------------------------------------------------- */

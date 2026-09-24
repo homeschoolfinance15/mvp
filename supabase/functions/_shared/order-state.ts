@@ -137,6 +137,46 @@ export async function confirmPaidOrder(
 }
 
 /**
+ * ORG-13. What Stripe kept, read off the charge's balance transaction on the
+ * account that took the money. Called after a payment lands and by the sweep
+ * for any paid order still without it — a payment method that clears later has
+ * no balance transaction yet, and that is not an error, just not yet.
+ *
+ * Never throws. The payment is already recorded; a missing fee only means the
+ * Results page says it is waiting for one, and the next sweep tries again.
+ */
+export async function recordStripeFee(
+  db: Db,
+  stripe: Stripe,
+  orderId: string,
+  paymentIntentId: string | null,
+  account: string | null,
+): Promise<void> {
+  if (!paymentIntentId) return
+  try {
+    const intent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      { expand: ['latest_charge.balance_transaction'] },
+      // undefined, not {}: stripe-node rejects an empty third argument as
+      // "Unknown arguments", which silently lost every platform-account fee.
+      account ? { stripeAccount: account } : undefined,
+    )
+    const charge = intent.latest_charge
+    const txn = charge && typeof charge !== 'string' ? charge.balance_transaction : null
+    if (!txn || typeof txn === 'string') return
+    const { error } = await db
+      .from('event_orders')
+      .update({ stripe_fee_cents: txn.fee, stripe_fee_currency: txn.currency })
+      .eq('id', orderId)
+      .is('stripe_fee_cents', null)
+    if (error) throw new Error(error.message)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`recordStripeFee: order ${orderId}: ${message}`)
+  }
+}
+
+/**
  * BUY-03. An expired session and a declined card are the same fact to us:
  * nobody paid. The order says `failed` and the place goes back in the pool so
  * the next person can have it. Neither may ever read as a completed purchase.

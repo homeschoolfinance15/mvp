@@ -172,10 +172,12 @@ try {
       const me = await stripe.accounts.retrieve()
       const other = await stripe.accounts.retrieve('${ACCT}')
       const eps = await stripe.webhookEndpoints.list({ limit: 100 })
+      const paid = await stripe.paymentIntents.retrieve('${pi}', { expand: ['latest_charge.balance_transaction'] }, { stripeAccount: '${ACCT}' })
+      const txn = paid.latest_charge?.balance_transaction
       let missing = null
       try { await stripe.checkout.sessions.retrieve(s.id) } catch (e) { missing = e.code }
       const ev = await stripe.webhooks.constructEventAsync(Deno.env.get('P'), Deno.env.get('S'), '${SECRET}', undefined, Stripe.createSubtleCryptoProvider())
-      console.log(JSON.stringify({ total: s.amount_total, same: again.id === s.id, me: me.id, charges: other.charges_enabled, eps: eps.data.length, missing, evType: ev.type, evAccount: ev.account }))
+      console.log(JSON.stringify({ total: s.amount_total, same: again.id === s.id, me: me.id, charges: other.charges_enabled, eps: eps.data.length, missing, evType: ev.type, evAccount: ev.account, fee: txn?.fee, feeCur: txn?.currency }))
     `
     const file = path.join(os.tmpdir(), `stripe-sim-sdk-${process.pid}.ts`)
     fs.writeFileSync(file, code)
@@ -185,6 +187,7 @@ try {
     const r = JSON.parse(run.stdout.trim().split('\n').at(-1))
     ok(r.total === 2550 && r.same && r.me === 'acct_sim_platform' && r.charges === false && r.eps === 1, 'stripe-node 18 SDK round-trips through the sim')
     ok(r.missing === 'resource_missing', 'SDK sees resource_missing for a wrong-account read')
+    ok(r.fee === 58 && r.feeCur === 'gbp', 'SDK expand latest_charge.balance_transaction returns the booked fee')
     ok(r.evType === 'checkout.session.completed' && r.evAccount === ACCT, 'stripe-node constructEventAsync accepts the sim signature')
   } else {
     console.log('  --  deno not found; skipped the real-SDK cross-check')
