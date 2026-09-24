@@ -229,7 +229,14 @@ export default function PublicEvent() {
     )
   }
 
-  const state = event.capacity_state
+  // A draft reads as 'closed' in event_capacity_state, which made the host's
+  // "Preview attendee page" show "Registration closed" and hide every price.
+  // Only hosts and admins can load a draft, so for them it renders the way it
+  // will look once published, with the Register button held back. A draft
+  // with "Close registration now" ticked previews as closed, because it will be.
+  const preview =
+    event.status === 'draft' && !event.registration_closed && event.capacity_state === 'closed'
+  const state = preview ? 'open' : event.capacity_state
   const open = canRegister(state)
   const types = event.ticket_types
   const selected = types.find((t) => t.id === chosen) ?? (types.length === 1 ? types[0] : null)
@@ -302,6 +309,12 @@ export default function PublicEvent() {
               <strong>This event has been cancelled.</strong> If you had a place, any refund due to
               you is handled by the host.
             </Notice>
+          </div>
+        )}
+
+        {preview && (
+          <div className="mb-6">
+            <Notice tone="warning">Preview. Registration opens when you publish this event.</Notice>
           </div>
         )}
 
@@ -424,7 +437,7 @@ export default function PublicEvent() {
                   <Button
                     variant="primary"
                     onClick={register}
-                    disabled={(types.length > 1 && !chosen) || selectedGone}
+                    disabled={preview || (types.length > 1 && !chosen) || selectedGone}
                   >
                     {selected && selected.price_cents > 0
                       ? `Register — ${priceLabel(selected)}`
