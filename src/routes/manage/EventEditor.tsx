@@ -391,9 +391,24 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
 
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(draftOf(event)) ||
-    JSON.stringify(ticketDrafts) !== JSON.stringify(ticketsOf(tickets)) ||
+    JSON.stringify(ticketDrafts.map(({ key: _key, ...t }) => t)) !==
+      JSON.stringify(ticketsOf(tickets).map(({ key: _key, ...t }) => t)) ||
     removedTickets.length > 0
   useWarnOnUnsaved(dirty)
+
+  const typedSoFar = JSON.stringify([draft, ticketDrafts, removedTickets])
+  const lastAutosave = useRef('')
+  useEffect(() => {
+    if (event.status !== 'draft' || !dirty || saving) return
+    if (typedSoFar === lastAutosave.current) return
+    const timer = setTimeout(() => {
+      lastAutosave.current = typedSoFar
+      void save({ quiet: true })
+    }, 1500)
+    return () => clearTimeout(timer)
+    // save() is recreated every render; the snapshot is what decides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedSoFar, dirty, saving, event.status])
 
   const locked = paymentLockedAt(event)
   const cancelled = event.status === 'cancelled'
@@ -520,10 +535,24 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
    * keeping the id-less copy would insert it a second time on the next save.
    */
   const resync = useRef(false)
+  /** The ticket rows as they were when the last save began. */
+  const savedFrom = useRef('')
   useEffect(() => {
     if (!resync.current) return
     resync.current = false
-    setTicketDrafts(ticketsOf(tickets))
+    // An autosave runs while the organiser may still be typing. Rows untouched
+    // since the save began take the stored version, as they always did; rows
+    // edited meanwhile keep what was typed and only gain the ids the save gave
+    // them, so the next save updates them rather than inserting them twice.
+    // Either way each row keeps its React key, or the box being typed in is
+    // remounted and the cursor lost mid-word.
+    setTicketDrafts((current) =>
+      JSON.stringify(current) === savedFrom.current
+        ? ticketsOf(tickets).map((t, i) => ({ ...t, key: current[i]?.key ?? t.key }))
+        : current.map((t, i) =>
+            t.id ? t : { ...t, id: tickets.find((x) => x.position === i)?.id ?? '' },
+          ),
+    )
   }, [tickets])
 
   /*
@@ -548,8 +577,8 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
    * ORG-10: this never emails anybody. The notification is the caller's
    * separate decision with its own separate result.
    */
-  async function save(): Promise<boolean> {
-    setProblem('')
+  async function save({ quiet = false } = {}): Promise<boolean> {
+    if (!quiet) setProblem('')
     const found = validateEvent(columns)
     for (const t of ticketDrafts) {
       if (!t.name.trim()) found.tickets = 'Every ticket option needs a name.'
@@ -558,10 +587,12 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         found.tickets = 'A ticket limit has to be a whole number, at least one, or empty.'
       }
     }
+    if (quiet && Object.keys(found).length > 0) return false
     setErrors(found)
     if (Object.keys(found).length > 0) return false
 
     setSaving(true)
+    savedFrom.current = JSON.stringify(ticketDrafts)
 
     const { error } = await supabase.from('events').update(columns).eq('id', event.id)
     if (error) {
@@ -827,7 +858,12 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              onClick={() => window.open(eventLink(event.slug), '_blank', 'noopener')}
+              onClick={async () => {
+                const tab = window.open('', '_blank')
+                if (tab) tab.opener = null
+                if (event.status === 'draft' && dirty) await save()
+                if (tab) tab.location.href = eventLink(event.slug)
+              }}
             >
               Preview attendee page
             </Button>
