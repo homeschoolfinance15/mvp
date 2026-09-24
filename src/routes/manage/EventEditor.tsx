@@ -398,7 +398,10 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
     .reduce((sum, t) => sum + Number(t.quantity), 0)
   const placesCap = draft.capacity.trim() === '' ? null : Number(draft.capacity)
   const overLimit = placesCap !== null && ticketLimitTotal > placesCap
-  const overLimitWords = `Ticket limits add up to ${ticketLimitTotal}, but the event has ${placesCap} places.`
+  // Only a question for the organiser, never a gate: the event places still
+  // cap sales whatever the options say. "Keep" hides it for these numbers.
+  const [keptLimits, setKeptLimits] = useState('')
+  const limitsKey = `${ticketLimitTotal}/${placesCap}`
 
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(draftOf(event)) ||
@@ -598,7 +601,6 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
         found.tickets = 'A ticket limit has to be a whole number, at least one, or empty.'
       }
     }
-    if (overLimit) found.tickets = overLimitWords
     if (quiet && Object.keys(found).length > 0) return false
     setErrors(found)
     if (Object.keys(found).length > 0) return false
@@ -670,10 +672,6 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
   async function setStatus(status: 'published' | 'draft') {
     setProblem('')
     setOutcome(null)
-    if (status === 'published' && overLimit) {
-      setProblem(`${overLimitWords} Raise the places or lower the ticket limits, then publish.`)
-      return
-    }
     if (dirty) {
       const ok = await save()
       if (!ok) return
@@ -1141,25 +1139,29 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
             </Field>
           </div>
 
-          {overLimit ? (
+          {overLimit && keptLimits !== limitsKey && (
             <div className="mb-4">
               <Notice tone="warning">
-                {overLimitWords} Raise the places, or lower the limits below.
-                <Button
-                  size="sm"
-                  className="mt-3 block"
-                  onClick={() => setDraft((d) => ({ ...d, capacity: String(ticketLimitTotal) }))}
-                >
-                  Raise places to {ticketLimitTotal}
-                </Button>
+                Ticket limits add up to {ticketLimitTotal}, but the event has {placesCap} places,
+                so no more than {placesCap} will sell. Raise the places to {ticketLimitTotal}?
+                <span className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setDraft((d) => ({ ...d, capacity: String(ticketLimitTotal) }))}
+                  >
+                    Raise places to {ticketLimitTotal}
+                  </Button>
+                  <Button size="sm" onClick={() => setKeptLimits(limitsKey)}>
+                    Keep {placesCap} places
+                  </Button>
+                </span>
               </Notice>
             </div>
-          ) : (
-            errors.tickets && (
-              <div className="mb-4">
-                <Notice tone="error">{errors.tickets}</Notice>
-              </div>
-            )
+          )}
+          {errors.tickets && (
+            <div className="mb-4">
+              <Notice tone="error">{errors.tickets}</Notice>
+            </div>
           )}
 
           {ticketDrafts.length === 0 ? (
