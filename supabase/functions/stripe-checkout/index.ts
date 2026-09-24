@@ -72,13 +72,13 @@
 // serves them with no configuration at all.
 //
 // Deploy:  supabase functions deploy stripe-checkout
-// Secrets: supabase secrets set STRIPE_SECRET_KEY=sk_...
+// Secrets: Admin → Payments (Supabase Vault), or supabase secrets set STRIPE_SECRET_KEY=sk_...
 //          supabase secrets set SITE_URL=https://goamazing.ai      (optional)
 //          supabase secrets set PLATFORM_FEE_BPS=0                 (optional)
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
-import { stripeClient } from '../_shared/stripe.ts'
+import { stripeClient, stripeSetting } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 const SITE = (Deno.env.get('SITE_URL') ?? 'https://goamazing.ai').replace(/\/+$/, '')
@@ -161,13 +161,13 @@ Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return json(null, 204)
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
 
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+  const stripeKey = await stripeSetting('STRIPE_SECRET_KEY')
   if (!stripeKey) {
     // Named precisely in the log, because the person who can fix this reads
     // it. The attendee gets a sentence that is theirs to act on (ATT-8).
     console.error(
       'stripe-checkout: card payments are not configured. Set STRIPE_SECRET_KEY on this ' +
-        'project (supabase secrets set STRIPE_SECRET_KEY=sk_...) and deploy again. ' +
+        'project on Admin → Payments. ' +
         'Free events are unaffected.',
     )
     return json(

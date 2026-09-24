@@ -74,7 +74,7 @@
 // organiser walks away from Stripe today.
 //
 // Deploy:  supabase functions deploy stripe-connect
-// Secrets: supabase secrets set STRIPE_SECRET_KEY=sk_...
+// Secrets: Admin → Payments (Supabase Vault), or supabase secrets set STRIPE_SECRET_KEY=sk_...
 //          supabase secrets set STRIPE_CONNECT_CLIENT_ID=ca_...
 //          supabase secrets set SITE_URL=https://goamazing.ai            (optional)
 //          supabase secrets set STRIPE_CONNECT_STATE_SECRET=...          (optional)
@@ -82,7 +82,7 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
-import { stripeClient } from '../_shared/stripe.ts'
+import { stripeClient, stripeSetting } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import { signState, STATE_MINUTES, verifyState } from './state.ts'
 
@@ -111,15 +111,15 @@ Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return json(null, 204)
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
 
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
-  const clientId = Deno.env.get('STRIPE_CONNECT_CLIENT_ID')
+  const stripeKey = await stripeSetting('STRIPE_SECRET_KEY')
+  const clientId = await stripeSetting('STRIPE_CONNECT_CLIENT_ID')
   if (!stripeKey || !clientId) {
     // Named precisely, because the person who can fix this is reading the log.
     return json(
       {
         error:
           'Stripe Connect is not configured on this project. Set STRIPE_SECRET_KEY and ' +
-          'STRIPE_CONNECT_CLIENT_ID (supabase secrets set ...) and deploy again. ' +
+          'STRIPE_CONNECT_CLIENT_ID on Admin → Payments. ' +
           'Free events are unaffected — they need no Stripe configuration at all.',
         reason: 'stripe_not_configured',
       },

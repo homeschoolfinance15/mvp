@@ -63,12 +63,12 @@
 //          signature check below is what stands in for it — an unsigned or
 //          wrongly signed request never reaches a single write.)
 //          config.toml carries the same setting as [functions.stripe-webhook].
-// Secrets: supabase secrets set STRIPE_SECRET_KEY=sk_...
+// Secrets: Admin → Payments (Supabase Vault), or supabase secrets set STRIPE_SECRET_KEY=sk_...
 //          supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
-import { stripeClient } from '../_shared/stripe.ts'
+import { stripeClient, stripeSetting } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import {
   applyRefund,
@@ -82,8 +82,8 @@ import {
 Deno.serve(async (request: Request) => {
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
 
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
-  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
+  const stripeKey = await stripeSetting('STRIPE_SECRET_KEY')
+  const webhookSecret = await stripeSetting('STRIPE_WEBHOOK_SECRET')
   if (!stripeKey || !webhookSecret) {
     // A 500 is deliberate: Stripe retries it, so a delivery that arrives during
     // a misconfigured deploy is not lost, it waits for the deploy to be fixed.
@@ -91,7 +91,7 @@ Deno.serve(async (request: Request) => {
       {
         error:
           'Stripe is not configured on this project. Set STRIPE_SECRET_KEY and ' +
-          'STRIPE_WEBHOOK_SECRET (supabase secrets set ...) and deploy again.',
+          'STRIPE_WEBHOOK_SECRET on Admin → Payments.',
       },
       500,
     )

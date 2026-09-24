@@ -153,6 +153,15 @@ Same page, **OAuth settings** section. There is a field labelled
 
 ## 3. Secrets
 
+**Set them on Admin → Payments.** The three Stripe values below can be pasted into
+the admin Payments page. `set_stripe_setting()` (admin only, logged by name without
+the value) stores them encrypted in Supabase Vault; the page can only read back
+whether each is set, its last four characters and when. The payment functions read
+them through `stripe_secrets()`, which only the service role may call, via
+`stripeSetting()` in `_shared/stripe.ts`. A value saved there wins over the function
+environment, and a warm function picks up a change within a minute. The
+`supabase secrets set` route below still works and is the fallback.
+
 | Secret | Where it comes from | Used by | Required |
 | --- | --- | --- | --- |
 | `STRIPE_SECRET_KEY` | §2.4, `sk_…` | all five functions | for paid events |

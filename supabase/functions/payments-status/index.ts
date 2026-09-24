@@ -29,7 +29,7 @@
 // is the single most useful thing on the screen.
 // ============================================================================
 
-import { stripeClient } from '../_shared/stripe.ts'
+import { stripeClient, stripeSetting } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 /** The eight deliveries stripe-webhook acts on (PAYMENTS.md §2.5). */
@@ -81,13 +81,13 @@ Deno.serve(async (request: Request) => {
   const { data: isAdmin } = await asCaller.rpc('is_admin')
   if (!isAdmin) return json({ error: 'Not authorised.' }, 403)
 
-  const secretKey = Deno.env.get('STRIPE_SECRET_KEY')
+  const secretKey = await stripeSetting('STRIPE_SECRET_KEY')
   const siteUrl = Deno.env.get('SITE_URL') ?? null
 
   const secrets = {
     STRIPE_SECRET_KEY: { ...presence(secretKey), mode: modeOf(secretKey) },
-    STRIPE_WEBHOOK_SECRET: presence(Deno.env.get('STRIPE_WEBHOOK_SECRET')),
-    STRIPE_CONNECT_CLIENT_ID: presence(Deno.env.get('STRIPE_CONNECT_CLIENT_ID')),
+    STRIPE_WEBHOOK_SECRET: presence(await stripeSetting('STRIPE_WEBHOOK_SECRET')),
+    STRIPE_CONNECT_CLIENT_ID: presence(await stripeSetting('STRIPE_CONNECT_CLIENT_ID')),
     STRIPE_CONNECT_STATE_SECRET: presence(Deno.env.get('STRIPE_CONNECT_STATE_SECRET')),
     // Not secrets. A URL and a number, both safe to show, and both worth
     // showing because a wrong SITE_URL breaks the OAuth return silently.

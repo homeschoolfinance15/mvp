@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, CopyCode, EmptyState, Notice, Panel, Spinner } from '../../components/ui'
+import { Button, ConfirmModal, EmptyState, Field, Input, Notice, Panel, Spinner } from '../../components/ui'
 import { errorMessage, supabase } from '../../lib/supabase'
 
 /**
@@ -10,16 +10,16 @@ import { errorMessage, supabase } from '../../lib/supabase'
  * that Stripe was unconfigured was an attendee meeting `stripe_not_configured`
  * in checkout — the worst possible place and the worst possible person.
  *
- * **This screen cannot set anything, deliberately.** BUY-13 puts Amazing's own
- * Stripe account behind admin-hosted events, so there is one platform key, and
- * it lives in Supabase's secret store where it is encrypted at rest and
- * injected into the edge runtime as an environment variable. A form that
- * accepted a secret key would put it in a browser, in the page's memory, in
- * the network tab, and in whatever screen recording is running. So the
- * commands are printed to copy and the values are never handled here.
+ * **Keys are set here, and never shown again.** BUY-13 puts Amazing's own
+ * Stripe account behind admin-hosted events, so there is one platform key.
+ * An administrator pastes it into the form below; set_stripe_setting() stores
+ * it encrypted in Supabase Vault, and from then on the page can only learn
+ * whether it is set, its last four characters and when it changed. The key
+ * passes through this browser once, on the way in — the trade-off the owner
+ * chose over running the Supabase CLI. The field is a password field and is
+ * emptied the moment the save succeeds.
  *
- * Nothing on this page has ever seen key material. `payments-status` returns
- * booleans and a test/live mode, and there is no field it could put a key in.
+ * `payments-status` still returns only booleans and a test/live mode.
  */
 
 interface SecretState {
@@ -231,25 +231,156 @@ export default function Payments() {
             </Panel>
           </div>
 
-          <div>
-            <h2 className="eyebrow mb-3">Setting or changing a key</h2>
-            <p className="mb-4 max-w-2xl text-sm leading-relaxed text-muted">
-              Run these with the Supabase CLI, then press Re-check. Never paste a key into
-              this site.
-            </p>
-            <CopyCode
-              code={`supabase secrets set STRIPE_SECRET_KEY=sk_test_...
-supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-supabase secrets set STRIPE_CONNECT_CLIENT_ID=ca_...
-supabase secrets set SITE_URL=https://goamazing.ai`}
-            />
-            <p className="mt-4 max-w-2xl text-xs leading-relaxed text-dim">
-              Where to find each value: docs/event-platform/PAYMENTS.md §2. Test and live mode
-              have separate keys, client ids and webhook endpoints, so do this once per mode.
-            </p>
-          </div>
         </div>
       )}
+
+      <div className="mt-8">
+        <StripeKeys onSaved={() => void load()} />
+      </div>
     </>
+  )
+}
+
+/** The three values an administrator can set here, in setup order. */
+const KEYS = [
+  {
+    name: 'STRIPE_SECRET_KEY',
+    label: 'Secret key',
+    where: 'Stripe → Developers → API keys. Starts sk_live_ or sk_test_ (or rk_ for a restricted key).',
+  },
+  {
+    name: 'STRIPE_WEBHOOK_SECRET',
+    label: 'Webhook signing secret',
+    where: 'Stripe → Developers → Webhooks → the stripe-webhook endpoint → Signing secret. Starts whsec_.',
+  },
+  {
+    name: 'STRIPE_CONNECT_CLIENT_ID',
+    label: 'Connect client id',
+    where: 'Stripe → Settings → Connect → Onboarding options → OAuth. Starts ca_.',
+  },
+] as const
+
+interface SavedKey {
+  name: string
+  is_set: boolean
+  last4: string | null
+  updated_at: string | null
+}
+
+/**
+ * Write-only. What comes back from the database is set/not set, the last four
+ * characters and when; the value itself never returns to a browser.
+ */
+function StripeKeys({ onSaved }: { onSaved: () => void }) {
+  const [saved, setSaved] = useState<SavedKey[]>([])
+  const [typed, setTyped] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+  const [problem, setProblem] = useState<Record<string, string>>({})
+  const [done, setDone] = useState('')
+  const [clearing, setClearing] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.rpc('stripe_settings_status')
+    if (error) setProblem({ _: errorMessage(error) })
+    else setSaved((data as SavedKey[]) ?? [])
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function save(name: string, value: string | null) {
+    setBusy(name)
+    setDone('')
+    setProblem((p) => ({ ...p, [name]: '' }))
+    const { error } = await supabase.rpc('set_stripe_setting', { p_name: name, p_value: value })
+    setBusy(null)
+    if (error) {
+      setProblem((p) => ({ ...p, [name]: errorMessage(error) }))
+      return false
+    }
+    setTyped((t) => ({ ...t, [name]: '' }))
+    setDone(value === null ? 'Cleared.' : 'Saved. It is used within a minute; press Re-check to confirm Stripe accepts it.')
+    await load()
+    onSaved()
+    return true
+  }
+
+  return (
+    <div>
+      <h2 className="eyebrow mb-3">Stripe keys</h2>
+      <p className="mb-4 max-w-2xl text-sm leading-relaxed text-muted">
+        Paste each key and save. Keys are stored encrypted and never shown again. Test and live
+        mode have separate keys; paste the set for the mode you want to run.
+      </p>
+      {problem._ && (
+        <div className="mb-4">
+          <Notice tone="error">{problem._}</Notice>
+        </div>
+      )}
+      {done && (
+        <div className="mb-4">
+          <Notice tone="success">{done}</Notice>
+        </div>
+      )}
+      <Panel className="divide-y divide-line">
+        {KEYS.map((k) => {
+          const row = saved.find((r) => r.name === k.name)
+          const value = typed[k.name] ?? ''
+          return (
+            <form
+              key={k.name}
+              className="px-5 py-5"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (value.trim()) void save(k.name, value)
+              }}
+            >
+              <Field
+                label={k.label}
+                hint={
+                  row?.is_set
+                    ? `Saved, ending ${row.last4}, on ${new Date(row.updated_at!).toLocaleString()}. Paste a new one to replace it. ${k.where}`
+                    : k.where
+                }
+                error={problem[k.name]}
+              >
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={value}
+                  onChange={(e) => setTyped((t) => ({ ...t, [k.name]: e.target.value }))}
+                  placeholder={row?.is_set ? `•••• ${row.last4}` : undefined}
+                />
+              </Field>
+              <div className="mt-3 flex gap-2">
+                <Button type="submit" size="sm" loading={busy === k.name} disabled={!value.trim()}>
+                  Save
+                </Button>
+                {row?.is_set && (
+                  <Button type="button" size="sm" onClick={() => setClearing(k.name)}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </form>
+          )
+        })}
+      </Panel>
+
+      <ConfirmModal
+        open={clearing !== null}
+        title={`Clear the saved ${KEYS.find((k) => k.name === clearing)?.label.toLowerCase() ?? 'key'}?`}
+        confirmLabel="Clear it"
+        busy={busy === clearing}
+        error={clearing ? problem[clearing] : undefined}
+        onConfirm={() => {
+          if (clearing) void save(clearing, null).then((ok) => ok && setClearing(null))
+        }}
+        onClose={() => setClearing(null)}
+        body="Payments fall back to the key set on the Supabase project, if there is one. With neither, paid events stop selling until a key is saved again."
+      />
+    </div>
   )
 }

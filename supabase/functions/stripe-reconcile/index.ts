@@ -45,7 +45,7 @@
 // ============================================================================
 
 import Stripe from 'npm:stripe@18'
-import { stripeClient } from '../_shared/stripe.ts'
+import { stripeClient, stripeSetting } from '../_shared/stripe.ts'
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 import { applyRefund, confirmPaidOrder, failPendingOrder, recordStripeFee } from '../_shared/order-state.ts'
 
@@ -77,7 +77,7 @@ Deno.serve(async (request: Request) => {
   if (request.method === 'OPTIONS') return json(null, 204)
   if (request.method !== 'POST') return json({ error: 'Use POST.' }, 405)
 
-  const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
+  const stripeKey = await stripeSetting('STRIPE_SECRET_KEY')
   if (!stripeKey) {
     // Not an error worth waking anybody for: a project with no Stripe key has
     // no paid orders to reconcile. Said plainly so a cron log reads as "there

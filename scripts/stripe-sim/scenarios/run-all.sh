@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Full payment run: all six batches, fresh fixtures, in the order they need.
+# Full payment run: Stripe key storage, then all six batches, fresh fixtures, in the order they need.
 # LOCAL ONLY: needs `supabase start` and Docker. Usage: bash scripts/stripe-sim/scenarios/run-all.sh
 H="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$H/../../.." && pwd)"
@@ -17,6 +17,7 @@ serve env.sim
 
 cd "$H"
 node fixtures.mjs > "$P/fixtures.log" 2>&1 || { cat "$P/fixtures.log"; exit 1; }
+node vault-keys.mjs > "$P/run0.log" 2>&1; echo "b0 pass $(grep -c ^PASS "$P/run0.log") fail $(grep -c ^FAIL "$P/run0.log")"; grep ^FAIL "$P/run0.log"
 node scen1.mjs > "$P/run1.log" 2>&1; count b1 run1.log
 node scen2.mjs > "$P/run2.log" 2>&1; count b2 run2.log
 node scen3a.mjs > "$P/run3a.log" 2>&1

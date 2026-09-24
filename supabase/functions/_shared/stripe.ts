@@ -1,4 +1,5 @@
 import Stripe from 'npm:stripe@18'
+import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 /**
  * The one place a Stripe client is built.
@@ -30,4 +31,35 @@ export function stripeClient(key: string): Stripe {
     port: url.port || (url.protocol === 'https:' ? '443' : '80'),
     protocol: url.protocol.replace(':', '') as 'http' | 'https',
   })
+}
+
+type StripeSettingName = 'STRIPE_SECRET_KEY' | 'STRIPE_WEBHOOK_SECRET' | 'STRIPE_CONNECT_CLIENT_ID'
+
+// ponytail: one read a minute per isolate, so a key changed on the Payments
+// page takes up to a minute to reach a warm function. Drop the cache if that
+// ever matters more than a database call on every webhook delivery.
+let saved: { at: number; values: Record<string, string> } | null = null
+
+/**
+ * A Stripe setting: the value an administrator saved on the admin Payments
+ * page (Supabase Vault, read through the service-role-only stripe_secrets()),
+ * else this function's environment secret, which is how it was set before
+ * that page could. A failed read falls back to the environment rather than
+ * failing the request, and says so in the log.
+ */
+export async function stripeSetting(name: StripeSettingName): Promise<string | undefined> {
+  if (!saved || Date.now() - saved.at > 60_000) {
+    const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    const { data, error } = await db.rpc('stripe_secrets')
+    if (error) console.error(`stripeSetting: could not read saved Stripe keys, using the environment: ${error.message}`)
+    saved = {
+      at: Date.now(),
+      values: Object.fromEntries(
+        ((data ?? []) as { name: string; value: string | null }[])
+          .filter((r) => r.value)
+          .map((r) => [r.name, r.value as string]),
+      ),
+    }
+  }
+  return saved.values[name] || Deno.env.get(name) || undefined
 }
