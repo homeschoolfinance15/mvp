@@ -414,7 +414,7 @@ export function attendanceAndMoney(
 
 /** EVT-04. Price and currency together, always — never a bare number. */
 export function money(cents: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency.toUpperCase(),
   }).format(cents / 100)

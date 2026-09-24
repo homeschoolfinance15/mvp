@@ -1070,7 +1070,7 @@ function Editor({ data, reload }: { data: ManagedEvent; reload: () => Promise<vo
                 onChange={(e) => setDraft({ ...draft, currency: e.target.value })}
                 disabled={Boolean(locked)}
               >
-                {['gbp', 'eur', 'usd'].map((c) => (
+                {['usd', 'gbp', 'eur'].map((c) => (
                   <option key={c} value={c}>
                     {c.toUpperCase()}
                   </option>

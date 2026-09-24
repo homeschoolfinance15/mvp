@@ -680,7 +680,7 @@ const REFUND_WORDS: Record<string, string> = {
 }
 
 function money(cents: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: (currency || 'gbp').toUpperCase(),
   }).format(cents / 100)

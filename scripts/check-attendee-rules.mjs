@@ -79,6 +79,7 @@ check(
 /* -------------------------------------------------------------------------- */
 
 check('EVT-04  minor units format with their currency', money(2500, 'gbp') === '£25.00', money(2500, 'gbp'))
+check('EVT-04  US dollars read as $, not US$ (USD is the default currency)', money(2500, 'usd') === '$25.00', money(2500, 'usd'))
 check(
   'EVT-04  a zero-priced ticket reads as Free, not as £0.00',
   priceLabel({ price_cents: 0, currency: 'gbp' }) === 'Free',
