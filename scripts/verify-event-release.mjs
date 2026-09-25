@@ -6,8 +6,8 @@ const asset = html.match(/src="([^"]+\.js)"/)?.[1]
 if (!asset) throw Error('No frontend entry asset found')
 const bundle = await fetch(new URL(asset, site))
 const js = await bundle.text()
-const qrAsset = js.match(/assets\/jsQR-[A-Za-z0-9_-]+\.js/)?.[0]
-const qrResponse = qrAsset ? await fetch(new URL('/' + qrAsset, site)) : null
+const qrAsset = js.match(/jsQR-[A-Za-z0-9_-]+\.js/)?.[0]
+const qrResponse = qrAsset ? await fetch(new URL(qrAsset, new URL(asset, site))) : null
 const result = {
   at: new Date().toISOString(),
   site,
