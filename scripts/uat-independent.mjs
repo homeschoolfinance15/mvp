@@ -3,6 +3,7 @@ import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import QRCode from 'qrcode'
 
 const cache = path.join(process.env.LOCALAPPDATA, 'npm-cache/_npx')
 const cli = path.join(cache, 'aa8e5c70f9d8d161/node_modules/supabase/dist/supabase.js')
@@ -218,12 +219,33 @@ try {
   await adminPage.goto(`${site}/manage/events/${ev.id}/checkin`);await adminPage.getByRole('button',{name:'Start the camera',exact:true}).waitFor()
   await adminPage.screenshot({path:`${out}/checkin-desktop.png`,fullPage:true})
   check('ATT-01 scanner capability recorded',true,`BarcodeDetector available: ${await adminPage.evaluate(()=>typeof window.BarcodeDetector==='function')}`)
-  if (!await adminPage.evaluate(()=>typeof window.BarcodeDetector==='function')) {
-    await adminPage.getByRole('button',{name:'Start the camera',exact:true}).click()
-    await adminPage.getByText('This browser cannot read QR codes.',{exact:false}).waitFor()
-    check('ATT-01 unsupported camera browser explains typed-code fallback',await adminPage.getByLabel(/Ticket code/).isVisible())
-    await adminPage.screenshot({path:`${out}/scanner-unsupported.png`,fullPage:true})
-  }
+  await adminPage.evaluate(() => {
+    Object.defineProperty(window, 'BarcodeDetector', { configurable: true, value: undefined })
+    navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Test permission denied', 'NotAllowedError') }
+  })
+  await adminPage.getByRole('button',{name:'Start the camera',exact:true}).click()
+  await adminPage.getByText('We could not open the camera.',{exact:false}).waitFor()
+  check('ATT-01 denied camera offers retry and typed-code backup', await adminPage.getByRole('button',{name:'Try the camera again'}).isVisible() && await adminPage.getByLabel(/Ticket code/).isVisible())
+  const cameraQr = await QRCode.toDataURL(tickets[0].code, { width: 480, margin: 4 })
+  await adminPage.evaluate(async imageUrl => {
+    const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0,0,640,480)
+    const image = new Image(); image.src = imageUrl; await image.decode()
+    ctx.drawImage(image,80,0)
+    window.uatCameraStream = canvas.captureStream(5)
+    navigator.mediaDevices.getUserMedia = async () => window.uatCameraStream
+  }, cameraQr)
+  const cameraReply = adminPage.waitForResponse(r=>r.url().includes('/rpc/check_in') && r.request().method()==='POST')
+  await adminPage.getByRole('button',{name:'Try the camera again'}).click()
+  const scanned = await cameraReply
+  await adminPage.getByText('Already checked in',{exact:true}).waitFor()
+  check('ATT-01 camera video decodes real ticket QR without BarcodeDetector', scanned.ok() && await adminPage.locator('video').evaluate(v=>v.videoWidth>0 && v.srcObject!==null))
+  check('ATT-03 camera scan retains one attendance record', (await db(`event_attendance?event_id=eq.${ev.id}&profile_id=eq.${guest.id}`)).data.length===1)
+  await adminPage.screenshot({path:`${out}/scanner-camera.png`,fullPage:true})
+  await adminPage.goto(`${site}/manage/events/${ev.id}`)
+  // A full navigation tears down the camera before exercising typed recovery.
+  await adminPage.goto(`${site}/manage/events/${ev.id}/checkin`)
+  await adminPage.getByRole('button',{name:'Start the camera',exact:true}).waitFor()
   await adminPage.route('**/rest/v1/rpc/check_in',route=>route.abort('internetdisconnected'))
   await adminPage.getByLabel(/Ticket code/).fill(tickets[0].code)
   await adminPage.getByRole('button',{name:'Check this ticket',exact:true}).click()

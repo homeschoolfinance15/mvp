@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-24T23:45:00.681Z",
+  "at": "2026-09-25T00:15:21.916Z",
   "scope": "local current working tree",
   "results": [
     {
@@ -180,7 +180,7 @@
     {
       "name": "EML-03 subject labelled optional is accepted by endpoint",
       "pass": true,
-      "detail": "HTTP 200; {\"message_id\":\"0035f5af-a7cd-4d81-9a5a-a35d858f3557\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:44:46.243Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+      "detail": "HTTP 200; {\"message_id\":\"7de5450e-5962-43cf-9a77-84361780ccad\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-25T00:15:06.841Z\",\"status\":\"scheduled\",\"dispatched\":false}"
     },
     {
       "name": "EML-03 queued subject matches default preview and contains latest changes",
@@ -198,7 +198,17 @@
       "detail": "BarcodeDetector available: false"
     },
     {
-      "name": "ATT-01 unsupported camera browser explains typed-code fallback",
+      "name": "ATT-01 denied camera offers retry and typed-code backup",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ATT-01 camera video decodes real ticket QR without BarcodeDetector",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "ATT-03 camera scan retains one attendance record",
       "pass": true,
       "detail": ""
     },
@@ -235,7 +245,7 @@
     {
       "name": "ORG-10 editor save-and-notify accepts its complete preview and default subject",
       "pass": true,
-      "detail": "HTTP 200; {\"message_id\":\"19616f9e-9dc7-499f-82e2-2b9126017fe4\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-24T23:44:57.466Z\",\"status\":\"scheduled\",\"dispatched\":false}"
+      "detail": "HTTP 200; {\"message_id\":\"b12f5432-8bdd-48d2-9439-bf84bc5e1735\",\"kind\":\"update\",\"audience_count\":2,\"scheduled_for\":\"2026-09-25T00:15:19.155Z\",\"status\":\"scheduled\",\"dispatched\":false}"
     },
     {
       "name": "QLT-02 tested browser journeys have no uncaught JS errors",

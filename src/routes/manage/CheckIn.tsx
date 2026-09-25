@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
+import { createQrReader } from '../../lib/qr-reader'
 import { Button, Field, Input, Modal, Notice, Panel, Spinner } from '../../components/ui'
 import { useLive } from '../../lib/live'
 import { errorMessage, supabase } from '../../lib/supabase'
@@ -33,40 +34,6 @@ import { ManagedEventGate, ManageShell, useManagedEvent } from './shared'
 /* -------------------------------------------------------------------------- */
 /* Scanning                                                                    */
 /* -------------------------------------------------------------------------- */
-
-/**
- * The browser's own barcode reader.
- *
- * Chrome and Edge on Android, and Chrome on ChromeOS and macOS, ship the
- * Shape Detection API, which is where this screen will actually be used — a
- * phone at a venue door. Safari and Firefox do not implement it at all, and
- * desktop Chrome on Windows and Linux is inconsistent about it. So this is
- * feature-detected twice: the constructor has to exist *and* it has to admit
- * to supporting QR, because an implementation that only reads one-dimensional
- * barcodes would parse nothing and look broken.
- *
- * ponytail: no scanner library. A dependency that ships a WASM decoder costs
- * more than the typed fallback below, which every device already supports.
- * Revisit only if enough venues turn out to run iPhones on Safari.
- */
-interface DetectedBarcode {
-  rawValue: string
-}
-
-interface BarcodeReader {
-  detect(source: CanvasImageSource): Promise<DetectedBarcode[]>
-}
-
-interface BarcodeReaderConstructor {
-  new (options?: { formats?: string[] }): BarcodeReader
-  getSupportedFormats(): Promise<string[]>
-}
-
-function barcodeReaderConstructor(): BarcodeReaderConstructor | null {
-  const found = (window as unknown as { BarcodeDetector?: BarcodeReaderConstructor })
-    .BarcodeDetector
-  return typeof found === 'function' ? found : null
-}
 
 /* -------------------------------------------------------------------------- */
 /* Outcomes                                                                    */
@@ -200,6 +167,8 @@ export default function CheckIn() {
   )
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const readerRef = useRef<Awaited<ReturnType<typeof createQrReader>> | null>(null)
+  const cameraAttempt = useRef(0)
 
   /**
    * One request at a time, and one arrival per code.
@@ -351,24 +320,24 @@ export default function CheckIn() {
   /* ---- camera ----------------------------------------------------------- */
 
   const startCamera = useCallback(async () => {
-    const Reader = barcodeReaderConstructor()
-    if (!Reader || !navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       setCamera('unsupported')
       return
     }
 
     setCamera('starting')
+    const attempt = ++cameraAttempt.current
     try {
-      const formats = await Reader.getSupportedFormats()
-      if (!formats.includes('qr_code')) {
-        setCamera('unsupported')
-        return
-      }
-
+      readerRef.current = await createQrReader()
+      if (attempt !== cameraAttempt.current) return
       const stream = await navigator.mediaDevices.getUserMedia({
         // The back camera, which is the one pointed at a ticket.
         video: { facingMode: 'environment' },
       })
+      if (attempt !== cameraAttempt.current || !videoRef.current) {
+        stream.getTracks().forEach(track => track.stop())
+        return
+      }
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
@@ -376,6 +345,9 @@ export default function CheckIn() {
       }
       setCamera('running')
     } catch (cameraError) {
+      if (attempt !== cameraAttempt.current) return
+      streamRef.current?.getTracks().forEach(track => track.stop())
+      streamRef.current = null
       // A refusal and a missing camera land in the same place, and from the
       // door they mean the same thing: type the code instead.
       console.error('[amazing] camera unavailable:', cameraError)
@@ -385,16 +357,15 @@ export default function CheckIn() {
 
   useEffect(() => {
     return () => {
+      cameraAttempt.current += 1
       streamRef.current?.getTracks().forEach((track) => track.stop())
     }
   }, [])
 
   useEffect(() => {
     if (camera !== 'running') return
-    const Reader = barcodeReaderConstructor()
-    if (!Reader) return
-
-    const reader = new Reader({ formats: ['qr_code'] })
+    const reader = readerRef.current
+    if (!reader) return
     let stopped = false
 
     // Polling rather than every frame: a ticket is held still for a second or
@@ -403,8 +374,8 @@ export default function CheckIn() {
       const video = videoRef.current
       if (stopped || !video || video.readyState < 2 || inFlight.current) return
       try {
-        const found = await reader.detect(video)
-        if (found[0]?.rawValue) void present(found[0].rawValue)
+        const code = reader(video)
+        if (!stopped && code) void present(code)
       } catch {
         // A frame that will not decode is the normal case, not an error.
       }
@@ -527,17 +498,17 @@ export default function CheckIn() {
         </div>
 
         <Panel className="overflow-hidden">
-          {camera === 'running' ? (
             <video
               ref={videoRef}
               muted
               playsInline
+              hidden={camera !== 'running'}
               // Nothing about a viewfinder is readable to a screen reader, and
               // the result above already announces itself.
               aria-hidden
               className="aspect-[4/3] w-full bg-fg object-cover"
             />
-          ) : (
+          {camera !== 'running' && (
             <div className="px-5 py-6">
               {camera === 'idle' && (
                 <>
@@ -561,8 +532,8 @@ export default function CheckIn() {
                   rather than showing a dead black rectangle. */}
               {camera === 'unsupported' && (
                 <p className="text-sm leading-relaxed text-muted">
-                  This browser cannot read QR codes. Type or paste the ticket code below, or
-                  scan in Chrome or Edge on Android, or Chrome on ChromeOS or macOS.
+                  Camera access is unavailable here. Open this site directly in your browser
+                  using HTTPS, or type the ticket code below.
                 </p>
               )}
 

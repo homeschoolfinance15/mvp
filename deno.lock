@@ -1069,6 +1069,7 @@
         "npm:@types/react-dom@^19.2.4",
         "npm:@types/react@^19.2.18",
         "npm:@vitejs/plugin-react@^6.1.0",
+        "npm:jsqr@1.4.0",
         "npm:oxlint@^1.79.0",
         "npm:qrcode@^1.5.4",
         "npm:react-dom@^19.2.8",
